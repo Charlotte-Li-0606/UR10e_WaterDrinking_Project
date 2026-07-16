@@ -84,12 +84,17 @@ def main() -> int:
     try:
         library = FeedingSkillLibrary()
     except Exception as exc:
+        detail = str(exc).strip()
         print(
             json.dumps(
                 {
                     "success": False,
                     "stage": "library_initialization",
-                    "reason": f"could not initialize safe feeding tools: {exc.__class__.__name__}",
+                    "reason": (
+                        f"could not initialize safe feeding tools: {exc.__class__.__name__}"
+                        f": {detail}" if detail else
+                        f"could not initialize safe feeding tools: {exc.__class__.__name__}"
+                    ),
                 }
             )
         )
