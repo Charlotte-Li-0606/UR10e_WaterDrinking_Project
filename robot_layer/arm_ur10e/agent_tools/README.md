@@ -6,6 +6,21 @@ pose, or gripper commands.
 
 `FeedingSkillLibrary` provides:
 
+- The agent-approved reusable surface: `get_observation()`,
+  `detect_target(target_type="mouth", detector="mediapipe")`,
+  `active_search(target_type="mouth", detector="mediapipe",
+  max_time_sec=30.0, strategy="safe_scan")`,
+  `select_target(target_type="mouth", strategy="center")`,
+  `move_tool_to_target(tool="straw_tip", target="pre_mouth", execute=False)`,
+  `check_progress(task="feed_water", critic="rule_based")`,
+  `hold(duration_sec=3.0)`, `retreat(target="ready", execute=False)`, and
+  the backwards-compatible `feed_water()` wrapper. The dispatcher and LLM
+  validator expose only this list.
+- `feed_water()` composes the reusable tools for the working water-assistance
+  sequence. It preserves the existing MediaPipe/active-search, fixed
+  flange-down pre-mouth, PlanningScene, optional OctoMap, MoveIt, progress,
+  and no-closer hold behavior.
+
 - `select_active_target(left|center|right)` and `get_active_target_state()` —
   lock one logical target and report its queue freshness/stability. The current
   single-pose perception publisher is treated as `center`; the manager is
@@ -36,7 +51,8 @@ pose, or gripper commands.
 
 `move_straw_tip_to_mouth_optional()` exists for a later, explicitly reviewed
 integration only. It is disabled by default and the smoke-test CLI never turns
-it on. The first-version safe tool surface is pre-mouth only.
+it on. It is not part of the agent-approved tool surface. The first-version
+safe tool surface is pre-mouth only.
 
 There is no gripper in this project.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local OpenClaw bridge for one validated safe feeding tool call.
+# Local OpenClaw bridge for one validated reusable tool call or safe tool plan.
 set -eo pipefail
 
 PROJECT_DIR="/home/dase-hw101/ur_drinking_project"

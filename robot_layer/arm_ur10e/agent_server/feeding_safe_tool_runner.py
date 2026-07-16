@@ -30,6 +30,7 @@ from robot_layer.arm_ur10e.agent_tools.feeding_tools import (  # noqa: E402
     SAFE_FEEDING_TOOL_NAMES,
     FeedingSkillLibrary,
     FeedingToolValidationError,
+    safe_feeding_tool_dispatch,
     validate_safe_feeding_tool_call,
     validate_safe_feeding_tool_plan,
 )
@@ -50,17 +51,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _tool_dispatch(library: FeedingSkillLibrary) -> Mapping[str, Callable[..., dict[str, Any]]]:
-    return {
-        "get_feeding_observation": library.get_feeding_observation,
-        "detect_mouth": library.detect_mouth,
-        "active_search_mouth": library.active_search_mouth,
-        "select_target": library.select_target,
-        "move_straw_tip_to_pre_mouth": library.move_straw_tip_to_pre_mouth,
-        "check_feeding_progress": library.check_feeding_progress,
-        "hold_pre_mouth": library.hold_pre_mouth,
-        "retreat_to_ready": library.retreat_to_ready,
-        "feed_water": library.feed_water,
-    }
+    return safe_feeding_tool_dispatch(library)
 
 
 def _call_tool(function: Callable[..., dict[str, Any]], call: Mapping[str, Any]) -> dict[str, Any]:

@@ -118,16 +118,19 @@ def _xyz(value: Sequence[float]) -> list[float]:
     return [round(float(item), 6) for item in value]
 
 
+# This is the only tool surface exposed to OpenClaw/LLM callers.  The
+# task-specific methods below remain as compatibility adapters for existing
+# project code, but are deliberately not dispatchable by an agent.
 SAFE_FEEDING_TOOL_NAMES = frozenset(
     {
-        "get_feeding_observation",
-        "detect_mouth",
-        "active_search_mouth",
+        "get_observation",
+        "detect_target",
+        "active_search",
         "select_target",
-        "move_straw_tip_to_pre_mouth",
-        "check_feeding_progress",
-        "hold_pre_mouth",
-        "retreat_to_ready",
+        "move_tool_to_target",
+        "check_progress",
+        "hold",
+        "retreat",
         "feed_water",
     }
 )
@@ -144,6 +147,30 @@ def _validate_safe_target_selection(value: Any) -> str:
     if selection not in {"left", "center", "right"}:
         raise FeedingToolValidationError("target_selection must be one of: left, center, right")
     return selection
+
+
+def _validate_supported_target_type(value: Any) -> str:
+    if not isinstance(value, str) or value.strip().lower() != "mouth":
+        raise FeedingToolValidationError("target_type must be the currently supported value: mouth")
+    return "mouth"
+
+
+def _validate_supported_detector(value: Any) -> str:
+    if not isinstance(value, str) or value.strip().lower() != "mediapipe":
+        raise FeedingToolValidationError("detector must be the currently supported value: mediapipe")
+    return "mediapipe"
+
+
+def _validate_safe_task(value: Any) -> str:
+    if not isinstance(value, str) or value.strip().lower() != "feed_water":
+        raise FeedingToolValidationError("task must be the currently supported value: feed_water")
+    return "feed_water"
+
+
+def _validate_safe_critic(value: Any) -> str:
+    if not isinstance(value, str) or value.strip().lower() != "rule_based":
+        raise FeedingToolValidationError("critic must be the currently supported value: rule_based")
+    return "rule_based"
 
 
 def _validate_safe_search_time(value: Any) -> float:
@@ -188,19 +215,18 @@ def validate_safe_feeding_tool_call(
         raise FeedingToolValidationError(f"{tool}.args must be an object")
 
     allowed: dict[str, set[str]] = {
-        "get_feeding_observation": set(),
-        "detect_mouth": set(),
-        "active_search_mouth": {"max_search_time_sec", "target_selection", "execute"},
-        "select_target": {"target_selection"},
-        "move_straw_tip_to_pre_mouth": {"execute"},
-        "check_feeding_progress": set(),
-        "hold_pre_mouth": {"duration_sec"},
-        "retreat_to_ready": {"execute"},
+        "get_observation": set(),
+        "detect_target": {"target_type", "detector"},
+        "active_search": {"target_type", "detector", "max_time_sec", "strategy", "execute"},
+        "select_target": {"target_type", "strategy"},
+        "move_tool_to_target": {"tool", "target", "execute"},
+        "check_progress": {"task", "critic"},
+        "hold": {"duration_sec"},
+        "retreat": {"target", "execute"},
         "feed_water": {
             "target_selection",
             "execute",
             "max_search_time_sec",
-            "allow_direct_mouth_contact",
             "allow_vertical_adjust",
         },
     }
@@ -208,25 +234,58 @@ def validate_safe_feeding_tool_call(
     if extra:
         raise FeedingToolValidationError(f"{tool} received unsupported arguments: {', '.join(sorted(extra))}")
 
-    if tool in {"get_feeding_observation", "detect_mouth", "check_feeding_progress"}:
+    if tool == "get_observation":
         return {"tool": tool, "args": {}}
-    if tool == "select_target":
-        return {"tool": tool, "args": {"target_selection": _validate_safe_target_selection(raw_args.get("target_selection", "center"))}}
-    if tool == "active_search_mouth":
+    if tool == "detect_target":
         return {
             "tool": tool,
             "args": {
-                "max_search_time_sec": _validate_safe_search_time(raw_args.get("max_search_time_sec", 30.0)),
-                "target_selection": _validate_safe_target_selection(raw_args.get("target_selection", "center")),
+                "target_type": _validate_supported_target_type(raw_args.get("target_type", "mouth")),
+                "detector": _validate_supported_detector(raw_args.get("detector", "mediapipe")),
+            },
+        }
+    if tool == "active_search":
+        raw_strategy = raw_args.get("strategy", "safe_scan")
+        if raw_strategy == "safe_scan":
+            strategy = "safe_scan"
+        else:
+            strategy = _validate_safe_target_selection(raw_strategy)
+        return {
+            "tool": tool,
+            "args": {
+                "target_type": _validate_supported_target_type(raw_args.get("target_type", "mouth")),
+                "detector": _validate_supported_detector(raw_args.get("detector", "mediapipe")),
+                "max_time_sec": _validate_safe_search_time(raw_args.get("max_time_sec", 30.0)),
+                "strategy": strategy,
                 "execute": _validated_execute_argument(raw_args.get("execute", False), cli_execute=cli_execute),
             },
         }
-    if tool in {"move_straw_tip_to_pre_mouth", "retreat_to_ready"}:
+    if tool == "select_target":
         return {
             "tool": tool,
-            "args": {"execute": _validated_execute_argument(raw_args.get("execute", False), cli_execute=cli_execute)},
+            "args": {
+                "target_type": _validate_supported_target_type(raw_args.get("target_type", "mouth")),
+                "strategy": _validate_safe_target_selection(raw_args.get("strategy", "center")),
+            },
         }
-    if tool == "hold_pre_mouth":
+    if tool == "move_tool_to_target":
+        requested_tool = raw_args.get("tool", "straw_tip")
+        requested_target = raw_args.get("target", "pre_mouth")
+        if requested_tool != "straw_tip" or requested_target != "pre_mouth":
+            raise FeedingToolValidationError("the only approved tool/target pair is straw_tip -> pre_mouth")
+        return {
+            "tool": tool,
+            "args": {"tool": "straw_tip", "target": "pre_mouth", "execute": _validated_execute_argument(raw_args.get("execute", False), cli_execute=cli_execute)},
+        }
+    if tool == "check_progress":
+        return {
+            "tool": tool,
+            "args": {
+                "task": _validate_safe_task(raw_args.get("task", "feed_water")),
+                "critic": _validate_safe_critic(raw_args.get("critic", "rule_based")),
+            },
+        }
+    if tool == "hold":
         value = raw_args.get("duration_sec", 3.0)
         if isinstance(value, bool):
             raise FeedingToolValidationError("duration_sec must be finite and between 0.1 and 30.0")
@@ -237,13 +296,16 @@ def validate_safe_feeding_tool_call(
         if not math.isfinite(duration) or not 0.1 <= duration <= 30.0:
             raise FeedingToolValidationError("duration_sec must be finite and between 0.1 and 30.0")
         return {"tool": tool, "args": {"duration_sec": duration}}
+    if tool == "retreat":
+        target = raw_args.get("target", "ready")
+        if target != "ready":
+            raise FeedingToolValidationError("the only approved retreat target is ready")
+        return {
+            "tool": tool,
+            "args": {"target": "ready", "execute": _validated_execute_argument(raw_args.get("execute", False), cli_execute=cli_execute)},
+        }
 
     # The remaining approved tool is the backwards-compatible high-level call.
-    direct_contact = raw_args.get("allow_direct_mouth_contact", False)
-    if not isinstance(direct_contact, bool):
-        raise FeedingToolValidationError("allow_direct_mouth_contact must be a boolean")
-    if direct_contact:
-        raise FeedingToolValidationError("direct mouth contact is not supported by the current feeding MVP")
     vertical_adjust = raw_args.get("allow_vertical_adjust", True)
     if not isinstance(vertical_adjust, bool):
         raise FeedingToolValidationError("allow_vertical_adjust must be a boolean")
@@ -253,7 +315,6 @@ def validate_safe_feeding_tool_call(
             "target_selection": _validate_safe_target_selection(raw_args.get("target_selection", "center")),
             "execute": _validated_execute_argument(raw_args.get("execute", False), cli_execute=cli_execute),
             "max_search_time_sec": _validate_safe_search_time(raw_args.get("max_search_time_sec", 30.0)),
-            "allow_direct_mouth_contact": False,
             "allow_vertical_adjust": vertical_adjust,
         },
     }
@@ -660,10 +721,39 @@ class FeedingSkillLibrary:
         self._search_fallback = None
         return self._success("select_active_target", **{key: value for key, value in result.items() if key not in {"success", "reason"}})
 
-    def select_target(self, target_selection: str = "center") -> dict[str, Any]:
-        """Safe intent-level alias for the active left/center/right selector."""
-        selected = self.select_active_target(target_selection)
-        result = {**selected, "tool": "select_target", "target_selection": target_selection}
+    def select_target(
+        self,
+        target_type: str = "mouth",
+        strategy: str = "center",
+        *,
+        target_selection: str | None = None,
+    ) -> dict[str, Any]:
+        """Select the current target type with a bounded left/center/right strategy.
+
+        ``target_selection`` and a positional ``left``/``center``/``right``
+        first argument remain accepted for existing callers while the public
+        agent surface uses ``target_type`` and ``strategy``.
+        """
+        if target_selection is not None:
+            strategy = target_selection
+        elif target_type in {"left", "center", "right"} and strategy == "center":
+            # Compatibility with the former select_target("left") shape.
+            strategy = target_type
+            target_type = "mouth"
+        try:
+            normalized_type = _validate_supported_target_type(target_type)
+            normalized_strategy = _validate_safe_target_selection(strategy)
+        except FeedingToolValidationError as exc:
+            return self._remember_safe_tool_result("target_selection_failed", self._failure("select_target", str(exc)))
+        selected = self.select_active_target(normalized_strategy)
+        result = {
+            **selected,
+            "tool": "select_target",
+            "target_type": normalized_type,
+            "strategy": normalized_strategy,
+            # Kept for old project consumers that inspect this field.
+            "target_selection": normalized_strategy,
+        }
         return self._remember_safe_tool_result("target_selected", result)
 
     def reset_active_target(self) -> dict[str, Any]:
@@ -736,6 +826,42 @@ class FeedingSkillLibrary:
                 note=str(latest.get("reason") or "no current mouth pose"),
             )
         return self._remember_safe_tool_result("mouth_detected" if result["mouth_detected"] else "waiting_for_mouth", result)
+
+    def detect_target(self, target_type: str = "mouth", detector: str = "mediapipe") -> dict[str, Any]:
+        """Read a supported detector result without creating a new detector.
+
+        Today this wraps the working MediaPipe mouth stream.  The explicit
+        parameters reserve a safe extension point for future person/cup YOLO
+        support without accepting an arbitrary detector or target name.
+        """
+        try:
+            normalized_type = _validate_supported_target_type(target_type)
+            normalized_detector = _validate_supported_detector(detector)
+        except FeedingToolValidationError as exc:
+            return self._remember_safe_tool_result(
+                "target_detection_failed",
+                self._failure("detect_target", str(exc), target_type=target_type, detector=detector),
+            )
+        detected = self.detect_mouth()
+        pose = detected.get("mouth_pose") if detected.get("mouth_detected") else None
+        result = self._success(
+            "detect_target",
+            detected=bool(detected.get("mouth_detected")),
+            target_type=normalized_type,
+            detector=normalized_detector,
+            pose=pose,
+            confidence=pose.get("confidence") if isinstance(pose, Mapping) else None,
+            frame_id=pose.get("frame_id") if isinstance(pose, Mapping) else self.config.base_frame,
+            timestamp=pose.get("source_stamp_sec") if isinstance(pose, Mapping) else None,
+            reason=None if detected.get("mouth_detected") else str(detected.get("note") or detected.get("reason") or "mouth is not detected"),
+        )
+        # A no-detection result is a valid detector response, so preserve the
+        # success status while clearly exposing the reason to the caller.
+        result["reason"] = None if result["detected"] else result["reason"]
+        return self._remember_safe_tool_result(
+            "target_detected" if result["detected"] else "waiting_for_target",
+            result,
+        )
 
     def _stable_mouth_result(self) -> dict[str, Any]:
         stable = self._active_targets.get_active_stable_pose()
@@ -1253,6 +1379,43 @@ class FeedingSkillLibrary:
             stage = "pre_mouth_blocked"
         return self._remember_safe_tool_result(stage, result)
 
+    def move_tool_to_target(
+        self,
+        tool: str = "straw_tip",
+        target: str = "pre_mouth",
+        *,
+        execute: bool = False,
+    ) -> dict[str, Any]:
+        """Plan or execute the only reviewed tool-to-target motion pair.
+
+        The wrapper intentionally has no pose, joint, trajectory, controller,
+        or contact argument.  It delegates unchanged to the established
+        fixed-axis, flange-down, PlanningScene/MoveIt pre-mouth path.
+        """
+        if tool != "straw_tip" or target != "pre_mouth":
+            return self._remember_safe_tool_result(
+                "tool_target_blocked",
+                self._failure(
+                    "move_tool_to_target",
+                    "the only approved tool/target pair is straw_tip -> pre_mouth",
+                    tool=tool,
+                    target=target,
+                    execute=execute,
+                ),
+            )
+        legacy = self.move_straw_tip_to_pre_mouth(execute=execute)
+        result = {
+            **legacy,
+            "tool": "move_tool_to_target",
+            "approved_tool": "straw_tip",
+            "approved_target": "pre_mouth",
+            "direct_mouth_contact": False,
+        }
+        return self._remember_safe_tool_result(
+            "at_pre_mouth" if result.get("success") and execute else "pre_mouth_plan_validated" if result.get("success") else "tool_target_blocked",
+            result,
+        )
+
     def _search_primitive_delta(self, primitive: str) -> np.ndarray:
         """Return one fixed base-link scan increment; never model-provided."""
         steps = {
@@ -1636,6 +1799,50 @@ class FeedingSkillLibrary:
         }
         stage = "mouth_found" if result.get("success") else "mouth_search_failed"
         return self._remember_safe_tool_result(stage, result)
+
+    def active_search(
+        self,
+        target_type: str = "mouth",
+        detector: str = "mediapipe",
+        max_time_sec: float = 30.0,
+        strategy: str = "safe_scan",
+        *,
+        execute: bool = False,
+    ) -> dict[str, Any]:
+        """Run the bounded existing safe scan for the supported mouth target.
+
+        ``strategy`` is the selected logical target (left/center/right).  The
+        default ``safe_scan`` means the established center-target scan and is
+        retained for the concise ABot-Claw call shape in the skill contract.
+        """
+        try:
+            normalized_type = _validate_supported_target_type(target_type)
+            normalized_detector = _validate_supported_detector(detector)
+            normalized_strategy = "center" if strategy == "safe_scan" else _validate_safe_target_selection(strategy)
+            timeout = _validate_safe_search_time(max_time_sec)
+        except FeedingToolValidationError as exc:
+            return self._remember_safe_tool_result(
+                "target_search_failed",
+                self._failure("active_search", str(exc), target_type=target_type, detector=detector, strategy=strategy),
+            )
+        legacy = self.active_search_mouth(
+            max_search_time_sec=timeout,
+            target_selection=normalized_strategy,
+            execute=execute,
+        )
+        result = {
+            **legacy,
+            "tool": "active_search",
+            "target_type": normalized_type,
+            "detector": normalized_detector,
+            "max_time_sec": timeout,
+            "strategy": strategy,
+            "target_selection": normalized_strategy,
+        }
+        return self._remember_safe_tool_result(
+            "target_found" if result.get("success") else "target_search_failed",
+            result,
+        )
 
     def move_straw_tip_to_mouth_optional(
         self,
@@ -2033,6 +2240,7 @@ class FeedingSkillLibrary:
             "robot_state": observation.get("robot_state"),
             "straw_tip_pose": observation.get("straw_tip_pose"),
             "tool0_pose": observation.get("tool0_pose"),
+            "camera_info": observation.get("camera_info"),
             "mouth_detected": bool(detected.get("success")),
             "detected_mouth_pose": detected.get("mouth_pose"),
             "mouth_stable": bool(stable.get("success")),
@@ -2046,6 +2254,47 @@ class FeedingSkillLibrary:
         }
         serialized = _jsonable(result)
         self._last_tool_results["get_feeding_observation"] = serialized
+        return serialized
+
+    def get_observation(self) -> dict[str, Any]:
+        """Return structured robot, perception, target, and obstacle state.
+
+        This is the reusable replacement for the feeding-specific observation
+        name.  It only reads the already-running SDK and perception streams;
+        it creates no detector and sends no robot command.
+        """
+        legacy = self.get_feeding_observation()
+        detected_pose = legacy.get("detected_mouth_pose")
+        stable_pose = legacy.get("stable_mouth_pose")
+        result = {
+            **legacy,
+            "tool": "get_observation",
+            "camera_status": {
+                "available": bool(legacy.get("camera_info")),
+                "info": legacy.get("camera_info"),
+            },
+            "perception_status": {
+                "target_type": "mouth",
+                "detector": "mediapipe",
+                "available": bool(legacy.get("mouth_detected")),
+                "stable": bool(legacy.get("mouth_stable")),
+                "source_topic": self.config.mouth_topic,
+            },
+            "latest_detections": {
+                "mouth": detected_pose,
+                "stable_mouth": stable_pose,
+            },
+            "mouth_pose": stable_pose or detected_pose,
+            "tool_pose": legacy.get("straw_tip_pose"),
+            "obstacle_status": {
+                "planning_scene": legacy.get("planning_scene"),
+                "planning_scene_enabled": legacy.get("planning_scene_enabled"),
+                "octomap": legacy.get("octomap"),
+            },
+            "current_task_stage": legacy.get("feeding_stage"),
+        }
+        serialized = _jsonable(result)
+        self._last_tool_results["get_observation"] = serialized
         return serialized
 
     def check_feeding_progress(self) -> dict[str, Any]:
@@ -2120,6 +2369,31 @@ class FeedingSkillLibrary:
         self._last_tool_results["check_feeding_progress"] = result
         return result
 
+    def check_progress(self, task: str = "feed_water", critic: str = "rule_based") -> dict[str, Any]:
+        """Return the current rule-based progress for a supported task.
+
+        ``critic='vlac'`` is intentionally not accepted until a reviewed
+        critic service exists.  The response explicitly identifies the
+        current rule-based implementation so callers need not infer it.
+        """
+        try:
+            normalized_task = _validate_safe_task(task)
+            normalized_critic = _validate_safe_critic(critic)
+        except FeedingToolValidationError as exc:
+            return self._remember_safe_tool_result(
+                "progress_check_failed", self._failure("check_progress", str(exc), task=task, critic=critic)
+            )
+        legacy = self.check_feeding_progress()
+        result = {
+            **legacy,
+            "tool": "check_progress",
+            "task": normalized_task,
+            "critic": normalized_critic,
+            "distance_to_target": legacy.get("distance_to_pre_mouth"),
+            "reached_target": legacy.get("reached_pre_mouth"),
+        }
+        return self._remember_safe_tool_result("progress_checked", result)
+
     def hold_pre_mouth(self, duration_sec: float = 3.0) -> dict[str, Any]:
         """Hold only after a successful executed pre-mouth motion; never approach closer."""
         if isinstance(duration_sec, bool):
@@ -2162,6 +2436,50 @@ class FeedingSkillLibrary:
             note="Held at the existing pre-mouth pose; no closer mouth motion was commanded.",
         )
         return self._remember_safe_tool_result("holding_pre_mouth", result)
+
+    def hold(self, duration_sec: float = 3.0) -> dict[str, Any]:
+        """Hold the current state without an approach or mouth-contact motion."""
+        last_move = self._last_tool_results.get("move_straw_tip_to_pre_mouth")
+        if last_move and last_move.get("success") and not last_move.get("execute"):
+            if isinstance(duration_sec, bool):
+                legacy = self.hold_pre_mouth(duration_sec=duration_sec)
+                return self._remember_safe_tool_result("hold_failed", {**legacy, "tool": "hold", "plan_only": True})
+            try:
+                planned_duration = float(duration_sec)
+            except (TypeError, ValueError):
+                legacy = self.hold_pre_mouth(duration_sec=duration_sec)
+                return self._remember_safe_tool_result("hold_failed", {**legacy, "tool": "hold", "plan_only": True})
+            if not math.isfinite(planned_duration) or not 0.1 <= planned_duration <= 30.0:
+                legacy = self.hold_pre_mouth(duration_sec=duration_sec)
+                return self._remember_safe_tool_result("hold_failed", {**legacy, "tool": "hold", "plan_only": True})
+            # A plan-only preflight has no trajectory to dwell on.  Retain the
+            # working pipeline's no-command settle check and report that the
+            # requested hold was validated without moving the robot.
+            settled = self.stop_motion_or_hold_position(settle_timeout_sec=min(3.0, planned_duration))
+            result = {
+                **settled,
+                "tool": "hold",
+                "duration_sec": round(planned_duration, 4),
+                "plan_only": True,
+                "note": "Plan-only hold validated; no robot motion or closer mouth approach was commanded.",
+            }
+            return self._remember_safe_tool_result(
+                "pre_mouth_plan_validated" if result.get("success") else "hold_failed", result
+            )
+        legacy = self.hold_pre_mouth(duration_sec=duration_sec)
+        result = {**legacy, "tool": "hold", "plan_only": False}
+        return self._remember_safe_tool_result("holding_pre_mouth" if result.get("success") else "hold_failed", result)
+
+    def retreat(self, target: str = "ready", *, execute: bool = False) -> dict[str, Any]:
+        """Use the existing safe ready retreat for the only approved target."""
+        if target != "ready":
+            return self._remember_safe_tool_result(
+                "retreat_failed",
+                self._failure("retreat", "the only approved retreat target is ready", target=target, execute=execute),
+            )
+        legacy = self.retreat_to_ready(execute=execute)
+        result = {**legacy, "tool": "retreat", "target": "ready"}
+        return self._remember_safe_tool_result("ready" if result.get("success") else "retreat_failed", result)
 
     def feed_water(
         self,
@@ -2225,32 +2543,52 @@ class FeedingSkillLibrary:
             return failed("validate_arguments", "max_search_time_sec must be finite and at least 0.1")
         search_time = min(requested_search_time, self.config.search_max_time_sec)
 
-        observation = record("get_feeding_observation", self.get_feeding_observation())
+        observation = record("get_observation", self.get_observation())
         if not observation.get("success"):
-            return failed("get_feeding_observation", str(observation.get("reason") or "robot observation failed"))
+            return failed("get_observation", str(observation.get("reason") or "robot observation failed"))
 
-        # This read-only sample provides the explicit safe-tool sequence with
-        # the latest existing MediaPipe result before bounded active search.
-        record("detect_mouth", self.detect_mouth())
+        detection = record("detect_target", self.detect_target(target_type="mouth", detector="mediapipe"))
 
-        selected = record("select_target", self.select_target(target))
+        # Active search is only needed when the existing stream is absent or
+        # not stable. Its stable-first path remains motionless, and its
+        # execute path is the existing bounded scan policy.
+        selected_strategy = target
+        if not detection.get("detected") or not observation.get("mouth_stable"):
+            search = record(
+                "active_search",
+                self.active_search(
+                    target_type="mouth",
+                    detector="mediapipe",
+                    max_time_sec=search_time,
+                    strategy=target,
+                    execute=execute,
+                ),
+            )
+            if not search.get("success"):
+                return failed("active_search", str(search.get("reason") or "active mouth search failed"))
+            selected_strategy = str(search.get("resolved_selection") or target)
+        else:
+            record(
+                "active_search",
+                {
+                    "success": True,
+                    "tool": "active_search",
+                    "skipped": True,
+                    "reason": None,
+                    "note": "A stable MediaPipe mouth target is already available; no scan was needed.",
+                },
+            )
+
+        selected = record(
+            "select_target",
+            self.select_target(target_type="mouth", strategy=selected_strategy),
+        )
         if not selected.get("success"):
             return failed("select_target", str(selected.get("reason") or "target selection failed"))
 
-        search = record(
-            "active_search_mouth",
-            self.active_search_mouth(
-                max_search_time_sec=search_time,
-                target_selection=target,
-                execute=execute,
-            ),
-        )
-        if not search.get("success"):
-            return failed("active_search_mouth", str(search.get("reason") or "active mouth search failed"))
-
         stable = record(
             "wait_for_stable_mouth_pose",
-            self.wait_for_stable_mouth_pose(timeout_sec=5.0, selection=target),
+            self.wait_for_stable_mouth_pose(timeout_sec=5.0, selection=selected_strategy),
         )
         if not stable.get("success"):
             return failed(
@@ -2261,34 +2599,28 @@ class FeedingSkillLibrary:
         if not isinstance(mouth_pose, Mapping):
             return failed("wait_for_stable_mouth_pose", "stable mouth result did not include a pose")
 
-        scene = record(
-            "ensure_planning_scene_obstacles",
-            self.ensure_planning_scene_obstacles(mouth_pose, execute=execute),
-        )
-        if not scene.get("success") or not scene.get("applied"):
-            return failed(
-                "ensure_planning_scene_obstacles",
-                str(scene.get("reason") or scene.get("warning") or "PlanningScene safety objects were not verified"),
-            )
-
-        # MoveIt automatically consumes this optional layer during the
-        # subsequent preflight/motion.  OctoMap absence is not a failure: the
-        # deterministic human PlanningScene objects remain mandatory above.
-        octomap = self._octomap_status()
-        record("check_octomap_status", {"success": True, **octomap})
-
-        preview = record("compute_pre_mouth_target", self.compute_pre_mouth_target(mouth_pose))
-        if not preview.get("success"):
-            return failed("compute_pre_mouth_target", str(preview.get("reason") or "pre-mouth target failed"))
-
         move = record(
-            "move_straw_tip_to_pre_mouth",
-            self.move_straw_tip_to_pre_mouth(mouth_pose, execute=execute),
+            "move_tool_to_target",
+            self.move_tool_to_target(tool="straw_tip", target="pre_mouth", execute=execute),
         )
         if not move.get("success"):
             return failed(
-                "move_straw_tip_to_pre_mouth",
+                "move_tool_to_target",
                 str(move.get("reason") or "MoveIt could not reach a safe pre-mouth target"),
+            )
+        # The reusable motion wrapper performed this update internally. Keep
+        # the existing high-level feed_water contract: do not claim a valid
+        # feeding plan unless the dynamic human safety objects were applied.
+        scene = move.get("planning_scene")
+        if not isinstance(scene, Mapping) or not scene.get("applied"):
+            scene_details = scene if isinstance(scene, Mapping) else {}
+            return failed(
+                "move_tool_to_target",
+                str(
+                    scene_details.get("reason")
+                    or scene_details.get("warning")
+                    or "PlanningScene safety objects were not verified"
+                ),
             )
 
         # The current intent-level API intentionally provides no height
@@ -2307,19 +2639,20 @@ class FeedingSkillLibrary:
             }
         )
 
-        hold = record(
-            "hold_pre_mouth" if execute else "stop_motion_or_hold_position",
-            self.hold_pre_mouth(duration_sec=3.0) if execute else self.stop_motion_or_hold_position(),
-        )
+        progress = record("check_progress", self.check_progress(task="feed_water", critic="rule_based"))
+        if not progress.get("success"):
+            return failed("check_progress", str(progress.get("reason") or "progress check failed"))
+
+        hold = record("hold", self.hold(duration_sec=3.0))
         if not hold.get("success"):
-            return failed(str(hold.get("tool") or "hold_pre_mouth"), str(hold.get("reason") or "robot did not settle"))
+            return failed("hold", str(hold.get("reason") or "robot did not settle"))
 
         # Do not retreat after a feeding request: the requested terminal state
         # is a safe pre-mouth hold.  A separately reviewed caller may invoke
         # the existing retreat_to_ready tool after this high-level operation.
         steps.append(
             {
-                "tool": "retreat_to_ready",
+                "tool": "retreat",
                 "result": {
                     "success": True,
                     "skipped": True,
@@ -2380,3 +2713,18 @@ class FeedingSkillLibrary:
             settle_timeout_sec=round(max(0.0, float(settle_timeout_sec)), 4),
             emergency_stop_note="Use the external simulator/controller safety stop if an immediate stop is required.",
         )
+
+
+def safe_feeding_tool_dispatch(library: FeedingSkillLibrary) -> Mapping[str, Callable[..., dict[str, Any]]]:
+    """Return the centrally defined, agent-approved reusable tool dispatch."""
+    return {
+        "get_observation": library.get_observation,
+        "detect_target": library.detect_target,
+        "active_search": library.active_search,
+        "select_target": library.select_target,
+        "move_tool_to_target": library.move_tool_to_target,
+        "check_progress": library.check_progress,
+        "hold": library.hold,
+        "retreat": library.retreat,
+        "feed_water": library.feed_water,
+    }

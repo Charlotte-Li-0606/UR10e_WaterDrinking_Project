@@ -1,4 +1,4 @@
-"""Focused safety checks for the one-tool LLM feeding contract."""
+"""Focused safety checks for the reusable LLM feeding-tool contract."""
 
 from __future__ import annotations
 
@@ -54,6 +54,38 @@ class FeedWaterPlanValidationTest(unittest.TestCase):
                 "task": "feed_water",
                 "mode": SAFE_MODE,
                 "steps": [{"tool": "move_joints", "args": {}}],
+            }
+        )
+        with self.assertRaises(PlanValidationError):
+            validate_plan(plan, cli_execute=True)
+
+    def test_normalizes_reusable_plan_only_sequence(self) -> None:
+        plan = json.dumps(
+            {
+                "task": "feed_water",
+                "mode": SAFE_MODE,
+                "steps": [
+                    {"tool": "get_observation", "args": {}},
+                    {"tool": "detect_target", "args": {"target_type": "mouth", "detector": "mediapipe"}},
+                    {"tool": "active_search", "args": {"max_time_sec": 30.0, "strategy": "safe_scan", "execute": True}},
+                    {"tool": "select_target", "args": {"target_type": "mouth", "strategy": "center"}},
+                    {"tool": "move_tool_to_target", "args": {"tool": "straw_tip", "target": "pre_mouth", "execute": True}},
+                    {"tool": "check_progress", "args": {"task": "feed_water", "critic": "rule_based"}},
+                    {"tool": "hold", "args": {"duration_sec": 3.0}},
+                ],
+            }
+        )
+        normalized = validate_plan(plan, cli_execute=False)
+        self.assertEqual("get_observation", normalized["steps"][0]["tool"])
+        self.assertFalse(normalized["steps"][2]["args"]["execute"])
+        self.assertFalse(normalized["steps"][4]["args"]["execute"])
+
+    def test_rejects_legacy_task_specific_tool(self) -> None:
+        plan = json.dumps(
+            {
+                "task": "feed_water",
+                "mode": SAFE_MODE,
+                "steps": [{"tool": "move_straw_tip_to_pre_mouth", "args": {}}],
             }
         )
         with self.assertRaises(PlanValidationError):

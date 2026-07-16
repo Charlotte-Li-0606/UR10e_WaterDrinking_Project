@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Real-LLM runner for the single safe ``feed_water`` tool.
+"""Real-LLM runner for validated reusable UR10e assistance tools.
 
-The language model is an intent/decomposition layer only.  It can propose one
-JSON call to :meth:`FeedingSkillLibrary.feed_water`; it never receives the
-UR10e SDK, camera data, joint targets, generic poses, controllers, grippers,
-or direct mouth-contact actions.  The local validator is the authoritative
-safety boundary before a ROS/MoveIt tool object is created.
+The language model is an intent/decomposition layer only. It can propose the
+small reusable ABot-Claw-style tool plan, including the backwards-compatible
+high-level ``feed_water`` wrapper. It never receives the UR10e SDK, camera
+data, joint targets, generic poses, controllers, grippers, or direct
+mouth-contact actions. The local validator is the authoritative safety
+boundary before a ROS/MoveIt tool object is created.
 
 ``--mock-llm`` remains an explicit offline demonstration path.  Without it,
 normal operation always calls the configured OpenAI-compatible Chat
@@ -17,7 +18,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
 import sys
 import urllib.error
@@ -37,13 +37,28 @@ PROJECT_ROOT = _project_root()
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from robot_layer.arm_ur10e.agent_tools.feeding_tools import FeedingSkillLibrary  # noqa: E402
+from robot_layer.arm_ur10e.agent_tools.feeding_tools import (  # noqa: E402
+    SAFE_FEEDING_TOOL_NAMES,
+    FeedingSkillLibrary,
+    FeedingToolValidationError,
+    safe_feeding_tool_dispatch,
+    validate_safe_feeding_tool_plan,
+)
 
 
-SAFE_MODE = "high_level_tool_call"
-ALLOWED_TOOLS = frozenset({"feed_water"})
+SAFE_MODE = "reusable_tool_plan"
+ALLOWED_TOOLS = SAFE_FEEDING_TOOL_NAMES
 FORBIDDEN_TOOLS = frozenset(
     {
+        # Former task-specific agent names are compatibility methods only;
+        # OpenClaw/LLM callers must use the reusable names above.
+        "get_feeding_observation",
+        "detect_mouth",
+        "active_search_mouth",
+        "move_straw_tip_to_pre_mouth",
+        "check_feeding_progress",
+        "hold_pre_mouth",
+        "retreat_to_ready",
         "get_robot_observation",
         "get_latest_mouth_pose",
         "select_active_target",
@@ -101,11 +116,11 @@ def _target_selection_from_task(task: str) -> str:
 
 
 def _plan_instructions() -> str:
-    """Return the intentionally small model contract for this MVP."""
+    """Return the tightly validated reusable tool contract for this MVP."""
     return f"""You are a safe UR10e feeding task decomposition planner.
 Output JSON only. Return exactly one JSON object and no markdown.
 
-For every feeding request, return exactly this shape:
+For a concise backwards-compatible request, you may return this one-step plan:
 {{
   "task": "feed_water",
   "mode": "{SAFE_MODE}",
@@ -116,24 +131,37 @@ For every feeding request, return exactly this shape:
         "target_selection": "center",
         "execute": false,
         "max_search_time_sec": 30.0,
-        "allow_direct_mouth_contact": false,
         "allow_vertical_adjust": true
       }}
     }}
   ]
 }}
 
-The only allowed tool is feed_water and there must be exactly one step. Map a
-requested person to target_selection "left", "center", or "right". The
-maximum search time is 30 seconds. Set execute to the supplied CLI execution
-permission. Direct mouth contact is forbidden, so
-allow_direct_mouth_contact must be false.
+For a decomposed plan, use only these tools: get_observation, detect_target,
+active_search, select_target, move_tool_to_target, check_progress, hold,
+retreat, feed_water. The recommended feed-water sequence is:
+1) get_observation({{}})
+2) detect_target({{"target_type":"mouth","detector":"mediapipe"}})
+3) active_search only if mouth detection is absent or unstable, with
+   target_type="mouth", detector="mediapipe", max_time_sec at most 30, and
+   strategy="safe_scan" or left/center/right
+4) select_target({{"target_type":"mouth","strategy":"center"}})
+5) move_tool_to_target({{"tool":"straw_tip","target":"pre_mouth","execute":false}})
+6) check_progress({{"task":"feed_water","critic":"rule_based"}})
+7) hold({{"duration_sec":3.0}}) only after execution or for an explicit
+   plan-only hold validation.
+
+Map a requested person to left, center, or right. Set execute to the supplied
+CLI execution permission. The local validator forces execute=false without
+that permission. Only straw_tip -> pre_mouth and retreat target ready are
+allowed. Direct mouth contact is forbidden.
 
 You must not command joints, arbitrary poses, trajectories, controllers,
-grippers, grasping, attach/detach, direct perception primitives, or direct
-mouth contact. feed_water itself performs the fixed safe pipeline: perception,
-active mouth search, target selection, PlanningScene safety objects, optional
-MoveIt OctoMap occupancy, flange-down pre-mouth planning, and hold. The local
+grippers, grasping, attach/detach, direct mouth contact, unknown target types,
+unknown detectors, unknown tool/target pairs, or search times above 30 seconds.
+feed_water itself composes the fixed safe pipeline: perception, active search,
+target selection, PlanningScene safety objects, optional MoveIt OctoMap
+occupancy, flange-down pre-mouth planning, progress check, and hold. The local
 validator is authoritative and can reject or override your plan.
 """
 
@@ -151,7 +179,6 @@ def _mock_plan(task: str, *, request_execute: bool) -> str:
                         "target_selection": _target_selection_from_task(task),
                         "execute": request_execute,
                         "max_search_time_sec": 30.0,
-                        "allow_direct_mouth_contact": False,
                         "allow_vertical_adjust": True,
                     },
                 }
@@ -289,60 +316,8 @@ def _request_real_llm_plan(task: str, model: str | None, *, request_execute: boo
     return plan_text
 
 
-def _validate_selection(value: Any) -> str:
-    if not isinstance(value, str):
-        raise PlanValidationError("feed_water.target_selection must be one of: left, center, right")
-    selection = value.strip().lower()
-    if selection not in {"left", "center", "right"}:
-        raise PlanValidationError("feed_water.target_selection must be one of: left, center, right")
-    return selection
-
-
-def _validate_feed_water_args(args: Mapping[str, Any], *, cli_execute: bool) -> dict[str, Any]:
-    """Normalize the only LLM-callable tool without broadening its surface."""
-    allowed_args = {
-        "target_selection",
-        "execute",
-        "max_search_time_sec",
-        "allow_direct_mouth_contact",
-        "allow_vertical_adjust",
-    }
-    extra = set(args) - allowed_args
-    if extra:
-        raise PlanValidationError(f"feed_water received unsupported arguments: {', '.join(sorted(extra))}")
-    selection = _validate_selection(args.get("target_selection", "center"))
-    try:
-        max_search_time_sec = float(args.get("max_search_time_sec", 30.0))
-    except (TypeError, ValueError) as exc:
-        raise PlanValidationError("feed_water.max_search_time_sec must be finite and between 0.1 and 30.0") from exc
-    if isinstance(args.get("max_search_time_sec", 30.0), bool) or not math.isfinite(max_search_time_sec):
-        raise PlanValidationError("feed_water.max_search_time_sec must be finite and between 0.1 and 30.0")
-    if not 0.1 <= max_search_time_sec <= 30.0:
-        raise PlanValidationError("feed_water.max_search_time_sec must be finite and between 0.1 and 30.0")
-    requested_execute = args.get("execute", False)
-    if not isinstance(requested_execute, bool):
-        raise PlanValidationError("feed_water.execute must be a boolean")
-    direct_contact = args.get("allow_direct_mouth_contact", False)
-    if not isinstance(direct_contact, bool):
-        raise PlanValidationError("feed_water.allow_direct_mouth_contact must be a boolean")
-    if direct_contact:
-        raise PlanValidationError("feed_water direct mouth contact is not supported by the current safety-reviewed MVP")
-    vertical_adjust = args.get("allow_vertical_adjust", True)
-    if not isinstance(vertical_adjust, bool):
-        raise PlanValidationError("feed_water.allow_vertical_adjust must be a boolean")
-    return {
-        "target_selection": selection,
-        # CLI permission is the only authority that can enable physical
-        # search/pre-mouth motion. --plan-only always forces this false.
-        "execute": bool(cli_execute and requested_execute),
-        "max_search_time_sec": max_search_time_sec,
-        "allow_direct_mouth_contact": False,
-        "allow_vertical_adjust": vertical_adjust,
-    }
-
-
 def validate_plan(plan_text: str, *, cli_execute: bool) -> dict[str, Any]:
-    """Parse and normalize untrusted JSON before constructing a ROS tool."""
+    """Parse and normalize an untrusted reusable plan before creating ROS tools."""
     try:
         raw = json.loads(plan_text)
     except json.JSONDecodeError as exc:
@@ -354,41 +329,65 @@ def validate_plan(plan_text: str, *, cli_execute: bool) -> dict[str, Any]:
     if raw.get("mode") != SAFE_MODE:
         raise PlanValidationError(f"LLM plan mode must be {SAFE_MODE!r}")
     steps = raw.get("steps")
-    if not isinstance(steps, list) or len(steps) != 1:
-        raise PlanValidationError("LLM plan must contain exactly one high-level feed_water step")
-    step = steps[0]
-    if not isinstance(step, Mapping):
-        raise PlanValidationError("Step 0 must be an object")
-    tool = step.get("tool")
-    if tool in FORBIDDEN_TOOLS:
-        raise PlanValidationError(f"Step 0 requests forbidden tool {tool!r}")
-    if tool not in ALLOWED_TOOLS:
-        raise PlanValidationError(f"Step 0 requests unknown or disallowed tool {tool!r}")
-    args = step.get("args", {})
-    if not isinstance(args, Mapping):
-        raise PlanValidationError("Step 0 args must be an object")
+    if not isinstance(steps, list) or not steps:
+        raise PlanValidationError("LLM plan must contain at least one approved reusable tool step")
+    for index, step in enumerate(steps):
+        if not isinstance(step, Mapping):
+            raise PlanValidationError(f"Step {index} must be an object")
+        tool = step.get("tool")
+        if tool in FORBIDDEN_TOOLS:
+            raise PlanValidationError(f"Step {index} requests forbidden tool {tool!r}")
+        if tool not in ALLOWED_TOOLS:
+            raise PlanValidationError(f"Step {index} requests unknown or disallowed tool {tool!r}")
+    try:
+        normalized = validate_safe_feeding_tool_plan({"steps": steps}, cli_execute=cli_execute)
+    except FeedingToolValidationError as exc:
+        raise PlanValidationError(str(exc)) from exc
     return {
         "task": "feed_water",
         "mode": SAFE_MODE,
-        "steps": [{"tool": "feed_water", "args": _validate_feed_water_args(args, cli_execute=cli_execute)}],
+        "steps": normalized["steps"],
         "cli_execute": bool(cli_execute),
     }
 
 
 def execute_validated_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
-    """Run the one approved high-level pipeline and return its structured result."""
+    """Run a validated reusable plan in one shared safe-library instance."""
     library = FeedingSkillLibrary()
     try:
-        step = plan["steps"][0]
-        result = library.feed_water(**step["args"])
-        print(
-            json.dumps(
-                {"event": "step_result", "index": 0, "tool": "feed_water", "result": _jsonable(result)},
-                sort_keys=True,
-                default=str,
+        dispatch = safe_feeding_tool_dispatch(library)
+        results: list[dict[str, Any]] = []
+        for index, step in enumerate(plan["steps"]):
+            tool = step["tool"]
+            try:
+                result = dispatch[tool](**step["args"])
+            except Exception as exc:
+                result = {
+                    "success": False,
+                    "tool": tool,
+                    "reason": f"safe tool raised {exc.__class__.__name__}",
+                }
+            serialized = _jsonable(result)
+            results.append({"tool": tool, "result": serialized})
+            print(
+                json.dumps(
+                    {"event": "step_result", "index": index, "tool": tool, "result": serialized},
+                    sort_keys=True,
+                    default=str,
+                )
             )
-        )
-        return _jsonable(result)
+            if not serialized.get("success"):
+                break
+        if len(results) == 1 and results[0]["tool"] == "feed_water":
+            return results[0]["result"]
+        success = len(results) == len(plan["steps"]) and all(item["result"].get("success") for item in results)
+        return {
+            "success": success,
+            "tool": "reusable_feeding_plan",
+            "steps": results,
+            "failed_step": None if success else results[-1]["tool"],
+            "reason": None if success else results[-1]["result"].get("reason"),
+        }
     finally:
         library.close()
 
@@ -462,14 +461,15 @@ def main() -> int:
     if cli_execute:
         result = execute_validated_plan(plan)
     else:
+        single_feed_water = len(plan["steps"]) == 1 and plan["steps"][0]["tool"] == "feed_water"
         result = {
             "success": True,
-            "tool": "feed_water",
+            "tool": "feed_water" if single_feed_water else "reusable_feeding_plan",
             "final_state": "plan_validated",
             "failed_step": None,
             "reason": None,
-            "steps": [],
-            "note": "Plan-only mode validated the feed_water call and forced execute=false; no feeding tool was run.",
+            "steps": plan["steps"],
+            "note": "Plan-only mode validated the approved reusable tool plan and forced execute=false; no feeding tool was run.",
         }
     print(json.dumps({"event": "agent_result", **result}, indent=2, sort_keys=True, default=str))
     return 0 if result["success"] else 2
