@@ -1,0 +1,3 @@
+# Used by the optional real OpenAI JSON-plan provider.  Motion remains local
+# and gated by llm_feeding_agent.py's allow-list validator.
+openai==2.45.0

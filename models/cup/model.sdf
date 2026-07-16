@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="cup">
+    <!-- At the flange-down reset, this keeps the upright straw top exactly
+         coincident with feeding_straw_tip_marker (the green sphere). -->
+    <pose>0.481542 0.208414 0.825006 0 0 0</pose>
+    <static>true</static>
+    <link name="cup_link">
+      <inertial>
+        <mass>0.15</mass>
+        <inertia>
+          <ixx>0.00061906</ixx>
+          <iyy>0.00061906</iyy>
+          <izz>0.00018750</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+
+      <!-- Stable simple collision; do not use the visual mesh for collision. -->
+      <collision name="cup_cylinder_collision">
+        <pose>0 0 0.1025 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.05</radius>
+            <length>0.205</length>
+          </cylinder>
+        </geometry>
+      </collision>
+
+      <visual name="cup_mesh_visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>model://cup/meshes/cup.dae</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+
+      <!-- Visual-only straw centered in the cup. Its top is 0.070 m above
+           the 0.205 m cup rim, for a total height of 0.275 m. -->
+      <visual name="center_straw_visual">
+        <pose>0 0 0.240 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.004</radius>
+            <length>0.070</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.95 0.95 0.90 1.0</ambient>
+          <diffuse>0.95 0.95 0.90 1.0</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

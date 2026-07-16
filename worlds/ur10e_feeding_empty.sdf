@@ -1,0 +1,129 @@
+<?xml version="1.0" ?>
+<sdf version="1.6">
+  <world name="empty">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics" />
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands" />
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster" />
+    <plugin filename="gz-sim-contact-system" name="gz::sim::systems::Contact" />
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>1.0 1.0 1.0 1</diffuse>
+      <specular>0.35 0.35 0.35 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Frontal fill light keeps the face readable in the wrist RGB image. -->
+    <light type="point" name="human_face_fill">
+      <pose>0.48 0.24 1.60 0 0 0</pose>
+      <cast_shadows>false</cast_shadows>
+      <diffuse>1.0 0.95 0.90 1</diffuse>
+      <specular>0.40 0.38 0.36 1</specular>
+      <attenuation>
+        <range>5</range>
+        <constant>0.5</constant>
+        <linear>0.1</linear>
+        <quadratic>0.01</quadratic>
+      </attenuation>
+    </light>
+
+    <!-- The URDF already has a fixed visual ground link.  Keep the world
+         floor visual-only so DART does not form static contacts against that
+         fixed-base robot model. -->
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+            <specular>0.8 0.8 0.8 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Raised visual platform.  The UR10e base is fixed to world at z=0.60,
+         so it requires no physical support.  In Gazebo Sim's DART backend, a
+         collision surface exactly coincident with that fixed base corrupts
+         shoulder-pan contact dynamics and can drive the joint to a limit.
+         Keep this model visual-only; the human proxy remains the task's
+         physical collision boundary. -->
+    <model name="ur10e_base_platform">
+      <static>true</static>
+      <pose>0 0.55 0 0 0 0</pose>
+      <link name="platform_link">
+        <visual name="column_visual">
+          <pose>0 0 0.275 0 0 0</pose>
+          <geometry><box><size>0.34 0.34 0.55</size></box></geometry>
+          <material><ambient>0.18 0.20 0.24 1</ambient><diffuse>0.22 0.25 0.30 1</diffuse></material>
+        </visual>
+        <visual name="top_visual">
+          <pose>0 0 0.575 0 0 0</pose>
+          <geometry><box><size>0.80 0.70 0.05</size></box></geometry>
+          <material><ambient>0.30 0.34 0.40 1</ambient><diffuse>0.38 0.42 0.50 1</diffuse><specular>0.15 0.15 0.15 1</specular></material>
+        </visual>
+      </link>
+    </model>
+
+
+    <!-- Feeding scene components are intentionally separate:
+         textured human visual, collision proxy, target markers, and task objects. -->
+    <include>
+      <uri>model://my_human_face</uri>
+      <name>my_human_face</name>
+    </include>
+
+    <!-- Second visual-only person for left/right target-selection tests.
+         Its pose is offset along the wrist camera's image-horizontal axis so
+         both faces can be detected in the reset camera view.  No new Gazebo
+         or MoveIt collision geometry is introduced here. -->
+    <include>
+      <uri>model://my_human_face</uri>
+      <name>my_human_face_right</name>
+    <pose>0.487 1.123 0 0 0 0</pose>
+    </include>
+
+    <include>
+      <uri>model://human_collision_proxy</uri>
+      <name>human_collision_proxy</name>
+    </include>
+
+    <include>
+      <uri>model://mouth_target</uri>
+      <name>feeding_mouth_target</name>
+    </include>
+
+    <!-- Fixed feeding targets. -->
+    <model name="feeding_pre_mouth_safe_target">
+      <static>true</static>
+      <pose>0.357000 0.860000 1.708000 0 0 0</pose>
+      <!-- Logical waypoint only. No visual sphere, so it cannot obscure the
+           person in the wrist RGB camera. -->
+      <link name="link"/>
+    </model>
+
+    <!-- Current camera/straw markers are fixed visual links on UR tool0. -->
+  </world>
+</sdf>

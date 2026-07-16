@@ -1,0 +1,20 @@
+# Experimental dynamic obstacle layer for MoveIt move_group.
+# Loaded only with the project launch argument use_octomap:=true.
+# The PointCloud2 source is published in wrist_rgbd_camera_optical_frame and
+# transformed through the existing wrist-camera TF chain into base_link.
+octomap_frame: base_link
+# 3 cm voxels are the practical first precision step for the stride-sampled
+# wrist cloud.  2 cm would create about 8x as many voxels as the old 4 cm map
+# and is likely to amplify depth noise and planning latency on this ThinkPad.
+octomap_resolution: 0.03
+sensors:
+  - wrist_rgbd_pointcloud
+wrist_rgbd_pointcloud:
+  sensor_plugin: occupancy_map_monitor/PointCloudOctomapUpdater
+  point_cloud_topic: /wrist_rgbd/points
+  max_range: 2.5
+  point_subsample: 1
+  max_update_rate: 5.0
+  padding_offset: 0.03
+  padding_scale: 1.0
+  filtered_cloud_topic: /wrist_rgbd/filtered_cloud

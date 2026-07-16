@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="my_human_face">
+    <static>true</static>
+    <!-- The face is 1.0 m from the UR base and looks toward -Y (the robot). -->
+    <pose>0.35 1.10 0 0 0 0</pose>
+    <link name="link">
+      <!--
+        Visual-only human model. Keep collision geometry in
+        ../human_collision_proxy so RGB-D appearance never affects contacts.
+      -->
+      <visual name="visual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>model://my_human_face/meshes/standing.dae</uri>
+          </mesh>
+        </geometry>
+      </visual>
+    </link>
+  </model>
+</sdf>

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+  <asset>
+    <unit name="meter" meter="1"/>
+    <up_axis>Z_UP</up_axis>
+  </asset>
+  <library_effects>
+    <effect id="cup_blue_effect">
+      <profile_COMMON>
+        <technique sid="common">
+          <phong>
+            <diffuse><color>0.05 0.35 0.85 1</color></diffuse>
+            <specular><color>0.3 0.3 0.3 1</color></specular>
+          </phong>
+        </technique>
+      </profile_COMMON>
+    </effect>
+  </library_effects>
+  <library_materials>
+    <material id="cup_blue" name="cup_blue">
+      <instance_effect url="#cup_blue_effect"/>
+    </material>
+  </library_materials>
+  <library_geometries>
+    <geometry id="cup_geometry" name="cup_geometry">
+      <mesh>
+        <source id="cup_positions">
+          <float_array id="cup_positions_array" count="72">
+            0.050 0 0  0.035355 0.035355 0  0 0.050 0  -0.035355 0.035355 0  -0.050 0 0  -0.035355 -0.035355 0  0 -0.050 0  0.035355 -0.035355 0
+            0.050 0 0.205  0.035355 0.035355 0.205  0 0.050 0.205  -0.035355 0.035355 0.205  -0.050 0 0.205  -0.035355 -0.035355 0.205  0 -0.050 0.205  0.035355 -0.035355 0.205
+            0.060 0 0.205  0.042426 0.042426 0.205  0 0.060 0.205  -0.042426 0.042426 0.205  -0.060 0 0.205  -0.042426 -0.042426 0.205  0 -0.060 0.205  0.042426 -0.042426 0.205
+          </float_array>
+          <technique_common>
+            <accessor source="#cup_positions_array" count="24" stride="3">
+              <param name="X" type="float"/><param name="Y" type="float"/><param name="Z" type="float"/>
+            </accessor>
+          </technique_common>
+        </source>
+        <vertices id="cup_vertices">
+          <input semantic="POSITION" source="#cup_positions"/>
+        </vertices>
+        <triangles material="cup_blue" count="48">
+          <input semantic="VERTEX" source="#cup_vertices" offset="0"/>
+          <p>
+            0 8 1  1 8 9  1 9 2  2 9 10  2 10 3  3 10 11  3 11 4  4 11 12
+            4 12 5  5 12 13  5 13 6  6 13 14  6 14 7  7 14 15  7 15 0  0 15 8
+            8 16 9  9 16 17  9 17 10  10 17 18  10 18 11  11 18 19  11 19 12  12 19 20
+            12 20 13  13 20 21  13 21 14  14 21 22  14 22 15  15 22 23  15 23 8  8 23 16
+            0 1 2  0 2 3  0 3 4  0 4 5  0 5 6  0 6 7
+            16 18 17  16 19 18  16 20 19  16 21 20  16 22 21  16 23 22
+          </p>
+        </triangles>
+      </mesh>
+    </geometry>
+  </library_geometries>
+  <library_visual_scenes>
+    <visual_scene id="Scene" name="Scene">
+      <node id="cup" name="cup">
+        <instance_geometry url="#cup_geometry">
+          <bind_material>
+            <technique_common>
+              <instance_material symbol="cup_blue" target="#cup_blue"/>
+            </technique_common>
+          </bind_material>
+        </instance_geometry>
+      </node>
+    </visual_scene>
+  </library_visual_scenes>
+  <scene><instance_visual_scene url="#Scene"/></scene>
+</COLLADA>

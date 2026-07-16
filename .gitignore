@@ -1,0 +1,47 @@
+# Local credentials and environment configuration
+.env
+*.env
+!.env.example
+
+# Python environments and bytecode
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+env/
+
+# ROS 2 build products and runtime state
+build/
+install/
+log/
+logs/
+.ros/
+rosbag*/
+*.bag
+*.db3
+*.mcap
+
+# ML checkpoints and generated caches
+*.pt
+*.pth
+*.onnx
+.cache/
+
+# Gazebo / Ignition cache and logs
+.gazebo/
+.gz/
+gazebo_logs/
+gazebo_log/
+
+# Temporary capture output
+screenshots/
+videos/
+*.png.tmp
+*.jpg.tmp
+*.jpeg.tmp
+*.mp4.tmp
+
+# Timestamped diagnostics exported by local visualization runs
+frames_*.gv
+frames_*.pdf

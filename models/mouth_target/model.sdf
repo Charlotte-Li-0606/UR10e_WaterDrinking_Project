@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="mouth_target">
+    <static>true</static>
+    <!-- 1 cm in front of the standing model's mouth surface. -->
+    <pose>0.357 0.940 1.708 0 0 0</pose>
+
+    <!-- This is intentionally visual-only. The human collision proxy owns
+         the physical safety boundary around the mouth. -->
+    <link name="mouth_target_link">
+      <visual name="mouth_target_marker">
+        <geometry>
+          <sphere><radius>0.010</radius></sphere>
+        </geometry>
+        <material>
+          <ambient>1.0 0.10 0.10 1.0</ambient>
+          <diffuse>1.0 0.10 0.10 1.0</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

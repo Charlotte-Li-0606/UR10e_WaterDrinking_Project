@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="human_collision_proxy">
+    <static>true</static>
+    <!-- Match models/my_human_face. Child poses are local to this root. -->
+    <pose>0.35 1.10 0 0 0 0</pose>
+
+    <!-- Geometric keep-out dimensions for the standing visual.  Do not add
+         Gazebo collision primitives here: with this fixed-base UR10e and the
+         DART backend, static proxy contacts destabilize the arm before it
+         reaches the pre-mouth waypoint.  The equivalent conservative volume
+         belongs in MoveIt's planning scene, while this Gazebo model remains a
+         stable semantic marker for that volume. -->
+    <link name="proxy_link">
+      <!-- Planning-scene keep-out primitives (world-frame model pose is
+           0.35, 1.10, 0):
+             lower body box: local (0, -0.06, 0.325), size (0.70, 0.50, 0.65)
+             upper body box: local (0,  0.10, 1.28), size (0.70, 0.50, 0.76)
+             head sphere:   local (0,  0.02, 1.78), radius 0.18
+             mouth guard:   local (0, -0.055,1.71), size (0.30, 0.19, 0.25)
+      -->
+    </link>
+  </model>
+</sdf>

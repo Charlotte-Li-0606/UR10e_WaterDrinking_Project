@@ -1,0 +1,227 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="$(arg name)">
+  <!-- robot name parameter -->
+  <xacro:arg name="name" default="ur"/>
+  <!-- import main macro -->
+  <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro"/>
+
+  <xacro:include filename="$(find ur_simulation_gz)/urdf/ur_gz.ros2_control.xacro" />
+
+  <!-- possible 'ur_type' values: ur3, ur3e, ur5, ur5e, ur7e, ur10, ur10e, ur12e, ur16e, ur8long, ur15, ur18, ur20, ur30 -->
+  <!-- the default value should raise an error in case this was called without defining the type -->
+  <xacro:arg name="ur_type" default="ur5x"/>
+
+  <!-- parameters -->
+  <xacro:arg name="tf_prefix" default="" />
+  <xacro:arg name="joint_limit_params" default="$(find ur_description)/config/$(arg ur_type)/joint_limits.yaml"/>
+  <xacro:arg name="kinematics_params" default="$(find ur_description)/config/$(arg ur_type)/default_kinematics.yaml"/>
+  <xacro:arg name="physical_params" default="$(find ur_description)/config/$(arg ur_type)/physical_parameters.yaml"/>
+  <xacro:arg name="visual_params" default="$(find ur_description)/config/$(arg ur_type)/visual_parameters.yaml"/>
+  <xacro:arg name="transmission_hw_interface" default=""/>
+  <xacro:arg name="safety_limits" default="false"/>
+  <xacro:arg name="safety_pos_margin" default="0.15"/>
+  <xacro:arg name="safety_k_position" default="20"/>
+
+  <xacro:arg name="simulation_controllers" default="" />
+  <xacro:arg name="ros_namespace" default="" />
+  <!-- Keep the robot root at Gazebo world origin and locate the physical
+       base through this fixed joint.  This makes Gazebo, robot_state_publisher
+       and the RGB-D camera use the same world-to-base_link transform. -->
+  <xacro:arg name="robot_base_x" default="0.0" />
+  <xacro:arg name="robot_base_y" default="0.55" />
+  <xacro:arg name="robot_base_z" default="0.60" />
+
+  <!-- Initial camera-ready pose: tool0 +Z points along world -Z (down). -->
+  <xacro:property name="feeding_initial_positions" value="${dict(shoulder_pan_joint=-0.151217, shoulder_lift_joint=-1.610439, elbow_joint=0.775573, wrist_1_joint=-0.735939, wrist_2_joint=-1.570760, wrist_3_joint=2.821707)}"/>
+
+  <!-- create link fixed to the "world" -->
+  <link name="world" />
+
+  <link name="ground_plane">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <box size="5 5 0"/>
+      </geometry>
+      <material name="ground_white">
+        <color rgba="1 1 1 0.5"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <box size="5 5 0"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="ground_plane_joint" type="fixed">
+    <origin xyz="0 0 -0.01" rpy="0 0 0"/>
+    <parent link="world"/>
+    <child link="ground_plane"/>
+  </joint>
+
+  <!-- arm -->
+  <xacro:ur_robot
+    name="$(arg name)"
+    tf_prefix="$(arg tf_prefix)"
+    parent="world"
+    joint_limits_parameters_file="$(arg joint_limit_params)"
+    kinematics_parameters_file="$(arg kinematics_params)"
+    physical_parameters_file="$(arg physical_params)"
+    visual_parameters_file="$(arg visual_params)"
+    safety_limits="$(arg safety_limits)"
+    safety_pos_margin="$(arg safety_pos_margin)"
+    safety_k_position="$(arg safety_k_position)"
+    force_abs_paths="true"
+    >
+    <origin xyz="$(arg robot_base_x) $(arg robot_base_y) $(arg robot_base_z)" rpy="0 0 0" />
+  </xacro:ur_robot>
+
+
+
+  <!-- Feeding demo flange attachments. There is no gripper in this setup. -->
+  <!-- Logical straw-tip frame only: the previous green sphere marker is
+       intentionally omitted so it cannot clutter the camera or scene. -->
+  <link name="$(arg tf_prefix)feeding_straw_tip_marker"/>
+
+  <joint name="$(arg tf_prefix)tool0-feeding_straw_tip_marker" type="fixed">
+    <origin xyz="0.11 0.0 0.0" rpy="0 0 0"/>
+    <parent link="$(arg tf_prefix)tool0"/>
+    <child link="$(arg tf_prefix)feeding_straw_tip_marker"/>
+  </joint>
+
+  <!-- The cup is a fixed tool attachment: its straw top is coincident with
+       the green feeding_straw_tip_marker and the cup opening remains upward
+       when tool0 is in the configured flange-down orientation. -->
+  <link name="$(arg tf_prefix)feeding_cup_link">
+    <inertial>
+      <origin xyz="0 0 0.1025" rpy="0 0 0"/>
+      <mass value="0.15"/>
+      <inertia ixx="0.00061906" ixy="0" ixz="0" iyy="0.00061906" iyz="0" izz="0.00018750"/>
+    </inertial>
+    <collision name="cup_cylinder_collision">
+      <origin xyz="0 0 0.1025" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.05" length="0.205"/></geometry>
+    </collision>
+    <visual name="cup_mesh_visual">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry><mesh filename="model://cup/meshes/cup.dae"/></geometry>
+    </visual>
+    <visual name="center_straw_visual">
+      <origin xyz="0 0 0.240" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.004" length="0.070"/></geometry>
+      <material name="feeding_straw_off_white">
+        <color rgba="0.95 0.95 0.90 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="$(arg tf_prefix)feeding_straw_tip_marker-feeding_cup_link" type="fixed">
+    <!-- The 180-degree roll makes cup local +Z point upward in the
+         flange-down tool frame; 0.275 m places the straw top at the marker. -->
+    <origin xyz="0 0 0.275" rpy="3.14159265359 0 0"/>
+    <parent link="$(arg tf_prefix)feeding_straw_tip_marker"/>
+    <child link="$(arg tf_prefix)feeding_cup_link"/>
+  </joint>
+
+  <!-- RGB-D camera body fixed to tool0. Tool-frame +X is the viewing direction. -->
+  <link name="$(arg tf_prefix)wrist_rgbd_camera_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.010"/>
+      <inertia ixx="0.000001" ixy="0" ixz="0" iyy="0.000001" iyz="0" izz="0.000001"/>
+    </inertial>
+    <visual name="visual">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.030 0.024 0.020"/>
+      </geometry>
+      <material name="wrist_rgbd_camera_cyan">
+        <color rgba="0.1 0.9 1.0 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="$(arg tf_prefix)tool0-wrist_rgbd_camera_link" type="fixed">
+  <!-- Rear/above-wrist RGB-D mount.  Looking along tool +X lets the camera
+       view the straw approach and face from a useful stand-off instead of
+       sitting beside the mouth at the pre-mouth pose. -->
+  <!-- tool0 +Z points downward when the flange is down.  Therefore -15 mm
+       in tool Z puts the optical center 15 mm above the flange bottom. -->
+  <origin xyz="0.07 0.0 -0.015" rpy="-3.141592654 -0.027969 -0.153885"/>
+    <parent link="$(arg tf_prefix)tool0"/>
+    <child link="$(arg tf_prefix)wrist_rgbd_camera_link"/>
+  </joint>
+
+  <!-- ROS optical convention: +Z forward, +X right, +Y down. -->
+  <link name="$(arg tf_prefix)wrist_rgbd_camera_optical_frame">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.0001"/>
+      <inertia ixx="0.000000001" ixy="0" ixz="0" iyy="0.000000001" iyz="0" izz="0.000000001"/>
+    </inertial>
+  </link>
+
+  <joint name="$(arg tf_prefix)wrist_rgbd_camera_optical_joint" type="fixed">
+    <origin xyz="0 0 0" rpy="-1.57079632679 0 -1.57079632679"/>
+    <parent link="$(arg tf_prefix)wrist_rgbd_camera_link"/>
+    <child link="$(arg tf_prefix)wrist_rgbd_camera_optical_frame"/>
+  </joint>
+
+  <!-- Gazebo Sim RGB-D sensor. The world Sensors system publishes:
+       /wrist_rgbd/image, /wrist_rgbd/depth_image, and
+       /wrist_rgbd/camera_info. -->
+  <gazebo reference="$(arg tf_prefix)wrist_rgbd_camera_link">
+    <sensor name="wrist_rgbd" type="rgbd_camera">
+      <always_on>1</always_on>
+      <update_rate>15</update_rate>
+      <visualize>false</visualize>
+      <topic>/wrist_rgbd</topic>
+      <camera>
+        <horizontal_fov>1.600</horizontal_fov>
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format>
+        </image>
+        <clip>
+          <near>0.05</near>
+          <far>5.0</far>
+        </clip>
+        <optical_frame_id>$(arg tf_prefix)wrist_rgbd_camera_optical_frame</optical_frame_id>
+      </camera>
+    </sensor>
+  </gazebo>
+
+  <!-- Keep the camera links as named frames instead of collapsing them into
+       the wrist link when URDF is converted to SDF. -->
+  <gazebo reference="$(arg tf_prefix)tool0-wrist_rgbd_camera_link">
+    <preserveFixedJoint>true</preserveFixedJoint>
+  </gazebo>
+  <gazebo reference="$(arg tf_prefix)feeding_straw_tip_marker-feeding_cup_link">
+    <preserveFixedJoint>true</preserveFixedJoint>
+  </gazebo>
+  <gazebo reference="$(arg tf_prefix)wrist_rgbd_camera_optical_joint">
+    <preserveFixedJoint>true</preserveFixedJoint>
+  </gazebo>
+
+  <gazebo reference="world">
+  </gazebo>
+  <gazebo>
+    <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(arg simulation_controllers)</parameters>
+      <ros>
+        <namespace>$(arg ros_namespace)</namespace>
+      </ros>
+    </plugin>
+  </gazebo>
+
+  <!-- ros2 control instance -->
+  <xacro:ur_ros2_control
+    name="$(arg name)"
+    tf_prefix="$(arg tf_prefix)"
+    transmission_hw_interface="$(arg transmission_hw_interface)"
+    initial_positions="${feeding_initial_positions}"
+  />
+</robot>

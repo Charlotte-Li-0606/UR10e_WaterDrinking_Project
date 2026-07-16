@@ -1,0 +1,5 @@
+# Pinned to NumPy 1.x so ROS Jazzy's cv_bridge binary remains ABI-compatible.
+mediapipe==0.10.35
+numpy==1.26.4
+opencv-contrib-python==4.10.0.84
+PyYAML>=6.0

@@ -1,0 +1,67 @@
+# UR10e ROS2 SDK configuration for ABot-Claw
+# This config assumes ABot-Claw/SDK runs on 5090 and talks to ThinkPad over ROS2.
+
+ros:
+  base_frame_id: "base_link"
+  tool_frame_id: "tool0"
+  joint_state_topic: "/joint_states"
+
+moveit:
+  group_name: "ur_manipulator"
+
+controller:
+  trajectory_action: "/scaled_joint_trajectory_controller/follow_joint_trajectory"
+
+observation:
+  # Gazebo RGB-D topics bridged into ROS2 by start_ur10e_feeding_sim.sh.
+  rgb_topic: "/wrist_rgbd/image"
+  depth_topic: "/wrist_rgbd/depth_image"
+  camera_info_topic: "/wrist_rgbd/camera_info"
+  camera_frame_id: "wrist_rgbd_camera_optical_frame"
+  tool_frame_id: "tool0"
+  straw_tip_frame_id: "feeding_straw_tip_marker"
+  # mouth_target_position remains in the feeding section until a dedicated
+  # target-frame publisher is introduced.
+
+ur10e:
+  num_joints: 6
+  joint_names:
+    - "shoulder_pan_joint"
+    - "shoulder_lift_joint"
+    - "elbow_joint"
+    - "wrist_1_joint"
+    - "wrist_2_joint"
+    - "wrist_3_joint"
+
+  # Same neutral-ish pose used by the UR simulation startup.
+  # Matches the Gazebo initial pose: tool0 +Z is downward and the wrist camera
+  # is aimed at the standing person's face.
+  reset_joints: [-0.151217, -1.610439, 0.775573, -0.735939, -1.570760, 2.821707]
+
+  # MoveIt/controller defaults for visible, gentle demo motion.
+  max_velocity: 0.2
+  max_acceleration: 0.2
+  default_duration: 7.0
+  cartesian_max_step: 0.01
+  min_cartesian_fraction: 0.99
+  avoid_collisions: true
+
+feeding:
+  # Tool geometry measured from UR10e tool0/flange frame, in meters. The
+  # RGB-D optical center is behind and above the flange for a useful face view
+  # during the pre-mouth approach.
+  flange_to_camera_optical_center: [0.07, 0.0, -0.015]
+  flange_to_straw_tip: [0.11, 0.0, 0.0]
+
+  # Straw-tip ready/start target in ROS base_link. The robot should move here
+  # before the feeding motion, so the visible start pose already has the flange
+  # pointing down.
+  ready_straw_tip_position: [0.25, 0.25, 0.85]
+
+  # The standing visual faces -Y at x=0.35, y=1.10. These coordinates put the
+  # straw 8 cm before the mouth, then 1 cm in front of the mouth surface.
+  pre_mouth_safe_position: [0.357, 0.860, 1.708]
+  mouth_target_position: [0.357, 0.940, 1.708]
+
+  # Current feeding MVP rule: keep tool0/flange local +Z pointing down.
+  flange_down_rpy: [3.141592653589793, 0.0, 0.0]
