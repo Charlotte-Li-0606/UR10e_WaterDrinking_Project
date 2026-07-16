@@ -9,7 +9,7 @@ if [ -f /home/dase-hw101/ros2_ws/install/setup.bash ]; then
 fi
 
 PYTHON_BIN="${PROJECT_DIR}/venv/bin/python"
-if [ ! -x "${PYTHON_BIN}" ]; then
+if [ ! -x "${PYTHON_BIN}" ] || ! "${PYTHON_BIN}" -c 'import rclpy' >/dev/null 2>&1; then
   PYTHON_BIN=python3
 fi
 
