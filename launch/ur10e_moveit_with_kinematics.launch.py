@@ -146,7 +146,10 @@ def _launch_setup(context):
     else:
         # Keep the dynamic layer opt-in. Existing deterministic PlanningScene
         # collision objects continue to work when the occupancy monitor is off.
-        moveit_parameters["sensors"] = []
+        # Do not pass sensors=[] here: ROS parameters cannot represent an
+        # untyped empty array and launch converts it to an invalid empty tuple.
+        # Omitting the optional configuration disables the occupancy monitor.
+        moveit_parameters.pop("sensors", None)
         octomap_log = LogInfo(msg="MoveIt OctoMap is disabled (use_octomap:=false)")
 
     wait_robot_description = Node(

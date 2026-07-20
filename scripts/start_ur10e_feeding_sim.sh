@@ -41,7 +41,9 @@ pkill -f robot_state_publisher || true
 pkill -f 'controller_manager/spawner' || true
 pkill -f spawner_joint_state_broadcaster || true
 pkill -f spawner_scaled_joint_trajectory_controller || true
-pkill -f static_transform_publisher || true
+# Bracket the first character so pkill cannot match this launcher command
+# itself through a parent shell command line.
+pkill -f '[s]tatic_transform_publisher' || true
 pkill -f 'parameter_bridge /clock@rosgraph_msgs/msg/Clock' || true
 pkill -f "parameter_bridge.*wrist_rgbd" || true
 pkill -f depth_to_pointcloud_node.py || true
