@@ -85,6 +85,15 @@ def declare_arguments():
                 default_value="false",
                 description="Enable the experimental wrist PointCloud2 OctoMap obstacle layer.",
             ),
+            DeclareLaunchArgument(
+                "trajectory_controller",
+                default_value="joint_trajectory_controller",
+                description=(
+                    "MoveIt FollowJointTrajectory controller. Keep the Gazebo default "
+                    "joint_trajectory_controller; use scaled_joint_trajectory_controller "
+                    "only with the physical UR driver."
+                ),
+            ),
         ]
     )
 
@@ -101,6 +110,13 @@ def _launch_setup(context):
     use_sim_time = LaunchConfiguration("use_sim_time")
     publish_robot_description_semantic = LaunchConfiguration("publish_robot_description_semantic")
     use_octomap = _as_bool(LaunchConfiguration("use_octomap").perform(context))
+    trajectory_controller = LaunchConfiguration("trajectory_controller").perform(context)
+    valid_controllers = {"joint_trajectory_controller", "scaled_joint_trajectory_controller"}
+    if trajectory_controller not in valid_controllers:
+        raise RuntimeError(
+            "trajectory_controller must be one of "
+            f"{sorted(valid_controllers)}, got {trajectory_controller!r}"
+        )
 
     moveit_config = (
         MoveItConfigsBuilder(robot_name="ur", package_name="ur_moveit_config")
@@ -122,12 +138,13 @@ def _launch_setup(context):
         "default_planning_response_adapters/ValidateSolution",
         "default_planning_response_adapters/DisplayMotionPath",
     ]
-    # This Gazebo scene starts joint_trajectory_controller.  The stock UR
-    # MoveIt config lists the scaled controller first, so MoveGroup can select
-    # an inactive action server and return CONTROL_FAILED after a valid plan.
+    # Gazebo starts joint_trajectory_controller while the physical UR driver
+    # starts scaled_joint_trajectory_controller.  Advertising only the active
+    # endpoint prevents MoveIt from selecting an inactive action server.
     controller_config = moveit_parameters["moveit_simple_controller_manager"]
-    controller_config["controller_names"] = ["joint_trajectory_controller"]
-    controller_config["joint_trajectory_controller"]["default"] = True
+    controller_config["controller_names"] = [trajectory_controller]
+    for controller_name in valid_controllers:
+        controller_config[controller_name]["default"] = controller_name == trajectory_controller
     if use_octomap:
         try:
             with SENSORS_3D_CONFIG.open(encoding="utf-8") as stream:

@@ -42,12 +42,19 @@ export UR10E_ROBOT_IP='<robot-ip>'
 This expands to the installed upstream launch interface:
 
 ```bash
-ros2 launch ur_robot_driver ur10e.launch.py \
+ros2 launch ur_robot_driver ur_control.launch.py \
+  ur_type:=ur10e \
   robot_ip:=<robot-ip> \
-  use_mock_hardware:=false \
-  initial_joint_controller:=scaled_joint_trajectory_controller \
-  activate_joint_controller:=true
+  kinematics_params_file:=/path/to/ur10e_calibration.yaml \
+  launch_rviz:=false
 ```
+
+The driver script requires the extracted calibration file at
+`config/ur10e_real/ur10e_calibration.yaml` by default (or an explicit
+`UR10E_KINEMATICS_FILE`). It unsets `ROS_STATIC_PEERS` and uses a localhost
+ROS discovery graph. This does not alter network addresses or the TCP
+connection to the UR controller; it prevents a Wi-Fi simulator from
+publishing a competing robot description or TF tree.
 
 Terminal 2, MoveIt only after the driver publishes robot description and joint
 state:
@@ -56,11 +63,13 @@ state:
 /home/dase-hw101/ur_drinking_project/scripts/start_ur10e_real_moveit.sh
 ```
 
-This uses the locally installed interface:
+This starts the project MoveIt wrapper, which supplies kinematics to
+`move_group` and advertises only the active physical controller:
 
 ```bash
-ros2 launch ur_moveit_config ur_moveit.launch.py \
-  ur_type:=ur10e launch_rviz:=false launch_servo:=false use_sim_time:=false
+ros2 launch /home/dase-hw101/ur_drinking_project/launch/ur10e_moveit_with_kinematics.launch.py \
+  ur_type:=ur10e launch_rviz:=false launch_servo:=false use_sim_time:=false \
+  use_octomap:=false trajectory_controller:=scaled_joint_trajectory_controller
 ```
 
 No project script combines driver startup with a feeding trajectory.
@@ -106,8 +115,10 @@ perception, planning scene, TF, or MoveIt is unavailable.
 does not use the feeding, LLM, OpenClaw, active-search, or perception paths.
 It always selects `UR10E_BACKEND=real` and has a fixed 2 cm `base_link +Z`
 tool0 target; the target orientation is copied from the current tool0 pose and
-held with a strict MoveIt path constraint. It accepts no joint target, absolute
-pose, or user-provided offset.
+held by Pilz `LIN` Cartesian planning. Pilz LIN makes the tool path linear;
+because the start and target orientations are identical, it preserves tool
+orientation without relying on an OMPL path-constraint manifold. The utility
+accepts no joint target, absolute pose, or user-provided offset.
 
 ```bash
 source /opt/ros/jazzy/setup.bash

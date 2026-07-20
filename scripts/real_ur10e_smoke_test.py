@@ -31,6 +31,12 @@ if str(PROJECT_ROOT) not in sys.path:
 # importing/constructing the canonical SDK, so it cannot accidentally select
 # the Gazebo endpoint.
 os.environ["UR10E_BACKEND"] = "real"
+# The driver connects to the UR controller over TCP, so its ROS graph can stay
+# on this ThinkPad.  This prevents a discovered Wi-Fi simulation graph from
+# supplying a competing robot description, TF tree, or action server.
+os.environ.pop("ROS_STATIC_PEERS", None)
+os.environ["ROS_AUTOMATIC_DISCOVERY_RANGE"] = "LOCALHOST"
+os.environ["ROS_LOCALHOST_ONLY"] = "0"
 
 import rclpy  # noqa: E402
 import rclpy.time  # noqa: E402
@@ -62,6 +68,8 @@ EXPECTED_JOINTS = (
 # Fixed by design. This script deliberately exposes no CLI pose or offset.
 SMOKE_OFFSET_BASE_Z_M = 0.02
 STRICT_ORIENTATION_TOLERANCE_RAD = 0.001
+SMOKE_PLANNING_PIPELINE = "pilz_industrial_motion_planner"
+SMOKE_PLANNER_ID = "LIN"
 
 
 def _jsonable(value: Any) -> Any:
@@ -124,19 +132,29 @@ def _read_only_checks(timeout_sec: float = 5.0) -> dict[str, Any]:
         owns_rclpy = True
     node = _ReadOnlyProbe()
     try:
+        # The TransformListener shares this node's executor with the joint-state
+        # subscription.  Keep spinning until both are present; otherwise a
+        # freshly created probe can receive its first joint state before its TF
+        # cache has received base_link -> tool0.
         deadline = time.monotonic() + timeout_sec
-        while node.latest_joint_state is None and time.monotonic() < deadline:
+        tf_ready = False
+        while time.monotonic() < deadline:
             rclpy.spin_once(node, timeout_sec=0.1)
+            tf_ready = node.tf_buffer.can_transform(
+                BASE_FRAME,
+                TOOL_FRAME,
+                rclpy.time.Time(),
+                timeout=Duration(seconds=0.0),
+            )
+            if node.latest_joint_state is not None and tf_ready:
+                break
 
         joint_state = _joint_state_summary(node.latest_joint_state)
         tf_result: dict[str, Any]
         try:
-            transform = node.tf_buffer.lookup_transform(
-                BASE_FRAME,
-                TOOL_FRAME,
-                rclpy.time.Time(),
-                timeout=Duration(seconds=1.0),
-            )
+            if not tf_ready:
+                raise RuntimeError(f"TF {BASE_FRAME} -> {TOOL_FRAME} was not received within {timeout_sec:.1f} seconds")
+            transform = node.tf_buffer.lookup_transform(BASE_FRAME, TOOL_FRAME, rclpy.time.Time())
             translation = transform.transform.translation
             rotation = transform.transform.rotation
             tf_result = {
@@ -246,7 +264,13 @@ def _plan_or_execute(arguments: argparse.Namespace, checks: dict[str, Any]) -> t
         target = _build_target(current)
         target_endpose = [*target["position_m"], *target["orientation_quat_xyzw"]]
         plan_result = _jsonable(
-            env.move_to_pose(target_endpose, plan_only=True, strict_orientation=True)
+            env.move_to_pose(
+                target_endpose,
+                plan_only=True,
+                strict_orientation=True,
+                planning_pipeline=SMOKE_PLANNING_PIPELINE,
+                planner_id=SMOKE_PLANNER_ID,
+            )
         )
         response: dict[str, Any] = {
             "success": bool(plan_result.get("success")),
@@ -266,7 +290,13 @@ def _plan_or_execute(arguments: argparse.Namespace, checks: dict[str, Any]) -> t
             return 0, response
 
         execution_result = _jsonable(
-            env.move_to_pose(target_endpose, plan_only=False, strict_orientation=True)
+            env.move_to_pose(
+                target_endpose,
+                plan_only=False,
+                strict_orientation=True,
+                planning_pipeline=SMOKE_PLANNING_PIPELINE,
+                planner_id=SMOKE_PLANNER_ID,
+            )
         )
         response["execution_result"] = execution_result
         response["execution_sent"] = True

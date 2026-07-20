@@ -493,6 +493,8 @@ class UR10eRobotEnv:
         *,
         orientation_tolerance_rad: float = 0.05,
         enforce_path_orientation: bool = False,
+        planning_pipeline: Optional[str] = None,
+        planner_id: Optional[str] = None,
     ) -> Dict[str, object]:
         if not self.node.move_group_client.wait_for_server(timeout_sec=10.0):
             raise RuntimeError("/move_action is not available. Start MoveIt move_group first.")
@@ -504,12 +506,23 @@ class UR10eRobotEnv:
             raise ValueError("orientation_tolerance_rad must be a finite value in (0, 0.05]") from exc
         if not math.isfinite(orientation_tolerance) or not 0.0 < orientation_tolerance <= 0.05:
             raise ValueError("orientation_tolerance_rad must be a finite value in (0, 0.05]")
+        if (planning_pipeline, planner_id) not in {
+            (None, None),
+            ("pilz_industrial_motion_planner", "LIN"),
+        }:
+            raise ValueError(
+                "only the reviewed Pilz LIN planner may be selected explicitly "
+                "for a real UR10e pose goal"
+            )
 
         if self.node.latest_joint_state is None:
             self._spin_until_joint_state(timeout=2.0)
 
         goal = MoveGroup.Goal()
         goal.request.group_name = self.node.group_name
+        if planning_pipeline is not None:
+            goal.request.pipeline_id = planning_pipeline
+            goal.request.planner_id = planner_id
         goal.request.num_planning_attempts = 10
         goal.request.allowed_planning_time = 10.0
         goal.request.max_velocity_scaling_factor = min(max(self.max_velocity, 0.01), 1.0)
@@ -578,6 +591,8 @@ class UR10eRobotEnv:
             "error_code": result.error_code.val,
             "points": points,
             "planning_time": result.planning_time,
+            "planning_pipeline": planning_pipeline or "default",
+            "planner_id": planner_id or "default",
         }
 
     def _retime_trajectory(self, robot_trajectory, duration: float):
@@ -782,6 +797,8 @@ class UR10eRobotEnv:
         plan_only: bool = False,
         *,
         strict_orientation: bool = False,
+        planning_pipeline: Optional[str] = None,
+        planner_id: Optional[str] = None,
     ) -> Dict[str, object]:
         """Move tool0 to an absolute pose in base_link.
 
@@ -793,13 +810,23 @@ class UR10eRobotEnv:
         if self.backend.is_real:
             # The physical backend always gives pose goals to MoveIt.  It
             # never publishes a raw joint trajectory from this SDK.
+            using_pilz_linear = (
+                planning_pipeline == "pilz_industrial_motion_planner" and planner_id == "LIN"
+            )
             return self._move_group_to_pose(
                 target,
                 duration=duration,
                 plan_only=plan_only,
                 orientation_tolerance_rad=0.001 if strict_orientation else 0.05,
-                enforce_path_orientation=bool(strict_orientation),
+                # Pilz LIN already constrains the Cartesian path. With equal
+                # current/goal orientations it preserves the tool orientation
+                # without asking OMPL to solve an orientation-only manifold.
+                enforce_path_orientation=bool(strict_orientation) and not using_pilz_linear,
+                planning_pipeline=planning_pipeline,
+                planner_id=planner_id,
             )
+        if planning_pipeline is not None or planner_id is not None:
+            raise ValueError("explicit planner selection is only supported by the real UR10e backend")
         try:
             current = self._current_pose_msg()
             position_error = math.sqrt(

@@ -36,6 +36,10 @@ class RealUR10eSmokeTestGuards(unittest.TestCase):
         self.assertEqual([0.0, 0.0, 0.0, 1.0], target["orientation_quat_xyzw"])
         self.assertTrue(target["orientation_preserved"])
 
+    def test_smoke_plan_uses_reviewed_linear_cartesian_planner(self) -> None:
+        self.assertEqual("pilz_industrial_motion_planner", SMOKE.SMOKE_PLANNING_PIPELINE)
+        self.assertEqual("LIN", SMOKE.SMOKE_PLANNER_ID)
+
     def test_execute_requires_both_cli_confirmation_and_environment_gate(self) -> None:
         previous = os.environ.pop("UR10E_ALLOW_REAL_EXECUTION", None)
         try:
