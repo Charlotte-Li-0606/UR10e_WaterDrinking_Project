@@ -15,6 +15,9 @@ class OpenClawReusableEntrypointTest(unittest.TestCase):
         content = ENTRYPOINT.read_text(encoding="utf-8")
 
         self.assertIn('openclaw_feeding_tool.sh', content)
+        self.assertIn('MODE="--execute"', content)
+        self.assertIn('start_ur10e_feeding_sim.sh', content)
+        self.assertIn('simulator_ready()', content)
         self.assertIn('--validate-only --plan-json', content)
         self.assertNotIn('run_llm_feeding_agent.sh', content)
         self.assertNotIn('openclaw_feed_water.sh --plan-only', content)
