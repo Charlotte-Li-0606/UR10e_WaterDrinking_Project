@@ -13,11 +13,10 @@ creating the library; the smoke-test CLI never enables it.
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import json
 import math
 import os
-import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -49,18 +48,16 @@ def _project_root() -> Path:
 
 
 def _load_sdk_type():
-    """Load the project SDK exactly as the established no-LLM node does."""
-    module_path = _project_root() / "robot_layer" / "arm_ur10e" / "agent_server" / "robot_sdk" / "ur10e_sdk.py"
-    module_name = "ur10e_sdk_for_feeding_tools"
-    existing = sys.modules.get(module_name)
-    if existing is not None:
-        return existing.UR10eRobotEnv
-    spec = importlib.util.spec_from_file_location(module_name, module_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Cannot load UR10e SDK from {module_path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
+    """Return the one canonical project SDK class.
+
+    Older callers loaded the same source file under private module names,
+    yielding multiple Python copies of the SDK class.  Import it by its
+    package path so OpenClaw, the LLM bridge, and the no-LLM bridge share the
+    same implementation and backend safety policy.
+    """
+    module = importlib.import_module(
+        "robot_layer.arm_ur10e.agent_server.robot_sdk.ur10e_sdk"
+    )
     return module.UR10eRobotEnv
 
 
@@ -2144,6 +2141,88 @@ class FeedingSkillLibrary:
             planning_scene=self._planning_scene_result,
         )
 
+    # ------------------------------------------------------------------ #
+    # Canonical ABot-Claw-style read-only and safe tool interface
+    # ------------------------------------------------------------------ #
+
+    def get_robot_state(self) -> dict[str, Any]:
+        """Return the canonical SDK's current robot state without motion."""
+        try:
+            return self._success(
+                "get_robot_state",
+                robot_state=self._env.get_robot_state(),
+                backend=self._env.backend.status(),
+            )
+        except Exception as exc:
+            return self._failure("get_robot_state", f"could not read robot state: {exc}")
+
+    def get_joint_state(self) -> dict[str, Any]:
+        """Return named joint-state data from the shared SDK node."""
+        try:
+            state = self._env.get_joint_state()
+        except Exception as exc:
+            return self._failure("get_joint_state", f"could not read joint state: {exc}")
+        return self._success("get_joint_state", joint_state=state, backend=self._env.backend.status())
+
+    def get_end_effector_pose(self) -> dict[str, Any]:
+        """Return the read-only base_link -> tool0 transform."""
+        try:
+            return self._success(
+                "get_end_effector_pose",
+                pose=self._env.get_end_effector_pose(),
+                backend=self._env.backend.status(),
+            )
+        except Exception as exc:
+            return self._failure("get_end_effector_pose", f"could not read base_link -> tool0 TF: {exc}")
+
+    def get_tool_pose(self, tool: str = "straw_tip") -> dict[str, Any]:
+        """Return only the approved straw-tip tool frame."""
+        if tool != "straw_tip":
+            return self._failure("get_tool_pose", "the only configured tool is straw_tip", tool=tool)
+        try:
+            return self._success(
+                "get_tool_pose",
+                tool="straw_tip",
+                pose=self._env.get_tool_pose(tool="straw_tip"),
+                backend=self._env.backend.status(),
+            )
+        except Exception as exc:
+            return self._failure("get_tool_pose", f"could not read straw-tip TF: {exc}", tool="straw_tip")
+
+    def plan_tool_to_target(
+        self,
+        tool: str = "straw_tip",
+        target: str = "pre_mouth",
+        *,
+        execute: bool = False,
+    ) -> dict[str, Any]:
+        """Plan the sole reviewed tool/target pair; never executes a plan."""
+        if execute:
+            return self._failure(
+                "plan_tool_to_target",
+                "plan_tool_to_target is plan-only; use move_tool_to_target for an explicitly permitted execution",
+                tool=tool,
+                target=target,
+                execute=False,
+            )
+        result = self.move_tool_to_target(tool=tool, target=target, execute=False)
+        return self._remember_safe_tool_result(
+            "pre_mouth_plan_validated" if result.get("success") else "tool_target_blocked",
+            {**result, "tool": "plan_tool_to_target", "execute": False},
+        )
+
+    def stop(self) -> dict[str, Any]:
+        """Report whether the synchronous safe pipeline is stationary.
+
+        This interface deliberately does not publish a controller stop command;
+        emergency stop remains an operator/robot-controller responsibility.
+        """
+        result = self.stop_motion_or_hold_position()
+        return self._remember_safe_tool_result(
+            "stopped" if result.get("success") else "stop_failed",
+            {**result, "tool": "stop", "controller_command_sent": False},
+        )
+
     def get_robot_observation(self, *, spin_timeout_sec: float = 0.10) -> dict[str, Any]:
         """Return compact state/camera metadata safe for an agent to inspect."""
         self._spin_for(spin_timeout_sec)
@@ -2166,6 +2245,7 @@ class FeedingSkillLibrary:
                 "tool0_to_camera_optical_center_m": list(self._env.flange_to_camera_optical_center),
                 "tool0_to_straw_tip_m": list(self._env.flange_to_straw_tip),
             },
+            backend=self._env.backend.status(),
             safety_config=asdict(self.config),
             direct_mouth_motion_enabled=self._allow_direct_mouth_motion,
         )

@@ -6,6 +6,18 @@ ros:
   tool_frame_id: "tool0"
   joint_state_topic: "/joint_states"
 
+# Canonical backend policy. UR10E_BACKEND may override this at process start,
+# but selecting `real` stays read-only until UR10E_ALLOW_REAL_EXECUTION=1 is
+# also explicitly set. Never put a robot IP address or credentials here.
+backend:
+  default: "sim"
+  sim:
+    trajectory_action: "/joint_trajectory_controller/follow_joint_trajectory"
+    expected_controller: "joint_trajectory_controller"
+  real:
+    trajectory_action: "/scaled_joint_trajectory_controller/follow_joint_trajectory"
+    expected_controller: "scaled_joint_trajectory_controller"
+
 moveit:
   group_name: "ur_manipulator"
 
@@ -66,7 +78,8 @@ ur10e:
   # is aimed at the standing person's face.
   reset_joints: [-0.151217, -1.610439, 0.775573, -0.735939, -1.570760, 2.821707]
 
-  # MoveIt/controller defaults for visible, gentle demo motion.
+  # MoveIt/controller defaults for visible, gentle simulation motion. The
+  # real backend clamps both values to 0.05 or lower in code.
   max_velocity: 0.2
   max_acceleration: 0.2
   default_duration: 7.0
@@ -75,9 +88,14 @@ ur10e:
   avoid_collisions: true
 
 feeding:
-  # Tool geometry measured from UR10e tool0/flange frame, in meters. The
-  # RGB-D optical center is behind and above the flange for a useful face view
-  # during the pre-mouth approach.
+  # Canonical calibrated tool geometry, measured from the UR10e tool0/flange
+  # frame in meters. The user convention is X forward, Y right, Z up; ROS
+  # base_link is X forward, Y left, Z up, so user coordinates map to ROS as
+  # [x, -y, z] when the bases are aligned. These two offsets are *tool0-frame*
+  # values: with flange-down, tool0 +Z points down, so the measured camera
+  # offset [+0.070, 0, +0.015] in user/upward language is [+.070, 0, -.015]
+  # in tool0. The fixed URDF links match these values and must not be changed
+  # independently.
   flange_to_camera_optical_center: [0.07, 0.0, -0.015]
   flange_to_straw_tip: [0.11, 0.0, 0.0]
 

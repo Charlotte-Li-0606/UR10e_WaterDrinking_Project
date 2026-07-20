@@ -26,6 +26,8 @@ class OpenClawReusableEntrypointTest(unittest.TestCase):
         self.assertNotIn('openclaw_feed_water.sh --plan-only', content)
         self.assertNotIn('"tool":"feed_water"', content)
         self.assertIn('ensure_ur10e_feeding_sim.sh', bridge_content)
+        self.assertIn('UR10E_BACKEND', bridge_content)
+        self.assertIn('real)', bridge_content)
         self.assertIn('start_ur10e_feeding_sim.sh', simulator_gate)
         self.assertIn('simulator_ready()', simulator_gate)
         for tool in (

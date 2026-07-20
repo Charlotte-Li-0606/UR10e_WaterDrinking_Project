@@ -26,10 +26,12 @@ Unsupported for bare UR10e simulation for now:
 
 from __future__ import annotations
 
+import copy
 import math
 import os
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
 import numpy as np
@@ -39,6 +41,7 @@ import rclpy
 import rclpy.time
 from builtin_interfaces.msg import Duration
 from control_msgs.action import FollowJointTrajectory
+from controller_manager_msgs.srv import ListControllers
 from geometry_msgs.msg import Pose, PoseStamped
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import (
@@ -58,9 +61,27 @@ from sensor_msgs.msg import CameraInfo, Image, JointState
 from shape_msgs.msg import SolidPrimitive
 import tf2_ros
 
+try:  # Works for normal package imports.
+    from .backend import (
+        UR10eBackendSettings,
+        require_real_execution_authorized,
+        resolve_ur10e_backend_settings,
+    )
+except ImportError:  # ``feeding_tools`` loads this module directly by path.
+    from robot_layer.arm_ur10e.agent_server.robot_sdk.backend import (  # type: ignore[no-redef]
+        UR10eBackendSettings,
+        require_real_execution_authorized,
+        resolve_ur10e_backend_settings,
+    )
+
 
 _ROBOT_SDK_DIR = os.path.dirname(os.path.abspath(__file__))
-_DEFAULT_CONFIG = os.path.join(_ROBOT_SDK_DIR, "config.yaml")
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]
+_PROJECT_CONFIG = _PROJECT_ROOT / "config" / "ur10e_sdk_config.yaml"
+# The root project config is the canonical source for feeding geometry and
+# backend policy.  The package-local file remains only as a compatibility
+# fallback for out-of-tree users of this SDK.
+_DEFAULT_CONFIG = str(_PROJECT_CONFIG if _PROJECT_CONFIG.is_file() else Path(_ROBOT_SDK_DIR) / "config.yaml")
 
 
 def _load_config() -> dict:
@@ -147,6 +168,10 @@ class _UR10eRosNode(Node):
             self.trajectory_action,
         )
         self.move_group_client = ActionClient(self, MoveGroup, "/move_action")
+        self.list_controllers_client = self.create_client(
+            ListControllers,
+            "/controller_manager/list_controllers",
+        )
 
     def _joint_state_cb(self, msg: JointState):
         self.latest_joint_state = msg
@@ -171,7 +196,13 @@ class UR10eRobotEnv:
         init_ros_node: bool = True,
         config: Optional[dict] = None,
     ):
-        self.cfg = config or _load_config()
+        self.cfg = copy.deepcopy(config) if config is not None else _load_config()
+        self.backend: UR10eBackendSettings = resolve_ur10e_backend_settings(self.cfg)
+        # There is one SDK implementation.  Backends only select the ROS
+        # controller endpoint used by that same MoveIt-based implementation.
+        controller_cfg = dict(self.cfg.get("controller", {}))
+        controller_cfg["trajectory_action"] = self.backend.trajectory_action
+        self.cfg["controller"] = controller_cfg
         ur_cfg = self.cfg.get("ur10e", {})
         self.NUM_JOINTS = int(ur_cfg.get("num_joints", 6))
         self.JOINT_NAMES = list(
@@ -198,6 +229,10 @@ class UR10eRobotEnv:
             if max_acceleration is not None
             else ur_cfg.get("max_acceleration", 0.2)
         )
+        if self.backend.max_velocity_limit is not None:
+            self.max_velocity = min(self.max_velocity, self.backend.max_velocity_limit)
+        if self.backend.max_acceleration_limit is not None:
+            self.max_acceleration = min(self.max_acceleration, self.backend.max_acceleration_limit)
         self.default_duration = float(ur_cfg.get("default_duration", 7.0))
         self.cartesian_max_step = float(ur_cfg.get("cartesian_max_step", 0.01))
         self.min_cartesian_fraction = float(ur_cfg.get("min_cartesian_fraction", 0.99))
@@ -253,10 +288,11 @@ class UR10eRobotEnv:
         rclpy.spin_once(self.node, timeout_sec=timeout_sec)
 
     def _wait_until_ready(self):
-        checks = [
-            (self.node.trajectory_action, self.node.trajectory_client.wait_for_server),
-            ("/move_action", self.node.move_group_client.wait_for_server),
-        ]
+        # Planning and read-only state access must remain possible on the
+        # real backend before a motion controller is armed.  Controller and
+        # execution permission checks therefore happen immediately before an
+        # executing goal, not during SDK construction.
+        checks = [("/move_action", self.node.move_group_client.wait_for_server)]
         for name, wait_fn in checks:
             if not wait_fn(timeout_sec=30.0):
                 raise RuntimeError(f"{name} is not available")
@@ -268,6 +304,41 @@ class UR10eRobotEnv:
                 return True
             self._spin(0.1)
         return False
+
+    def _has_complete_joint_state(self) -> bool:
+        msg = self.node.latest_joint_state
+        if msg is None:
+            return False
+        index = {name: i for i, name in enumerate(msg.name)}
+        return all(index.get(name) is not None and index[name] < len(msg.position) for name in self.JOINT_NAMES)
+
+    def _active_controller_names(self, timeout_sec: float = 3.0) -> list[str]:
+        """Read controller state without publishing a command."""
+        if not self.node.list_controllers_client.wait_for_service(timeout_sec=timeout_sec):
+            raise RuntimeError("/controller_manager/list_controllers is not available")
+        future = self.node.list_controllers_client.call_async(ListControllers.Request())
+        rclpy.spin_until_future_complete(self.node, future, timeout_sec=timeout_sec)
+        response = future.result()
+        if response is None:
+            raise RuntimeError("/controller_manager/list_controllers returned no response")
+        return [controller.name for controller in response.controller if controller.state == "active"]
+
+    def _ensure_execution_ready(self) -> None:
+        """Perform safety prerequisites immediately before sending a motion goal."""
+        require_real_execution_authorized(self.backend)
+        if not self.node.trajectory_client.wait_for_server(timeout_sec=10.0):
+            raise RuntimeError(f"{self.node.trajectory_action} is not available")
+        if not self._spin_until_joint_state(timeout=2.0) or not self._has_complete_joint_state():
+            raise RuntimeError("a complete /joint_states message is required before execution")
+        # This also makes a missing base_link -> tool0 transform a hard stop.
+        self._current_pose_msg()
+        if self.backend.is_real:
+            active = self._active_controller_names()
+            if self.backend.expected_controller not in active:
+                raise RuntimeError(
+                    "real UR10e execution requires active controller "
+                    f"{self.backend.expected_controller!r}; active controllers: {active}"
+                )
 
     def _current_pose_msg(self) -> Pose:
         deadline = time.time() + 30.0
@@ -422,6 +493,8 @@ class UR10eRobotEnv:
     ) -> Dict[str, object]:
         if not self.node.move_group_client.wait_for_server(timeout_sec=10.0):
             raise RuntimeError("/move_action is not available. Start MoveIt move_group first.")
+        if not plan_only:
+            self._ensure_execution_ready()
 
         if self.node.latest_joint_state is None:
             self._spin_until_joint_state(timeout=2.0)
@@ -613,6 +686,12 @@ class UR10eRobotEnv:
         return {"success": True, "enabled": True, "objects": added_ids}
 
     def _execute_trajectory(self, robot_trajectory, duration: Optional[float] = None):
+        if self.backend.is_real:
+            raise RuntimeError(
+                "the real UR10e backend does not send direct trajectory-controller goals; "
+                "use the reviewed MoveGroup pose path"
+            )
+        self._ensure_execution_ready()
         execution_duration = float(duration or self.default_duration)
         self._retime_trajectory(robot_trajectory, execution_duration)
         goal = FollowJointTrajectory.Goal()
@@ -655,6 +734,10 @@ class UR10eRobotEnv:
         duration: Optional[float] = None,
     ) -> Dict[str, object]:
         """Move UR10e to target joint positions via FollowJointTrajectory."""
+        if self.backend.is_real:
+            raise RuntimeError(
+                "the real UR10e backend rejects direct joint commands; use a reviewed MoveIt pose goal"
+            )
         if len(joint_states) != self.NUM_JOINTS:
             raise ValueError(f"joint_states must have {self.NUM_JOINTS} values")
         if gripper is not None:
@@ -691,6 +774,10 @@ class UR10eRobotEnv:
             [x, y, z, qx, qy, qz, qw]
         """
         target = self._convert_endpose(endpose)
+        if self.backend.is_real:
+            # The physical backend always gives pose goals to MoveIt.  It
+            # never publishes a raw joint trajectory from this SDK.
+            return self._move_group_to_pose(target, duration=duration, plan_only=plan_only)
         try:
             current = self._current_pose_msg()
             position_error = math.sqrt(
@@ -759,6 +846,8 @@ class UR10eRobotEnv:
         itself should still use Cartesian planning once the flange is down.
         """
         target = self._convert_endpose(endpose)
+        if self.backend.is_real:
+            return self._move_group_to_pose(target, duration=duration, plan_only=plan_only)
         ik_response = self._solve_ik(target)
         if ik_response.error_code.val != 1:
             return {"success": False, "stage": "ik", "error_code": ik_response.error_code.val}
@@ -861,6 +950,10 @@ class UR10eRobotEnv:
             flange_down_rpy=flange_down_rpy,
             label=label,
         )
+        if self.backend.is_real:
+            # The real backend has no direct controller/joint command path;
+            # retain the same constrained target but let MoveIt execute it.
+            planning_mode = "move_group"
         if planning_mode == "move_group":
             move_result = self._move_group_to_pose(
                 self._convert_endpose(plan["tool0_target_endpose"]),
@@ -1082,6 +1175,39 @@ class UR10eRobotEnv:
             "gripper_position": np.array([]),
         }
 
+    def get_joint_state(self) -> Dict[str, object]:
+        """Return a read-only, named view of the latest UR joint state."""
+        self._spin(0.05)
+        if self.node.latest_joint_state is None:
+            self._spin_until_joint_state(timeout=2.0)
+        msg = self.node.latest_joint_state
+        if msg is None:
+            return {
+                "available": False,
+                "topic": self.node.joint_state_topic,
+                "joint_names": list(self.JOINT_NAMES),
+                "reason": "no /joint_states message was received",
+            }
+        index = {name: i for i, name in enumerate(msg.name)}
+        positions = {
+            name: float(msg.position[i])
+            for name, i in index.items()
+            if name in self.JOINT_NAMES and i < len(msg.position)
+        }
+        velocities = {
+            name: float(msg.velocity[i])
+            for name, i in index.items()
+            if name in self.JOINT_NAMES and i < len(msg.velocity)
+        }
+        return {
+            "available": self._has_complete_joint_state(),
+            "topic": self.node.joint_state_topic,
+            "joint_names": list(self.JOINT_NAMES),
+            "positions": positions,
+            "velocities": velocities,
+            "timestamp": float(msg.header.stamp.sec) + float(msg.header.stamp.nanosec) * 1e-9,
+        }
+
     def get_robot_end_pose(self):
         """Return current tool0 pose from TF base_link -> tool0."""
         pose = self._current_pose_msg()
@@ -1095,9 +1221,36 @@ class UR10eRobotEnv:
             "link_name": self.node.tool_frame,
         }
 
+    def get_end_effector_pose(self):
+        """Piper-style alias for the read-only ``base_link -> tool0`` pose."""
+        return self.get_robot_end_pose()
+
     def get_straw_tip_pose(self):
         """Return the live TF pose of the tool-mounted straw-tip marker."""
         return self._frame_pose(self.straw_tip_frame_id)
+
+    def get_tool_pose(self, tool: str = "straw_tip"):
+        """Return only the reviewed fixed feeding tool frame."""
+        if tool != "straw_tip":
+            raise ValueError("the only configured tool is straw_tip")
+        return self.get_straw_tip_pose()
+
+    def get_backend_status(self) -> Dict[str, object]:
+        """Read-only backend diagnostics used by physical-robot setup checks."""
+        status: Dict[str, object] = dict(self.backend.status())
+        status["joint_state"] = self.get_joint_state()
+        try:
+            self._current_pose_msg()
+            status["base_to_tool0_tf_available"] = True
+        except Exception as exc:
+            status["base_to_tool0_tf_available"] = False
+            status["tf_reason"] = str(exc)
+        try:
+            status["active_controllers"] = self._active_controller_names(timeout_sec=1.0)
+        except Exception as exc:
+            status["active_controllers"] = []
+            status["controller_reason"] = str(exc)
+        return status
 
     def get_mouth_target_pose(self):
         """Return the configured fixed mouth target in the base frame."""

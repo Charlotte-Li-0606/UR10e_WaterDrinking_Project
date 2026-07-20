@@ -23,6 +23,29 @@ class ReusableFeedingToolWrapperTest(unittest.TestCase):
         )
         return library
 
+    def test_canonical_safe_interface_is_present_without_gripper_commands(self) -> None:
+        required = {
+            "get_robot_state",
+            "get_joint_state",
+            "get_end_effector_pose",
+            "get_tool_pose",
+            "get_observation",
+            "detect_target",
+            "active_search",
+            "select_target",
+            "plan_tool_to_target",
+            "move_tool_to_target",
+            "hold",
+            "retreat",
+            "stop",
+            "feed_water",
+        }
+
+        for method in required:
+            with self.subTest(method=method):
+                self.assertTrue(callable(getattr(FeedingSkillLibrary, method, None)))
+        self.assertFalse(hasattr(FeedingSkillLibrary, "set_gripper"))
+
     def test_get_observation_exposes_general_status(self) -> None:
         library = self._library()
         library.get_feeding_observation = lambda: {
