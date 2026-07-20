@@ -47,6 +47,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Explicit operator permission for a validated motion-capable tool. Default is plan-only.",
     )
+    parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Validate and normalize the approved call or plan without initializing ROS, Gazebo, MoveIt, or the robot SDK.",
+    )
     return parser.parse_args()
 
 
@@ -80,6 +85,53 @@ def main() -> int:
     except FeedingToolValidationError as exc:
         print(json.dumps({"success": False, "stage": "validation", "reason": str(exc)}))
         return 2
+
+    if cli.validate_only:
+        if cli.execute:
+            print(
+                json.dumps(
+                    {
+                        "success": False,
+                        "stage": "validation",
+                        "reason": "--validate-only cannot be combined with --execute",
+                    }
+                )
+            )
+            return 2
+        if cli.plan_json is None:
+            item = calls[0]
+            print(
+                json.dumps(
+                    {
+                        "event": "safe_feeding_tool_validation_result",
+                        "success": True,
+                        "mode": "validate_only",
+                        "call": item,
+                        "final_state": "plan_validated",
+                        "reason": None,
+                        "note": "Validated the approved reusable call; no ROS, simulator, MoveIt, perception, or robot SDK was initialized.",
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 0
+        print(
+            json.dumps(
+                {
+                    "event": "safe_feeding_tool_plan_result",
+                    "success": True,
+                    "mode": "validate_only",
+                    "final_state": "plan_validated",
+                    "planned_steps": calls,
+                    "results": [],
+                    "failed_step": None,
+                    "reason": None,
+                    "note": "Validated the approved reusable plan; no ROS, simulator, MoveIt, perception, or robot SDK was initialized.",
+                },
+                sort_keys=True,
+            )
+        )
+        return 0
 
     try:
         library = FeedingSkillLibrary()

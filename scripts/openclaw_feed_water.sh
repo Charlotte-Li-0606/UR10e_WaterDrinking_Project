@@ -59,4 +59,4 @@ fi
 if [[ "$MODE" == "--execute" ]]; then
   exec "$PROJECT_DIR/scripts/openclaw_feeding_tool.sh" --execute --plan-json "$PLAN"
 fi
-exec "$PROJECT_DIR/scripts/openclaw_feeding_tool.sh" --plan-json "$PLAN"
+exec "$PROJECT_DIR/scripts/openclaw_feeding_tool.sh" --validate-only --plan-json "$PLAN"
