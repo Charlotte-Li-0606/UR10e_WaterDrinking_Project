@@ -100,6 +100,37 @@ That script forcibly sets `UR10E_ALLOW_REAL_EXECUTION=0` and calls only the
 existing `move_tool_to_target(..., execute=False)` path. It can fail safely if
 perception, planning scene, TF, or MoveIt is unavailable.
 
+## First physical-motion smoke test
+
+`scripts/real_ur10e_smoke_test.py` is a separate commissioning utility. It
+does not use the feeding, LLM, OpenClaw, active-search, or perception paths.
+It always selects `UR10E_BACKEND=real` and has a fixed 2 cm `base_link +Z`
+tool0 target; the target orientation is copied from the current tool0 pose and
+held with a strict MoveIt path constraint. It accepts no joint target, absolute
+pose, or user-provided offset.
+
+```bash
+source /opt/ros/jazzy/setup.bash
+cd /home/dase-hw101/ur_drinking_project
+export UR10E_ALLOW_REAL_EXECUTION=0
+python3 scripts/real_ur10e_smoke_test.py --mode check
+```
+
+`check` is read-only and reports `/joint_states`, `base_link -> tool0`, the
+active controller list, and availability of `/move_action` without calling an
+action. It does not start MoveIt. After a separately reviewed MoveIt instance
+is already running, this remains plan-only:
+
+```bash
+python3 scripts/real_ur10e_smoke_test.py --mode plan
+```
+
+Execution is intentionally not the default and requires all three gates: a
+successful check and plan, `--mode execute --confirm-real-motion`, and the
+exact process environment `UR10E_ALLOW_REAL_EXECUTION=1`. The first physical
+motion requires a clear test area, the pendant speed slider at 5–10%, a
+manually verified payload, and an operator with immediate E-stop access.
+
 ## Feeding geometry and frames
 
 `config/ur10e_sdk_config.yaml` is the canonical software configuration for

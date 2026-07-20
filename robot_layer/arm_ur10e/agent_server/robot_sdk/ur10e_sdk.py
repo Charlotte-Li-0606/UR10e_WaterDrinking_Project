@@ -490,11 +490,20 @@ class UR10eRobotEnv:
         pose: Pose,
         duration: Optional[float] = None,
         plan_only: bool = False,
+        *,
+        orientation_tolerance_rad: float = 0.05,
+        enforce_path_orientation: bool = False,
     ) -> Dict[str, object]:
         if not self.node.move_group_client.wait_for_server(timeout_sec=10.0):
             raise RuntimeError("/move_action is not available. Start MoveIt move_group first.")
         if not plan_only:
             self._ensure_execution_ready()
+        try:
+            orientation_tolerance = float(orientation_tolerance_rad)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("orientation_tolerance_rad must be a finite value in (0, 0.05]") from exc
+        if not math.isfinite(orientation_tolerance) or not 0.0 < orientation_tolerance <= 0.05:
+            raise ValueError("orientation_tolerance_rad must be a finite value in (0, 0.05]")
 
         if self.node.latest_joint_state is None:
             self._spin_until_joint_state(timeout=2.0)
@@ -528,9 +537,9 @@ class UR10eRobotEnv:
         orientation_constraint.header.frame_id = self.node.base_frame
         orientation_constraint.link_name = self.node.tool_frame
         orientation_constraint.orientation = pose.orientation
-        orientation_constraint.absolute_x_axis_tolerance = 0.05
-        orientation_constraint.absolute_y_axis_tolerance = 0.05
-        orientation_constraint.absolute_z_axis_tolerance = 0.05
+        orientation_constraint.absolute_x_axis_tolerance = orientation_tolerance
+        orientation_constraint.absolute_y_axis_tolerance = orientation_tolerance
+        orientation_constraint.absolute_z_axis_tolerance = orientation_tolerance
         orientation_constraint.weight = 1.0
 
         goal_constraint = Constraints()
@@ -538,6 +547,11 @@ class UR10eRobotEnv:
         goal_constraint.position_constraints.append(position_constraint)
         goal_constraint.orientation_constraints.append(orientation_constraint)
         goal.request.goal_constraints.append(goal_constraint)
+        if enforce_path_orientation:
+            path_constraint = Constraints()
+            path_constraint.name = "tool0_orientation_path_constraint"
+            path_constraint.orientation_constraints.append(copy.deepcopy(orientation_constraint))
+            goal.request.path_constraints = path_constraint
 
         goal.planning_options.plan_only = bool(plan_only)
         goal.planning_options.look_around = False
@@ -766,6 +780,8 @@ class UR10eRobotEnv:
         max_acceleration=None,
         duration: Optional[float] = None,
         plan_only: bool = False,
+        *,
+        strict_orientation: bool = False,
     ) -> Dict[str, object]:
         """Move tool0 to an absolute pose in base_link.
 
@@ -777,7 +793,13 @@ class UR10eRobotEnv:
         if self.backend.is_real:
             # The physical backend always gives pose goals to MoveIt.  It
             # never publishes a raw joint trajectory from this SDK.
-            return self._move_group_to_pose(target, duration=duration, plan_only=plan_only)
+            return self._move_group_to_pose(
+                target,
+                duration=duration,
+                plan_only=plan_only,
+                orientation_tolerance_rad=0.001 if strict_orientation else 0.05,
+                enforce_path_orientation=bool(strict_orientation),
+            )
         try:
             current = self._current_pose_msg()
             position_error = math.sqrt(
