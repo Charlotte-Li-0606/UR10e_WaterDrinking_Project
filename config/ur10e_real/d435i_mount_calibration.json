@@ -1,0 +1,31 @@
+{
+  "calibration_status": "provisional",
+  "description": "Physical-axis correction from the 2026-07-23 pendant/base comparison. Camera optical +Z is aligned with the observed approach direction (UR base +X / ROS base_link -X), optical +Y is down (base_link -Z), and optical +X is image-right (base_link +Y). This remains provisional until the three-marker calibration is completed.",
+  "frames": {
+    "parent": "tool0",
+    "child": "d435i_link",
+    "optical_frame": "d435i_color_optical_frame"
+  },
+  "tool0_to_d435i_link": {
+    "translation_m": [0.08492188795948852, 0.0017213103077830332, 0.013902080017376932],
+    "rpy_rad": [3.0678491967358434, -0.005146961704527064, -1.4651971057494921]
+  },
+  "calibration_metrics": {
+    "method": "manual_physical_axis_alignment",
+    "captured_at": "2026-07-23T15:45:00+08:00",
+    "target_camera_optical_axes_in_base_link": {
+      "+X_image_right": [0.0, 1.0, 0.0],
+      "+Y_image_down": [0.0, 0.0, -1.0],
+      "+Z_depth_forward": [-1.0, 0.0, 0.0]
+    },
+    "preserved_tool0_to_optical_center_m": [0.07011388448249163, 0.000057893373886079916, 0.014787667744015683],
+    "rotation_determinant": 1.0000000000000009,
+    "rotation_orthogonality_error": 1.0461657976343662e-15,
+    "rollback_tool0_to_d435i_link": {
+      "translation_m": [0.072299, 0.014823, 0.015],
+      "rpy_rad": [-3.141592654, -0.027969, -0.153885],
+      "note": "Legacy simulation-derived provisional transform"
+    },
+    "limitation": "One physical approach direction plus the upright-image constraint fixes the axis convention, but a three-marker solve is still required for metrology-grade 6-DoF verification."
+  }
+}

@@ -22,7 +22,7 @@ import message_filters
 import numpy as np
 import rclpy
 from cv_bridge import CvBridge
-from geometry_msgs.msg import PoseStamped, TransformStamped
+from geometry_msgs.msg import PoseStamped, TransformStamped, Vector3Stamped
 from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision
 from rclpy.duration import Duration
@@ -45,10 +45,12 @@ class NodeOptions:
     depth_topic: str
     camera_info_topic: str
     output_topic: str
+    normal_topic: str
     candidates_topic: str
     base_frame: str
     debug_image_topic: str
     status_topic: str
+    mount_calibration_status: str
     model_path: Path
     sync_slop_sec: float
     depth_patch_radius_px: int
@@ -56,6 +58,7 @@ class NodeOptions:
     max_depth_m: float
     max_jump_m: float
     smoothing_alpha: float
+    normal_smoothing_alpha: float
     max_rate_hz: float
     max_tf_age_sec: float
     max_faces: int
@@ -78,6 +81,55 @@ def _rotation_matrix(transform: TransformStamped) -> np.ndarray:
         ],
         dtype=np.float64,
     )
+
+
+def _surface_normal_from_depth(
+    depth_m: np.ndarray,
+    center_u: float,
+    center_v: float,
+    fx: float,
+    fy: float,
+    cx: float,
+    cy: float,
+    radius_px: int,
+    min_depth_m: float,
+    max_depth_m: float,
+) -> np.ndarray | None:
+    """Fit a camera-frame surface normal near the mouth depth sample.
+
+    The normal is flipped toward the camera.  For a printed face or screen
+    viewed by the wrist camera, that is the physical pre-mouth side.
+    """
+    if fx <= 0.0 or fy <= 0.0:
+        return None
+    center_x = int(round(center_u))
+    center_y = int(round(center_v))
+    radius = max(3, int(radius_px))
+    points: list[list[float]] = []
+    for pixel_y in range(max(0, center_y - radius), min(depth_m.shape[0], center_y + radius + 1)):
+        for pixel_x in range(max(0, center_x - radius), min(depth_m.shape[1], center_x + radius + 1)):
+            z = float(depth_m[pixel_y, pixel_x])
+            if not math.isfinite(z) or not min_depth_m <= z <= max_depth_m:
+                continue
+            points.append([(pixel_x - cx) * z / fx, (pixel_y - cy) * z / fy, z])
+    if len(points) < 12:
+        return None
+    cloud = np.asarray(points, dtype=np.float64)
+    centroid = np.mean(cloud, axis=0)
+    try:
+        _, _, right_vectors = np.linalg.svd(cloud - centroid, full_matrices=False)
+    except np.linalg.LinAlgError:
+        return None
+    normal = np.asarray(right_vectors[-1], dtype=np.float64)
+    magnitude = float(np.linalg.norm(normal))
+    if not math.isfinite(magnitude) or magnitude < 1e-8:
+        return None
+    normal /= magnitude
+    # Camera optical +Z points away from the camera.  The face/screen side
+    # visible to the camera therefore has a normal toward the optical origin.
+    if float(np.dot(normal, centroid)) > 0.0:
+        normal = -normal
+    return normal
 
 
 class MouthPerceptionNode(Node):
@@ -111,6 +163,7 @@ class MouthPerceptionNode(Node):
             reliability=ReliabilityPolicy.RELIABLE,
         )
         self._pose_publisher = self.create_publisher(PoseStamped, options.output_topic, qos)
+        self._normal_publisher = self.create_publisher(Vector3Stamped, options.normal_topic, qos)
         # A JSON string is used deliberately here instead of a new custom ROS
         # message: it keeps the single-pose contract intact while carrying the
         # image-x metadata required for left/center/right selection.
@@ -137,6 +190,7 @@ class MouthPerceptionNode(Node):
         self._last_landmarker_timestamp_ms = -1
         self._last_processing_time = 0.0
         self._last_base_position: np.ndarray | None = None
+        self._last_base_normal: np.ndarray | None = None
         self._outlier_count = 0
         self._last_warning_times: dict[str, float] = {}
         self.get_logger().info(
@@ -207,7 +261,7 @@ class MouthPerceptionNode(Node):
 
     def _transform_to_base(
         self, point_camera: np.ndarray, camera_frame: str, stamp
-    ) -> tuple[np.ndarray, str] | None:
+    ) -> tuple[np.ndarray, str, np.ndarray] | None:
         """Transform a camera point into base, preferring the image timestamp.
 
         Gazebo can publish camera frames slightly ahead of the robot-state TF
@@ -249,10 +303,11 @@ class MouthPerceptionNode(Node):
                 )
                 return None
         translation = transform.transform.translation
-        point_base = _rotation_matrix(transform) @ point_camera + np.array(
+        rotation = _rotation_matrix(transform)
+        point_base = rotation @ point_camera + np.array(
             [translation.x, translation.y, translation.z], dtype=np.float64
         )
-        return point_base, mode
+        return point_base, mode, rotation
 
     def _filter_position(self, candidate: np.ndarray) -> np.ndarray | None:
         if self._last_base_position is None:
@@ -268,6 +323,25 @@ class MouthPerceptionNode(Node):
         alpha = self._options.smoothing_alpha
         self._last_base_position = alpha * candidate + (1.0 - alpha) * self._last_base_position
         return self._last_base_position
+
+    def _filter_normal(self, candidate: np.ndarray) -> np.ndarray | None:
+        magnitude = float(np.linalg.norm(candidate))
+        if not math.isfinite(magnitude) or magnitude < 1e-8:
+            return None
+        candidate = candidate / magnitude
+        if self._last_base_normal is None:
+            self._last_base_normal = candidate
+            return self._last_base_normal
+        # Plane fitting has a sign ambiguity.  Keep it continuous before EMA.
+        if float(np.dot(candidate, self._last_base_normal)) < 0.0:
+            candidate = -candidate
+        alpha = self._options.normal_smoothing_alpha
+        filtered = alpha * candidate + (1.0 - alpha) * self._last_base_normal
+        filtered_magnitude = float(np.linalg.norm(filtered))
+        if filtered_magnitude < 1e-8:
+            return None
+        self._last_base_normal = filtered / filtered_magnitude
+        return self._last_base_normal
 
     def _synchronized_callback(self, rgb: Image, depth: Image, camera_info: CameraInfo) -> None:
         now = time.monotonic()
@@ -336,13 +410,27 @@ class MouthPerceptionNode(Node):
             point_camera = np.array(
                 [(depth_u - cx) * z / fx, (depth_v - cy) * z / fy, z], dtype=np.float64
             )
+            normal_camera = _surface_normal_from_depth(
+                depth_m,
+                depth_u,
+                depth_v,
+                fx,
+                fy,
+                cx,
+                cy,
+                self._options.depth_patch_radius_px,
+                self._options.min_depth_m,
+                self._options.max_depth_m,
+            )
             transform_result = self._transform_to_base(point_camera, camera_frame, rgb.header.stamp)
             if transform_result is None:
                 continue
-            point_base, tf_mode = transform_result
+            point_base, tf_mode, rotation = transform_result
+            normal_base = None if normal_camera is None else rotation @ normal_camera
             candidates.append(
                 {
                     "position": point_base,
+                    "surface_normal": normal_base,
                     "image_x": mouth_u,
                     "image_y": mouth_v,
                     "depth_m": z,
@@ -372,6 +460,9 @@ class MouthPerceptionNode(Node):
                         "image_x": round(float(candidate["image_x"]), 3),
                         "image_y": round(float(candidate["image_y"]), 3),
                         "depth_m": round(float(candidate["depth_m"]), 4),
+                        "surface_normal": None
+                        if candidate["surface_normal"] is None
+                        else [round(float(value), 6) for value in candidate["surface_normal"]],
                     }
                     for candidate in candidates
                 ],
@@ -404,6 +495,16 @@ class MouthPerceptionNode(Node):
         # This node estimates position only; orientation is intentionally not inferred.
         pose.pose.orientation.w = 1.0
         self._pose_publisher.publish(pose)
+        normal = primary["surface_normal"]
+        if normal is not None:
+            normal = self._filter_normal(np.asarray(normal, dtype=np.float64))
+        if normal is not None:
+            normal_message = Vector3Stamped()
+            normal_message.header = pose.header
+            normal_message.vector.x = float(normal[0])
+            normal_message.vector.y = float(normal[1])
+            normal_message.vector.z = float(normal[2])
+            self._normal_publisher.publish(normal_message)
         self._status(
             True,
             "mouth_pose_published",
@@ -413,6 +514,8 @@ class MouthPerceptionNode(Node):
             depth_m=round(float(primary["depth_m"]), 4),
             frame_id=self._options.base_frame,
             tf_mode=str(primary["tf_mode"]),
+            surface_normal_available=normal is not None,
+            mount_calibration_status=self._options.mount_calibration_status,
         )
         self._publish_debug(
             rgb_bgr,
@@ -433,10 +536,12 @@ def _parse_options(argv: Sequence[str] | None = None) -> tuple[NodeOptions, list
     parser.add_argument("--depth-topic", default="/wrist_rgbd/depth_image")
     parser.add_argument("--camera-info-topic", default="/wrist_rgbd/camera_info")
     parser.add_argument("--output-topic", default="/detected_mouth_pose")
+    parser.add_argument("--normal-topic", default="/detected_mouth_normal")
     parser.add_argument("--candidates-topic", default="/detected_mouth_candidates")
     parser.add_argument("--base-frame", default="base_link")
     parser.add_argument("--debug-image-topic", default="/mouth_detection/debug_image")
     parser.add_argument("--status-topic", default="/mouth_detection/status")
+    parser.add_argument("--mount-calibration-status", default="unknown")
     parser.add_argument("--model-path", type=Path, default=default_model)
     parser.add_argument("--sync-slop-sec", type=float, default=0.08)
     parser.add_argument("--depth-patch-radius-px", type=int, default=3)
@@ -444,6 +549,7 @@ def _parse_options(argv: Sequence[str] | None = None) -> tuple[NodeOptions, list
     parser.add_argument("--max-depth-m", type=float, default=4.0)
     parser.add_argument("--max-jump-m", type=float, default=0.12)
     parser.add_argument("--smoothing-alpha", type=float, default=0.45)
+    parser.add_argument("--normal-smoothing-alpha", type=float, default=0.20)
     parser.add_argument("--max-rate-hz", type=float, default=10.0)
     parser.add_argument("--max-tf-age-sec", type=float, default=5.0)
     parser.add_argument("--max-faces", type=int, default=2)
@@ -451,15 +557,19 @@ def _parse_options(argv: Sequence[str] | None = None) -> tuple[NodeOptions, list
     parsed, ros_args = parser.parse_known_args(argv)
     if parsed.max_faces < 1:
         parser.error("--max-faces must be at least one")
+    if not 0.0 < parsed.normal_smoothing_alpha <= 1.0:
+        parser.error("--normal-smoothing-alpha must be in (0, 1]")
     options = NodeOptions(
         rgb_topic=parsed.rgb_topic,
         depth_topic=parsed.depth_topic,
         camera_info_topic=parsed.camera_info_topic,
         output_topic=parsed.output_topic,
+        normal_topic=parsed.normal_topic,
         candidates_topic=parsed.candidates_topic,
         base_frame=parsed.base_frame,
         debug_image_topic=parsed.debug_image_topic,
         status_topic=parsed.status_topic,
+        mount_calibration_status=parsed.mount_calibration_status,
         model_path=parsed.model_path,
         sync_slop_sec=parsed.sync_slop_sec,
         depth_patch_radius_px=parsed.depth_patch_radius_px,
@@ -467,6 +577,7 @@ def _parse_options(argv: Sequence[str] | None = None) -> tuple[NodeOptions, list
         max_depth_m=parsed.max_depth_m,
         max_jump_m=parsed.max_jump_m,
         smoothing_alpha=parsed.smoothing_alpha,
+        normal_smoothing_alpha=parsed.normal_smoothing_alpha,
         max_rate_hz=parsed.max_rate_hz,
         max_tf_age_sec=parsed.max_tf_age_sec,
         max_faces=parsed.max_faces,
