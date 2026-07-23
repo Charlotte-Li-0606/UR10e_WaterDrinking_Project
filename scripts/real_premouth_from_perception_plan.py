@@ -101,6 +101,13 @@ MAX_TOOL0_RADIUS_FROM_UR_BASE_M = 1.30
 MAX_PLAN_TRANSLATION_M = 0.30
 MIN_EXECUTION_SPEED_PERCENT = 5.0
 MAX_EXECUTION_SPEED_PERCENT = 15.0
+DEFAULT_MOUTH_SAMPLE_SECONDS = 2.0
+MIN_MOUTH_SAMPLE_SECONDS = 0.5
+MAX_MOUTH_SAMPLE_SECONDS = 8.0
+DEFAULT_TRAJECTORY_VELOCITY_SCALING = 0.10
+DEFAULT_TRAJECTORY_ACCELERATION_SCALING = 0.10
+MIN_TRAJECTORY_SCALING = 0.01
+MAX_TRAJECTORY_SCALING = 0.20
 MAX_MOUTH_POSE_AGE_SEC = 1.0
 MIN_STABLE_SAMPLES = 3
 MAX_POSE_SPREAD_M = 0.025
@@ -224,6 +231,9 @@ class RealPreMouthFromPerceptionPlan(Node):
         maximum_plan_translation_m: float = MAX_PLAN_TRANSLATION_M,
         feeding_vector: tuple[float, float, float] = DEFAULT_FEEDING_VECTOR,
         feeding_vector_sign: str = "plus",
+        mouth_sample_seconds: float = DEFAULT_MOUTH_SAMPLE_SECONDS,
+        trajectory_velocity_scaling: float = DEFAULT_TRAJECTORY_VELOCITY_SCALING,
+        trajectory_acceleration_scaling: float = DEFAULT_TRAJECTORY_ACCELERATION_SCALING,
     ) -> None:
         super().__init__("real_premouth_from_perception_plan")
         if premouth_policy not in PREMOUTH_POLICIES:
@@ -239,6 +249,18 @@ class RealPreMouthFromPerceptionPlan(Node):
             )
         if feeding_vector_sign not in FEEDING_VECTOR_SIGNS:
             raise ValueError(f"feeding_vector_sign must be one of {FEEDING_VECTOR_SIGNS}")
+        if not math.isfinite(mouth_sample_seconds) or not MIN_MOUTH_SAMPLE_SECONDS <= mouth_sample_seconds <= MAX_MOUTH_SAMPLE_SECONDS:
+            raise ValueError(
+                f"mouth_sample_seconds must be within {MIN_MOUTH_SAMPLE_SECONDS:.1f}–{MAX_MOUTH_SAMPLE_SECONDS:.1f} seconds"
+            )
+        for name, value in (
+            ("trajectory_velocity_scaling", trajectory_velocity_scaling),
+            ("trajectory_acceleration_scaling", trajectory_acceleration_scaling),
+        ):
+            if not math.isfinite(value) or not MIN_TRAJECTORY_SCALING <= value <= MAX_TRAJECTORY_SCALING:
+                raise ValueError(
+                    f"{name} must be within {MIN_TRAJECTORY_SCALING:.2f}–{MAX_TRAJECTORY_SCALING:.2f}"
+                )
         normalized_feeding_vector = _normalize_feeding_vector(feeding_vector)
         if premouth_policy == "feeding-vector" and abs(normalized_feeding_vector[2]) > MAX_ABS_FEEDING_VECTOR_Z:
             raise ValueError(
@@ -250,6 +272,9 @@ class RealPreMouthFromPerceptionPlan(Node):
         self.feeding_vector_input = [float(component) for component in feeding_vector]
         self.feeding_vector_normalized = normalized_feeding_vector
         self.feeding_vector_sign = feeding_vector_sign
+        self.mouth_sample_seconds = float(mouth_sample_seconds)
+        self.trajectory_velocity_scaling = float(trajectory_velocity_scaling)
+        self.trajectory_acceleration_scaling = float(trajectory_acceleration_scaling)
         self.latest_joint_state: JointState | None = None
         self.latest_speed_scaling: Float64 | None = None
         self.mouth_samples: list[MouthSample] = []
@@ -663,8 +688,8 @@ class RealPreMouthFromPerceptionPlan(Node):
         goal.request.planner_id = PILZ_PLANNER
         goal.request.num_planning_attempts = 1
         goal.request.allowed_planning_time = 10.0
-        goal.request.max_velocity_scaling_factor = 0.05
-        goal.request.max_acceleration_scaling_factor = 0.05
+        goal.request.max_velocity_scaling_factor = self.trajectory_velocity_scaling
+        goal.request.max_acceleration_scaling_factor = self.trajectory_acceleration_scaling
         if self.latest_joint_state is not None:
             goal.request.start_state.joint_state = self.latest_joint_state
             goal.request.start_state.is_diff = False
@@ -1017,7 +1042,7 @@ class RealPreMouthFromPerceptionPlan(Node):
         # Keep planning independent of controller-manager service calls.  The
         # plan path only needs live state, TF, perception, and /move_action;
         # controller state is rechecked later, immediately before an execute.
-        snapshot = self.snapshot(mouth_sample_sec=5.0, inspect_controllers=False)
+        snapshot = self.snapshot(mouth_sample_sec=self.mouth_sample_seconds, inspect_controllers=False)
         failures = self.readiness_failures(snapshot, require_stable_mouth=True)
         if failures:
             return 2, {"success": False, "mode": "plan", "stage": "readiness", "failures": failures, "checks": snapshot, "execution_sent": False}
@@ -1157,6 +1182,12 @@ class RealPreMouthFromPerceptionPlan(Node):
             "mode": "plan",
             "premouth_policy": self.premouth_policy,
             "safe_distance_m": self.safe_distance_m,
+            "timing_profile": {
+                "mouth_sample_seconds": self.mouth_sample_seconds,
+                "trajectory_velocity_scaling": self.trajectory_velocity_scaling,
+                "trajectory_acceleration_scaling": self.trajectory_acceleration_scaling,
+                "recommended_pendant_speed_percent": MAX_EXECUTION_SPEED_PERCENT,
+            },
             "feeding_vector_input": self.feeding_vector_input,
             "feeding_vector_normalized": self.feeding_vector_normalized,
             "feeding_vector_sign": self.feeding_vector_sign,
@@ -1316,7 +1347,7 @@ class RealPreMouthFromPerceptionPlan(Node):
                 "execution_disabled": True,
             }
 
-        # plan() performs all checks, collects a fresh five-second stable
+        # plan() performs all checks, collects a fresh bounded stable
         # observation, freezes its mean mouth pose, and computes this one
         # immutable pre-mouth target before any execution is considered.
         _, prepared = self.plan()
@@ -1324,7 +1355,10 @@ class RealPreMouthFromPerceptionPlan(Node):
         prepared["frozen_detected_mouth_pose"] = prepared.get("detected_mouth_pose")
         prepared["execution_disabled"] = False
         prepared["execution_sent"] = False
-        prepared["frozen_target_policy"] = "The five-second stable mouth-pose mean is frozen before planning; no perception updates are consumed during motion."
+        prepared["frozen_target_policy"] = (
+            f"The {self.mouth_sample_seconds:g}-second stable mouth-pose mean is frozen before planning; "
+            "no perception updates are consumed during motion."
+        )
 
         if not prepared.get("success"):
             failed_plan_stage = prepared.get("stage")
@@ -1453,8 +1487,8 @@ def _parse_args() -> argparse.Namespace:
         choices=PREMOUTH_POLICIES,
         default=DEFAULT_PREMOUTH_POLICY,
         help=(
-            "Pre-mouth target policy. tcp-forward is recommended for real review; legacy base-x, "
-            "diagnostic camera-ray, and configurable feeding-vector remain available."
+            "Pre-mouth target policy. camera-ray is the validated real default with the corrected D435i extrinsic; "
+            "tcp-forward, legacy base-x, and configurable feeding-vector remain available."
         ),
     )
     parser.add_argument(
@@ -1528,6 +1562,24 @@ def _parse_args() -> argparse.Namespace:
         help="Mouth-pose collection duration for check mode (default: 1.0; use 8 for a stability report).",
     )
     parser.add_argument(
+        "--mouth-sample-seconds",
+        type=float,
+        default=DEFAULT_MOUTH_SAMPLE_SECONDS,
+        help="Stable mouth-pose collection duration used by plan/execute (default: 2.0 seconds).",
+    )
+    parser.add_argument(
+        "--trajectory-velocity-scaling",
+        type=float,
+        default=DEFAULT_TRAJECTORY_VELOCITY_SCALING,
+        help="MoveIt velocity scaling for the validated plan (default: 0.10; allowed: 0.01–0.20).",
+    )
+    parser.add_argument(
+        "--trajectory-acceleration-scaling",
+        type=float,
+        default=DEFAULT_TRAJECTORY_ACCELERATION_SCALING,
+        help="MoveIt acceleration scaling for the validated plan (default: 0.10; allowed: 0.01–0.20).",
+    )
+    parser.add_argument(
         "--return-report",
         type=Path,
         help="Successful execution report whose recorded start pose is the guarded --mode return target.",
@@ -1542,6 +1594,16 @@ def _parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.sample_seconds <= 0.0 or not math.isfinite(args.sample_seconds):
         parser.error("--sample-seconds must be a positive finite number")
+    if not math.isfinite(args.mouth_sample_seconds) or not MIN_MOUTH_SAMPLE_SECONDS <= args.mouth_sample_seconds <= MAX_MOUTH_SAMPLE_SECONDS:
+        parser.error(
+            f"--mouth-sample-seconds must be within {MIN_MOUTH_SAMPLE_SECONDS:.1f}–{MAX_MOUTH_SAMPLE_SECONDS:.1f}"
+        )
+    for option, value in (
+        ("--trajectory-velocity-scaling", args.trajectory_velocity_scaling),
+        ("--trajectory-acceleration-scaling", args.trajectory_acceleration_scaling),
+    ):
+        if not math.isfinite(value) or not MIN_TRAJECTORY_SCALING <= value <= MAX_TRAJECTORY_SCALING:
+            parser.error(f"{option} must be within {MIN_TRAJECTORY_SCALING:.2f}–{MAX_TRAJECTORY_SCALING:.2f}")
     if not math.isfinite(args.safe_distance) or not MIN_SAFE_DISTANCE_M <= args.safe_distance <= MAX_SAFE_DISTANCE_M:
         parser.error(f"--safe-distance must be within {MIN_SAFE_DISTANCE_M:.2f}–{MAX_SAFE_DISTANCE_M:.2f} m")
     if not math.isfinite(args.maximum_plan_translation) or not 0.0 < args.maximum_plan_translation <= MAX_TOOL0_RADIUS_FROM_UR_BASE_M:
@@ -1584,6 +1646,9 @@ def main() -> int:
         maximum_plan_translation_m=args.maximum_plan_translation,
         feeding_vector=(args.feeding_vector_x, args.feeding_vector_y, args.feeding_vector_z),
         feeding_vector_sign=args.feeding_vector_sign,
+        mouth_sample_seconds=args.mouth_sample_seconds,
+        trajectory_velocity_scaling=args.trajectory_velocity_scaling,
+        trajectory_acceleration_scaling=args.trajectory_acceleration_scaling,
     )
     try:
         if args.mode == "check":
