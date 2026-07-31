@@ -160,14 +160,14 @@ safety-certified collision layer.
 
 ## Same-target dynamic replanning
 
-`FeedingSkillLibrary.move_straw_tip_to_pre_mouth_with_dynamic_avoidance()` is
-the independent simulation active-avoidance function. The real backend is
-hard-blocked there and uses
-`scripts/real_dynamic_obstacle_avoidance_plan.py`, which reuses the calibrated
-real camera-ray target, reach, identity, and PlanningScene guards and has no
-execution mode. Neither path uses MoveIt Hybrid Planning or replaces the
-current MoveIt launch structure. The simulation function sends a normal
-MoveGroup plan-and-execute request with:
+`FeedingSkillLibrary.move_straw_tip_to_pre_mouth_with_dynamic_avoidance()`
+remains the independent simulation function. The canonical physical path does
+not call that simulation helper. It uses
+`scripts/real_feed_water_integrated.py`, while
+`scripts/real_dynamic_obstacle_avoidance_plan.py` remains the independent
+real plan-only diagnostic. Neither path uses MoveIt Hybrid Planning or
+replaces the current MoveIt launch structure. The guarded real workflow sends
+a normal MoveGroup plan-and-execute request with:
 
 - one frozen pre-mouth coordinate and final flange-down orientation;
 - `ompl/RRTConnectkConfigDefault`, so a non-linear detour is possible;
@@ -193,11 +193,13 @@ both a non-empty `/wrist_rgbd/points` input and MoveIt's non-empty
 the filtered stream prevents a live camera with a broken TF/updater path from
 being mistaken for a working occupancy map.
 
-Real execution of this new function is hard-blocked in both the high-level
-library and the SDK. The existing guarded real `feed_water` path is unchanged.
-The next promotion gate is real D435i point-cloud/OctoMap plan-only validation,
-including cup/straw/camera self-filtering; only after repeatable results should
-runtime real execution be considered separately.
+Direct real execution of the generic helper remains hard-blocked in both the
+high-level library and SDK. Real dynamic execution is reachable only inside
+the single guarded `feed_water` operation. That state machine requires fresh
+raw and filtered clouds, freezes the selected mouth and target coordinate,
+uses exactly three zero-delay replan attempts, cancels if the cloud becomes
+stale or selected identity becomes unsafe, and retains all normal real-motion
+runtime gates.
 
 For that no-motion promotion gate, use the dedicated MoveIt launcher after
 stopping the ordinary real MoveIt instance. It sets MoveGroup's

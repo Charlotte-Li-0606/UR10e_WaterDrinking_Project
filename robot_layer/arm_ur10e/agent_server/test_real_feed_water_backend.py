@@ -60,15 +60,15 @@ class RealFeedWaterBackendTest(unittest.TestCase):
         def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
             report_argument = command.index("--report-file") + 1
             Path(command[report_argument]).write_text(json.dumps(pipeline), encoding="utf-8")
-            self.assertIn("camera-ray", command)
+            self.assertEqual(
+                str(backend.REAL_FEED_WATER_SCRIPT),
+                command[1],
+            )
+            self.assertIn("--plan-only", command)
             target_selection_argument = command.index("--target-selection") + 1
             self.assertEqual("center", command[target_selection_argument])
             self.assertIn("--no-execute", command)
             self.assertNotIn("--confirm-real-motion", command)
-            safe_distance_argument = command.index("--safe-distance") + 1
-            self.assertEqual("0.08", command[safe_distance_argument])
-            maximum_translation_argument = command.index("--maximum-plan-translation") + 1
-            self.assertEqual("1.3", command[maximum_translation_argument])
             mouth_sample_argument = command.index("--mouth-sample-seconds") + 1
             self.assertEqual("1.0", command[mouth_sample_argument])
             return subprocess.CompletedProcess(command, 0, "", "")

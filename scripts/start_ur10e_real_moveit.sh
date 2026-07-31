@@ -13,11 +13,12 @@ export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
 export ROS_LOCALHOST_ONLY=0
 
 # This project wrapper supplies the MoveIt kinematics parameters required for
-# pose planning and advertises only the active physical-robot controller.
+# pose planning, loads the wrist-camera occupancy monitor used by the guarded
+# real feed_water workflow, and advertises only the physical-robot controller.
 exec ros2 launch "${PROJECT_DIR}/launch/ur10e_moveit_with_kinematics.launch.py" \
   ur_type:=ur10e \
   launch_rviz:=false \
   launch_servo:=false \
   use_sim_time:=false \
-  use_octomap:=false \
+  use_octomap:=true \
   trajectory_controller:=scaled_joint_trajectory_controller

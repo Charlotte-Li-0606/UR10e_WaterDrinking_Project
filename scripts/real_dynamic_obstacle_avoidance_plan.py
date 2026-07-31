@@ -120,8 +120,15 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
             "width": record["width"],
         }
 
-    def dynamic_readiness(self) -> dict[str, Any]:
-        """Require current occupancy input and an execution-disabled MoveGroup."""
+    def dynamic_readiness(self, *, execution_mode: bool | None = False) -> dict[str, Any]:
+        """Require current occupancy input and the requested MoveGroup mode.
+
+        ``False`` preserves this standalone script's original hard plan-only
+        requirement. ``True`` is used only by the guarded real ``feed_water``
+        state machine and requires MoveGroup execution to be enabled. ``None``
+        validates a plan-only request without requiring the surrounding
+        MoveGroup process to be globally execution-disabled.
+        """
         deadline = time.monotonic() + CLOUD_SETTLE_SEC
         while rclpy.ok() and time.monotonic() < deadline:
             if all(self._clouds[topic] is not None for topic in self._clouds):
@@ -159,8 +166,10 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
         resolution = parameters["octomap_resolution_m"]
         if not isinstance(resolution, (int, float)) or not math.isfinite(float(resolution)) or float(resolution) <= 0.0:
             failures.append("MoveGroup OctoMap resolution is unavailable or invalid")
-        if parameters["allow_trajectory_execution"] is not False:
+        if execution_mode is False and parameters["allow_trajectory_execution"] is not False:
             failures.append("MoveGroup trajectory execution is not explicitly disabled")
+        if execution_mode is True and parameters["allow_trajectory_execution"] is not True:
+            failures.append("MoveGroup trajectory execution is not enabled for guarded feed_water")
         if not raw["active"]:
             failures.append("raw wrist PointCloud2 is missing, empty, or stale")
         if not filtered["active"]:
@@ -168,6 +177,7 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
         return {
             "success": not failures,
             "failures": failures,
+            "execution_mode": execution_mode,
             "move_group_parameters": parameters,
             "raw_cloud": raw,
             "filtered_cloud": filtered,
@@ -193,6 +203,14 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
         return goal
 
     def _run_plan(self, target: dict[str, Any]) -> dict[str, Any]:
+        self._frozen_dynamic_target = {
+            "frame_id": str(target["frame_id"]),
+            "link_name": str(target["link_name"]),
+            "position_m": [float(value) for value in target["position_m"]],
+            "orientation_quat_xyzw": [
+                float(value) for value in target["orientation_quat_xyzw"]
+            ],
+        }
         result = super()._run_plan(target)
         result.update(
             {

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Real-only ``feed_water`` adapter for the validated pre-mouth pipeline.
+"""Real-only ``feed_water`` adapter for the integrated guarded pipeline.
 
 This module deliberately contains no perception projection, target geometry,
 MoveIt planning, trajectory, joint, controller, cup-tilt, or pour logic.  It
-invokes ``scripts/real_premouth_from_perception_plan.py``, the exact guarded
-camera-ray path validated on the physical UR10e, then optionally performs a
-motionless dwell at the resulting 80 mm pre-mouth pose.
+invokes ``scripts/real_feed_water_integrated.py``.  That real-only state
+machine retains selected-person identity, performs bounded translation-only
+active search when needed, freezes the camera-ray 80 mm pre-mouth target, and
+uses the wrist OctoMap for same-target alternate-path replanning.  This adapter
+then optionally performs a motionless dwell at the final pre-mouth pose.
 """
 
 from __future__ import annotations
@@ -22,7 +24,7 @@ from typing import Any, Mapping
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-REAL_PREMOUTH_SCRIPT = PROJECT_ROOT / "scripts/real_premouth_from_perception_plan.py"
+REAL_FEED_WATER_SCRIPT = PROJECT_ROOT / "scripts/real_feed_water_integrated.py"
 REPORT_DIR = PROJECT_ROOT / "reports"
 
 REAL_BACKEND = "real"
@@ -62,17 +64,10 @@ def _pipeline_command(
 ) -> list[str]:
     command = [
         sys.executable,
-        str(REAL_PREMOUTH_SCRIPT),
-        "--mode",
-        "execute" if execute else "plan",
-        "--premouth-policy",
-        "camera-ray",
+        str(REAL_FEED_WATER_SCRIPT),
+        "--execute" if execute else "--plan-only",
         "--target-selection",
         target_selection,
-        "--safe-distance",
-        str(SAFE_DISTANCE_M),
-        "--maximum-plan-translation",
-        str(MAXIMUM_PLAN_TRANSLATION_M),
         "--mouth-sample-seconds",
         str(MOUTH_SAMPLE_SECONDS),
         "--trajectory-velocity-scaling",
@@ -134,12 +129,24 @@ def _tool_report(
     elapsed_sec: float,
     gates: Mapping[str, Any],
 ) -> dict[str, Any]:
+    active_search = (
+        pipeline.get("active_search")
+        if isinstance(pipeline.get("active_search"), Mapping)
+        else {}
+    )
     checks = pipeline.get("checks") if isinstance(pipeline.get("checks"), Mapping) else {}
+    if not checks and isinstance(active_search.get("checks"), Mapping):
+        checks = active_search["checks"]
     actual = pipeline.get("actual") if isinstance(pipeline.get("actual"), Mapping) else {}
     execution_result = (
         pipeline.get("execution_result")
         if isinstance(pipeline.get("execution_result"), Mapping)
         else None
+    )
+    integrated = (
+        pipeline.get("integrated_real_feed_water")
+        if isinstance(pipeline.get("integrated_real_feed_water"), Mapping)
+        else {}
     )
     success = bool(pipeline.get("success"))
     reason = pipeline.get("reason")
@@ -161,6 +168,9 @@ def _tool_report(
         "mount_calibration": checks.get("mount_calibration") or pipeline.get("mount_calibration"),
         "detected_mouth_pose": pipeline.get("detected_mouth_pose"),
         "pre_mouth_target": pipeline.get("pre_mouth_pose"),
+        "active_search": active_search,
+        "dynamic_octomap_readiness": pipeline.get("dynamic_octomap_readiness"),
+        "integrated_real_feed_water": integrated,
         "target_tool0_pose": pipeline.get("target_tool0_pose"),
         "planned_displacement_m": pipeline.get("planned_tool0_translation_m"),
         "planned_displacement_norm_m": pipeline.get("planned_tool0_translation_norm_m"),
@@ -175,6 +185,9 @@ def _tool_report(
         "safety_gates": {
             **dict(gates),
             "stable_mouth_pose": bool(checks.get("mouth_pose", {}).get("stable")),
+            "multi_target_identity_lock": bool(integrated.get("multi_target_identity_lock")),
+            "translation_only_active_search": bool(integrated.get("translation_only_search")),
+            "dynamic_same_target_replanning": bool(integrated.get("same_target_replanning")),
             "corrected_camera_tf_loaded": bool(checks.get("camera_mount_match", {}).get("matches")),
             "execution_runtime_gates_required": execute,
             "controller_active": None

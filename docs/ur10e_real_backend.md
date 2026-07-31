@@ -26,10 +26,14 @@ OpenClaw integration remains preserved as a legacy fallback but is not part of
 the Codex route. Simulation remains backed by `FeedingSkillLibrary`; with
 `UR10E_BACKEND=real`, the safe-tool runner
 accepts only one high-level `feed_water` call and delegates it to the same
-corrected camera-ray pre-mouth script that was physically validated. The real
-branch exposes no arbitrary joint, pose, trajectory, controller, gripper,
-direct-mouth, tilt, pour, or retreat action. It plans by default. Execution
-requires `--execute`, `--confirm-real-motion`, and
+integrated real state machine. That state machine locks the center-selected
+person among the visible mouth candidates, performs the bounded
+translation-only active search when that target is absent, freezes the
+corrected camera-ray 80 mm pre-mouth target, and uses the wrist OctoMap for
+same-target alternate-path replanning. The real branch exposes no arbitrary
+joint, pose, trajectory, controller, gripper, direct-mouth, tilt, pour, or
+retreat action. It plans by default. Execution requires `--execute`,
+`--confirm-real-motion`, and
 `UR10E_ALLOW_REAL_EXECUTION=1`, and terminates at a motionless 2–5 second
 pre-mouth hold.
 
@@ -106,13 +110,19 @@ state:
 ```
 
 This starts the project MoveIt wrapper, which supplies kinematics to
-`move_group` and advertises only the active physical controller:
+`move_group`, loads the wrist point-cloud occupancy updater, and advertises
+only the active physical controller:
 
 ```bash
 ros2 launch /home/dase-hw101/ur_drinking_project/launch/ur10e_moveit_with_kinematics.launch.py \
   ur_type:=ur10e launch_rviz:=false launch_servo:=false use_sim_time:=false \
-  use_octomap:=false trajectory_controller:=scaled_joint_trajectory_controller
+  use_octomap:=true trajectory_controller:=scaled_joint_trajectory_controller
 ```
+
+The real D435i perception process and `scripts/run_real_depth_to_pointcloud.sh`
+must already be publishing fresh raw and MoveIt-filtered point clouds. The
+integrated workflow refuses before motion if either stream is missing or more
+than 0.75 seconds old.
 
 No project script combines driver startup with a feeding trajectory.
 
