@@ -182,6 +182,18 @@ def _validate_safe_search_time(value: Any) -> float:
     return timeout
 
 
+def _validate_feed_water_hold_duration(value: Any) -> float:
+    if isinstance(value, bool):
+        raise FeedingToolValidationError("hold_duration_sec must be finite and between 2.0 and 5.0")
+    try:
+        duration = float(value)
+    except (TypeError, ValueError) as exc:
+        raise FeedingToolValidationError("hold_duration_sec must be finite and between 2.0 and 5.0") from exc
+    if not math.isfinite(duration) or not 2.0 <= duration <= 5.0:
+        raise FeedingToolValidationError("hold_duration_sec must be finite and between 2.0 and 5.0")
+    return duration
+
+
 def _validated_execute_argument(value: Any, *, cli_execute: bool) -> bool:
     if not isinstance(value, bool):
         raise FeedingToolValidationError("execute must be a boolean")
@@ -225,6 +237,7 @@ def validate_safe_feeding_tool_call(
             "execute",
             "max_search_time_sec",
             "allow_vertical_adjust",
+            "hold_duration_sec",
         },
     }
     extra = set(raw_args) - allowed[tool]
@@ -303,7 +316,7 @@ def validate_safe_feeding_tool_call(
         }
 
     # The remaining approved tool is the backwards-compatible high-level call.
-    vertical_adjust = raw_args.get("allow_vertical_adjust", True)
+    vertical_adjust = raw_args.get("allow_vertical_adjust", False)
     if not isinstance(vertical_adjust, bool):
         raise FeedingToolValidationError("allow_vertical_adjust must be a boolean")
     return {
@@ -313,6 +326,7 @@ def validate_safe_feeding_tool_call(
             "execute": _validated_execute_argument(raw_args.get("execute", False), cli_execute=cli_execute),
             "max_search_time_sec": _validate_safe_search_time(raw_args.get("max_search_time_sec", 30.0)),
             "allow_vertical_adjust": vertical_adjust,
+            "hold_duration_sec": _validate_feed_water_hold_duration(raw_args.get("hold_duration_sec", 3.0)),
         },
     }
 
@@ -2567,7 +2581,8 @@ class FeedingSkillLibrary:
         execute: bool = False,
         max_search_time_sec: float = 30.0,
         allow_direct_mouth_contact: bool = False,
-        allow_vertical_adjust: bool = True,
+        allow_vertical_adjust: bool = False,
+        hold_duration_sec: float = 3.0,
     ) -> dict[str, Any]:
         """Run the fixed, safe MVP feeding sequence through pre-mouth hold.
 
@@ -2615,6 +2630,16 @@ class FeedingSkillLibrary:
             )
         if not isinstance(allow_vertical_adjust, bool):
             return failed("validate_arguments", "allow_vertical_adjust must be a boolean")
+        try:
+            hold_duration = float(hold_duration_sec)
+        except (TypeError, ValueError):
+            return failed("validate_arguments", "hold_duration_sec must be finite and between 2.0 and 5.0")
+        if (
+            isinstance(hold_duration_sec, bool)
+            or not math.isfinite(hold_duration)
+            or not 2.0 <= hold_duration <= 5.0
+        ):
+            return failed("validate_arguments", "hold_duration_sec must be finite and between 2.0 and 5.0")
         try:
             requested_search_time = float(max_search_time_sec)
         except (TypeError, ValueError):
@@ -2723,7 +2748,7 @@ class FeedingSkillLibrary:
         if not progress.get("success"):
             return failed("check_progress", str(progress.get("reason") or "progress check failed"))
 
-        hold = record("hold", self.hold(duration_sec=3.0))
+        hold = record("hold", self.hold(duration_sec=hold_duration))
         if not hold.get("success"):
             return failed("hold", str(hold.get("reason") or "robot did not settle"))
 
@@ -2746,6 +2771,7 @@ class FeedingSkillLibrary:
             "target_selection": target,
             "execute": execute,
             "max_search_time_sec": search_time,
+            "hold_duration_sec": hold_duration,
             "steps": steps,
             "final_state": "holding_pre_mouth" if execute else "pre_mouth_plan_validated",
             "failed_step": None,

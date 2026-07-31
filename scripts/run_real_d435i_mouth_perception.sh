@@ -7,9 +7,11 @@
 # simulation defaults in run_mouth_perception.sh are intentionally untouched.
 #
 # The project-local JSON file records the current tool0 -> d435i_link mount
-# transform and its calibration status.  The checked-in initial rotation is
-# provisional; scripts/calibrate_d435i_mount.py is the only supported writer
-# for a verified replacement.
+# transform and its calibration status. The checked-in provisional transform
+# is the physically validated 2026-07-23 axis correction used by the successful
+# real pre-mouth runs; the guarded execution path also compares the live TF to
+# this file before it permits motion. scripts/calibrate_d435i_mount.py is the
+# supported writer for a future metrology-grade verified replacement.
 set -eo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source /opt/ros/jazzy/setup.bash

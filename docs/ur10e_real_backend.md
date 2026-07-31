@@ -10,7 +10,7 @@ that same implementation; it does not select a second SDK or use Piper code.
 | --- | --- | --- |
 | `UR10E_BACKEND` | `sim` | `sim` uses Gazebo's `joint_trajectory_controller`; `real` uses the UR driver's `scaled_joint_trajectory_controller`. |
 | `UR10E_ROBOT_IP` | unset | Required by the manual real-driver start command and any supervised real execution process. It is never stored in project files. |
-| `UR10E_ALLOW_REAL_EXECUTION` | `0` | A real execution request is rejected unless it is exactly enabled (`1`, `true`, `yes`, or `on`). |
+| `UR10E_ALLOW_REAL_EXECUTION` | `0` | The real `feed_water` adapter rejects execution unless this is exactly `1`. |
 
 Selecting `UR10E_BACKEND=real` does not enable motion. The shared SDK blocks
 every executing MoveIt or trajectory action unless the execution variable is
@@ -20,10 +20,33 @@ server is available. Real planning-only requests do not require the execution
 variable. The real backend caps MoveIt velocity and acceleration scaling at
 `0.05`.
 
-OpenClaw and the LLM runner keep using `FeedingSkillLibrary` and the existing
-validated tools. `feed_water(execute=False)` remains backward compatible. The
-OpenClaw compatibility command remains simulator-oriented; it must not be used
-to start a real robot.
+OpenClaw uses the canonical `feed_water` interface. Simulation remains backed
+by `FeedingSkillLibrary`; with `UR10E_BACKEND=real`, the safe-tool runner
+accepts only one high-level `feed_water` call and delegates it to the same
+corrected camera-ray pre-mouth script that was physically validated. The real
+branch exposes no arbitrary joint, pose, trajectory, controller, gripper,
+direct-mouth, tilt, pour, or retreat action. It plans by default. Execution
+requires `--execute`, `--confirm-real-motion`, and
+`UR10E_ALLOW_REAL_EXECUTION=1`, and terminates at a motionless 2–5 second
+pre-mouth hold.
+
+The guarded pre-mouth planner accepts a pendant speed-slider setting from 5%
+through a 60% ceiling. Its per-invocation tool0 displacement ceiling is the
+UR10e's nominal 1.30 m reach; target radius, inverse-kinematics, joint-limit,
+and collision checks still apply independently. The mature adapter retains
+0.10 MoveIt velocity and acceleration scaling for its generated trajectory.
+Short-lived execution requests subscribe to the UR driver's latched robot,
+safety, and program state with matching transient-local QoS, and use a
+one-second stable-mouth sampling window to avoid a separate preflight delay.
+
+The real camera startup command is
+`scripts/run_real_d435i_mouth_perception.sh`. Its default mount file is
+`config/ur10e_real/d435i_mount_calibration.json`, containing the physically
+validated 2026-07-23 axis correction. Before any real execution, the pre-mouth
+pipeline requires `d435i_color_optical_frame`, resolves
+`base_link -> d435i_color_optical_frame`, compares live
+`tool0 -> d435i_link` against that configuration, and refuses a missing,
+uncorrected provisional, or mismatched transform.
 
 ## Locally verified Jazzy launch interfaces
 

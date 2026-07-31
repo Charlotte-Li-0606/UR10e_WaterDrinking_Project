@@ -120,7 +120,7 @@ def _plan_instructions() -> str:
     return f"""You are a safe UR10e feeding task decomposition planner.
 Output JSON only. Return exactly one JSON object and no markdown.
 
-For a concise backwards-compatible request, you may return this one-step plan:
+For a feeding request, return this one-step high-level plan:
 {{
   "task": "feed_water",
   "mode": "{SAFE_MODE}",
@@ -131,13 +131,16 @@ For a concise backwards-compatible request, you may return this one-step plan:
         "target_selection": "center",
         "execute": false,
         "max_search_time_sec": 30.0,
-        "allow_vertical_adjust": true
+        "allow_vertical_adjust": false,
+        "hold_duration_sec": 3.0
       }}
     }}
   ]
 }}
 
-For a decomposed plan, use only these tools: get_observation, detect_target,
+Do not decompose a real-robot request. The real backend permits only the
+single feed_water tool above. A simulation-only decomposed plan may use only
+these tools: get_observation, detect_target,
 active_search, select_target, move_tool_to_target, check_progress, hold,
 retreat, feed_water. The recommended feed-water sequence is:
 1) get_observation({{}})
@@ -159,10 +162,12 @@ allowed. Direct mouth contact is forbidden.
 You must not command joints, arbitrary poses, trajectories, controllers,
 grippers, grasping, attach/detach, direct mouth contact, unknown target types,
 unknown detectors, unknown tool/target pairs, or search times above 30 seconds.
-feed_water itself composes the fixed safe pipeline: perception, active search,
-target selection, PlanningScene safety objects, optional MoveIt OctoMap
-occupancy, flange-down pre-mouth planning, progress check, and hold. The local
-validator is authoritative and can reject or override your plan.
+feed_water itself selects the backend's fixed safe pipeline. In real mode it
+uses stable D435i MediaPipe perception, the corrected camera transform, the
+validated 5 cm camera-ray pre-mouth target, one guarded MoveIt trajectory, and
+a motionless hold. It never contacts the mouth, tilts, pours, or retreats
+automatically. The local validator is authoritative and can reject or override
+your plan.
 """
 
 
@@ -179,7 +184,8 @@ def _mock_plan(task: str, *, request_execute: bool) -> str:
                         "target_selection": _target_selection_from_task(task),
                         "execute": request_execute,
                         "max_search_time_sec": 30.0,
-                        "allow_vertical_adjust": True,
+                        "allow_vertical_adjust": False,
+                        "hold_duration_sec": 3.0,
                     },
                 }
             ],
@@ -351,8 +357,36 @@ def validate_plan(plan_text: str, *, cli_execute: bool) -> dict[str, Any]:
     }
 
 
-def execute_validated_plan(plan: Mapping[str, Any]) -> dict[str, Any]:
+def execute_validated_plan(
+    plan: Mapping[str, Any], *, confirm_real_motion: bool = False
+) -> dict[str, Any]:
     """Run a validated reusable plan in one shared safe-library instance."""
+    if os.environ.get("UR10E_BACKEND", "sim").strip().lower() == "real":
+        steps = plan["steps"]
+        if len(steps) != 1 or steps[0]["tool"] != "feed_water":
+            return {
+                "success": False,
+                "tool": "feed_water",
+                "final_state": "refused",
+                "reason": "the real backend accepts only one high-level feed_water call",
+            }
+        from robot_layer.arm_ur10e.agent_server.real_feed_water_backend import run_real_feed_water
+
+        call_args = steps[0]["args"]
+        if call_args.get("allow_vertical_adjust"):
+            return {
+                "success": False,
+                "tool": "feed_water",
+                "final_state": "refused",
+                "reason": "real feed_water does not permit vertical adjustment",
+            }
+        return run_real_feed_water(
+            execute=bool(call_args["execute"]),
+            confirm_real_motion=confirm_real_motion,
+            target_selection=str(call_args["target_selection"]),
+            hold_duration_sec=float(call_args["hold_duration_sec"]),
+        )
+
     library = FeedingSkillLibrary()
     try:
         dispatch = safe_feeding_tool_dispatch(library)
@@ -398,6 +432,11 @@ def _parse_args() -> argparse.Namespace:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--plan-only", action="store_true", help="Generate and validate only (the default).")
     mode.add_argument("--execute", action="store_true", help="Permit the validated feed_water pipeline to send safe motion.")
+    parser.add_argument(
+        "--confirm-real-motion",
+        action="store_true",
+        help="Required with --execute for the explicitly selected real backend.",
+    )
     parser.add_argument("--mock-llm", action="store_true", help="Use the fixed offline JSON-only demonstration plan.")
     parser.add_argument(
         "--model",
@@ -459,7 +498,7 @@ def main() -> int:
     if args.print_plan:
         print(json.dumps({"event": "validated_plan", "plan": plan}, indent=2, sort_keys=True))
     if cli_execute:
-        result = execute_validated_plan(plan)
+        result = execute_validated_plan(plan, confirm_real_motion=bool(args.confirm_real_motion))
     else:
         single_feed_water = len(plan["steps"]) == 1 and plan["steps"][0]["tool"] == "feed_water"
         result = {

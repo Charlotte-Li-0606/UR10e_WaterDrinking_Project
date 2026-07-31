@@ -43,15 +43,18 @@ from moveit_msgs.msg import BoundingVolume, Constraints, OrientationConstraint, 
 from rclpy.action import ActionClient  # noqa: E402
 from rclpy.duration import Duration  # noqa: E402
 from rclpy.node import Node  # noqa: E402
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy  # noqa: E402
 from sensor_msgs.msg import JointState  # noqa: E402
 from shape_msgs.msg import SolidPrimitive  # noqa: E402
-from std_msgs.msg import Float64, String  # noqa: E402
+from std_msgs.msg import Bool, Float64, String  # noqa: E402
+from ur_dashboard_msgs.msg import RobotMode, SafetyMode  # noqa: E402
 
 
 BASE_FRAME = "base_link"
 UR_BASE_FRAME = "base"
 TOOL_FRAME = "tool0"
 CAMERA_OPTICAL_FRAME = "d435i_color_optical_frame"
+CAMERA_LINK_FRAME = "d435i_link"
 MOUTH_TOPIC = "/detected_mouth_pose"
 MOUTH_NORMAL_TOPIC = "/detected_mouth_normal"
 MOUTH_STATUS_TOPIC = "/mouth_detection/status"
@@ -60,6 +63,9 @@ EXECUTE_TRAJECTORY_ACTION = "/execute_trajectory"
 GROUP_NAME = "ur_manipulator"
 SCALED_CONTROLLER = "scaled_joint_trajectory_controller"
 SPEED_SCALING_TOPIC = "/speed_scaling_state_broadcaster/speed_scaling"
+ROBOT_PROGRAM_RUNNING_TOPIC = "/io_and_status_controller/robot_program_running"
+SAFETY_MODE_TOPIC = "/io_and_status_controller/safety_mode"
+ROBOT_MODE_TOPIC = "/io_and_status_controller/robot_mode"
 EXPECTED_JOINTS = (
     "shoulder_pan_joint",
     "shoulder_lift_joint",
@@ -98,9 +104,9 @@ MOUNT_CALIBRATION_CONFIG = PROJECT_ROOT / "config/ur10e_real/d435i_mount_calibra
 # not use the simulated feeding-policy XYZ minimum/maximum here: base_link is
 # rotated relative to the physical UR base on this real robot.
 MAX_TOOL0_RADIUS_FROM_UR_BASE_M = 1.30
-MAX_PLAN_TRANSLATION_M = 0.30
+MAX_PLAN_TRANSLATION_M = MAX_TOOL0_RADIUS_FROM_UR_BASE_M
 MIN_EXECUTION_SPEED_PERCENT = 5.0
-MAX_EXECUTION_SPEED_PERCENT = 15.0
+MAX_EXECUTION_SPEED_PERCENT = 60.0
 DEFAULT_MOUTH_SAMPLE_SECONDS = 2.0
 MIN_MOUTH_SAMPLE_SECONDS = 0.5
 MAX_MOUTH_SAMPLE_SECONDS = 8.0
@@ -119,13 +125,15 @@ RETURN_START_MATCH_TOLERANCE_M = 0.02
 RETURN_START_MATCH_ORIENTATION_TOLERANCE_RAD = 0.02
 PILZ_PIPELINE = "pilz_industrial_motion_planner"
 PILZ_PLANNER = "LIN"
-# At the required 5%–15% pendant setting, the scaled controller can take much
+# At low pendant settings, the scaled controller can take much
 # longer than the nominal MoveIt trajectory duration.  Keep the client alive
 # long enough to receive the controller's real terminal result.
 ACTION_TIMEOUT_SEC = 180.0
 JOINT_STATE_DISCOVERY_TIMEOUT_SEC = 5.0
 TF_DISCOVERY_TIMEOUT_SEC = 8.0
 MOVE_GROUP_DISCOVERY_TIMEOUT_SEC = 8.0
+MAX_CAMERA_MOUNT_TRANSLATION_ERROR_M = 0.001
+MAX_CAMERA_MOUNT_ROTATION_ERROR_RAD = math.radians(0.5)
 
 
 def _jsonable(value: Any) -> Any:
@@ -196,6 +204,19 @@ def _tool_x_axis_base(orientation_xyzw: list[float]) -> list[float]:
 def _quaternion_distance_rad(first: list[float], second: list[float]) -> float:
     dot = abs(sum(float(a) * float(b) for a, b in zip(first, second)))
     return 2.0 * math.acos(max(-1.0, min(1.0, dot)))
+
+
+def _quaternion_from_rpy(rpy: list[float]) -> list[float]:
+    roll, pitch, yaw = (float(value) for value in rpy)
+    cr, sr = math.cos(roll / 2.0), math.sin(roll / 2.0)
+    cp, sp = math.cos(pitch / 2.0), math.sin(pitch / 2.0)
+    cy, sy = math.cos(yaw / 2.0), math.sin(yaw / 2.0)
+    return [
+        sr * cp * cy - cr * sp * sy,
+        cr * sp * cy + sr * cp * sy,
+        cr * cp * sy - sr * sp * cy,
+        cr * cp * cy + sr * sp * sy,
+    ]
 
 
 def _trajectory_summary(trajectory: Any) -> dict[str, Any]:
@@ -277,13 +298,39 @@ class RealPreMouthFromPerceptionPlan(Node):
         self.trajectory_acceleration_scaling = float(trajectory_acceleration_scaling)
         self.latest_joint_state: JointState | None = None
         self.latest_speed_scaling: Float64 | None = None
+        self.latest_robot_program_running: Bool | None = None
+        self.latest_safety_mode: SafetyMode | None = None
+        self.latest_robot_mode: RobotMode | None = None
         self.mouth_samples: list[MouthSample] = []
         self.normal_samples: list[MouthSample] = []
         self.latest_mouth_status: dict[str, Any] | None = None
         self.latest_mouth_status_received_monotonic: float | None = None
         self._validated_trajectory: Any | None = None
+        latched_robot_state_qos = QoSProfile(
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL,
+        )
         self.create_subscription(JointState, "/joint_states", self._joint_state_callback, 10)
         self.create_subscription(Float64, SPEED_SCALING_TOPIC, self._speed_scaling_callback, 10)
+        self.create_subscription(
+            Bool,
+            ROBOT_PROGRAM_RUNNING_TOPIC,
+            self._robot_program_running_callback,
+            latched_robot_state_qos,
+        )
+        self.create_subscription(
+            SafetyMode,
+            SAFETY_MODE_TOPIC,
+            self._safety_mode_callback,
+            latched_robot_state_qos,
+        )
+        self.create_subscription(
+            RobotMode,
+            ROBOT_MODE_TOPIC,
+            self._robot_mode_callback,
+            latched_robot_state_qos,
+        )
         self.create_subscription(PoseStamped, MOUTH_TOPIC, self._mouth_callback, 20)
         self.create_subscription(Vector3Stamped, MOUTH_NORMAL_TOPIC, self._normal_callback, 20)
         self.create_subscription(String, MOUTH_STATUS_TOPIC, self._mouth_status_callback, 20)
@@ -307,6 +354,15 @@ class RealPreMouthFromPerceptionPlan(Node):
 
     def _speed_scaling_callback(self, message: Float64) -> None:
         self.latest_speed_scaling = message
+
+    def _robot_program_running_callback(self, message: Bool) -> None:
+        self.latest_robot_program_running = message
+
+    def _safety_mode_callback(self, message: SafetyMode) -> None:
+        self.latest_safety_mode = message
+
+    def _robot_mode_callback(self, message: RobotMode) -> None:
+        self.latest_robot_mode = message
 
     def _mouth_callback(self, message: PoseStamped) -> None:
         frame_id = message.header.frame_id.strip().lstrip("/")
@@ -364,10 +420,72 @@ class RealPreMouthFromPerceptionPlan(Node):
         status = configuration.get("calibration_status")
         if status not in {"provisional", "verified"}:
             return {"status": "invalid", "reason": "calibration_status must be provisional or verified"}
+        transform = configuration.get("tool0_to_d435i_link")
+        if not isinstance(transform, dict):
+            return {"status": "invalid", "reason": "tool0_to_d435i_link is missing"}
+        translation = transform.get("translation_m")
+        rpy = transform.get("rpy_rad")
+        values = list(translation or []) + list(rpy or [])
+        if len(translation or []) != 3 or len(rpy or []) != 3 or not all(
+            isinstance(value, (int, float)) and math.isfinite(float(value)) for value in values
+        ):
+            return {"status": "invalid", "reason": "tool0_to_d435i_link must contain finite translation_m and rpy_rad"}
+        metrics = configuration.get("calibration_metrics")
+        manual_corrected = bool(
+            status == "provisional"
+            and isinstance(metrics, dict)
+            and metrics.get("method") == "manual_physical_axis_alignment"
+            and metrics.get("target_camera_optical_axes_in_base_link", {}).get("+Z_depth_forward")
+            == [-1.0, 0.0, 0.0]
+        )
+        verified_physical = bool(
+            status == "verified"
+            and isinstance(metrics, dict)
+            and isinstance(metrics.get("rms_residual_m"), (int, float))
+            and float(metrics["rms_residual_m"]) <= 0.010
+        )
         return {
             "status": status,
-            "metrics": configuration.get("calibration_metrics"),
+            "metrics": metrics,
+            "tool0_to_d435i_link": {
+                "translation_m": [float(value) for value in translation],
+                "rpy_rad": [float(value) for value in rpy],
+            },
+            "corrected_physical_profile": manual_corrected or verified_physical,
             "config": str(MOUNT_CALIBRATION_CONFIG),
+        }
+
+    @staticmethod
+    def _camera_mount_match(
+        calibration: dict[str, Any], live_tool_to_camera_link: dict[str, Any]
+    ) -> dict[str, Any]:
+        if not live_tool_to_camera_link.get("available"):
+            return {"matches": False, "reason": "live tool0 -> d435i_link TF is unavailable"}
+        configured = calibration.get("tool0_to_d435i_link")
+        if not isinstance(configured, dict):
+            return {"matches": False, "reason": "corrected camera mount transform is unavailable in config"}
+        translation_error = _norm(
+            _subtract(live_tool_to_camera_link["position_m"], configured["translation_m"])
+        )
+        configured_quaternion = _quaternion_from_rpy(configured["rpy_rad"])
+        rotation_error = _quaternion_distance_rad(
+            live_tool_to_camera_link["orientation_quat_xyzw"], configured_quaternion
+        )
+        matches = bool(
+            calibration.get("corrected_physical_profile")
+            and translation_error <= MAX_CAMERA_MOUNT_TRANSLATION_ERROR_M
+            and rotation_error <= MAX_CAMERA_MOUNT_ROTATION_ERROR_RAD
+        )
+        return {
+            "matches": matches,
+            "translation_error_m": translation_error,
+            "rotation_error_rad": rotation_error,
+            "rotation_error_deg": math.degrees(rotation_error),
+            "maximum_translation_error_m": MAX_CAMERA_MOUNT_TRANSLATION_ERROR_M,
+            "maximum_rotation_error_deg": math.degrees(MAX_CAMERA_MOUNT_ROTATION_ERROR_RAD),
+            "configured": configured,
+            "live": live_tool_to_camera_link,
+            "reason": None if matches else "live camera mount TF does not match the corrected physical calibration",
         }
 
     def _spin_for(self, duration_sec: float) -> None:
@@ -581,6 +699,8 @@ class RealPreMouthFromPerceptionPlan(Node):
                 "inspection": "skipped in plan mode; controller state is checked only immediately before execution",
             }
         )
+        calibration = self._mount_calibration()
+        tool_to_camera_link = self._frame_transform(TOOL_FRAME, CAMERA_LINK_FRAME)
         return {
             "joint_state": self._joint_state_status(),
             "tool0_pose": tool0,
@@ -593,6 +713,8 @@ class RealPreMouthFromPerceptionPlan(Node):
                 "orientation_quat_xyzw": tool0["orientation_quat_xyzw"],
             },
             "camera_tf": self._frame_transform(BASE_FRAME, CAMERA_OPTICAL_FRAME),
+            "tool0_to_camera_link_tf": tool_to_camera_link,
+            "camera_mount_match": self._camera_mount_match(calibration, tool_to_camera_link),
             "required_nodes": {
                 "move_group_exists": "/move_group" in nodes,
                 "controller_manager_exists": "/controller_manager" in nodes,
@@ -603,8 +725,19 @@ class RealPreMouthFromPerceptionPlan(Node):
             "speed_slider_percent": None
             if self.latest_speed_scaling is None
             else float(self.latest_speed_scaling.data),
+            "robot_program_running": None
+            if self.latest_robot_program_running is None
+            else bool(self.latest_robot_program_running.data),
+            "safety_mode": None if self.latest_safety_mode is None else int(self.latest_safety_mode.mode),
+            "safety_mode_normal": bool(
+                self.latest_safety_mode is not None and self.latest_safety_mode.mode == SafetyMode.NORMAL
+            ),
+            "robot_mode": None if self.latest_robot_mode is None else int(self.latest_robot_mode.mode),
+            "robot_mode_running": bool(
+                self.latest_robot_mode is not None and self.latest_robot_mode.mode == RobotMode.RUNNING
+            ),
             "mouth_pose": self._collect_mouth_samples(mouth_sample_sec),
-            "mount_calibration": self._mount_calibration(),
+            "mount_calibration": calibration,
         }
 
     @staticmethod
@@ -620,6 +753,13 @@ class RealPreMouthFromPerceptionPlan(Node):
             failures.append("TF base -> base_link is unavailable")
         if not snapshot["camera_tf"].get("available"):
             failures.append(f"TF base_link -> {CAMERA_OPTICAL_FRAME} is unavailable")
+        if not snapshot.get("mount_calibration", {}).get("corrected_physical_profile"):
+            failures.append("corrected physical D435i mount calibration profile is not loaded")
+        if not snapshot.get("camera_mount_match", {}).get("matches"):
+            failures.append(
+                snapshot.get("camera_mount_match", {}).get("reason")
+                or "live camera mount TF does not match corrected calibration"
+            )
         if not snapshot.get("move_group_available"):
             failures.append(f"{MOVE_ACTION} is unavailable")
         if require_controller_inspection:
@@ -795,7 +935,10 @@ class RealPreMouthFromPerceptionPlan(Node):
             failures.append("scaled_joint_trajectory_controller is not active")
         speed = snapshot.get("speed_slider_percent")
         if speed is None or not MIN_EXECUTION_SPEED_PERCENT <= float(speed) <= MAX_EXECUTION_SPEED_PERCENT:
-            failures.append("speed slider is unavailable or outside the required 5%–15% range")
+            failures.append(
+                "speed slider is unavailable or outside the required "
+                f"{MIN_EXECUTION_SPEED_PERCENT:.0f}%–{MAX_EXECUTION_SPEED_PERCENT:.0f}% range"
+            )
         return failures
 
     def return_to_recorded_start(
@@ -1254,6 +1397,12 @@ class RealPreMouthFromPerceptionPlan(Node):
                 f"speed slider is {float(speed_percent):.1f}%, outside the required "
                 f"{MIN_EXECUTION_SPEED_PERCENT:.0f}%–{MAX_EXECUTION_SPEED_PERCENT:.0f}% range"
             )
+        if checks.get("robot_program_running") is not True:
+            guards.append("UR External Control program is not Running")
+        if checks.get("safety_mode_normal") is not True:
+            guards.append("UR safety mode is unavailable or not NORMAL")
+        if checks.get("robot_mode_running") is not True:
+            guards.append("UR robot mode is unavailable or not RUNNING")
         return guards
 
     def _execute_validated_trajectory(self) -> dict[str, Any]:
@@ -1412,13 +1561,33 @@ class RealPreMouthFromPerceptionPlan(Node):
         start_drift = _norm(_subtract(latest_tool0["position_m"], start_tool0["position_m"]))
         controller_state = self._controller_status()
         speed_percent = None if self.latest_speed_scaling is None else float(self.latest_speed_scaling.data)
+        prepared["pre_execution_controller_state"] = controller_state
+        prepared["pre_execution_speed_slider_percent"] = speed_percent
+        prepared["pre_execution_robot_program_running"] = bool(
+            self.latest_robot_program_running is not None and self.latest_robot_program_running.data
+        )
+        prepared["pre_execution_safety_mode_normal"] = bool(
+            self.latest_safety_mode is not None and self.latest_safety_mode.mode == SafetyMode.NORMAL
+        )
+        prepared["pre_execution_robot_mode_running"] = bool(
+            self.latest_robot_mode is not None and self.latest_robot_mode.mode == RobotMode.RUNNING
+        )
         late_guards: list[str] = []
         if start_drift > 0.01:
             late_guards.append(f"tool0 moved {start_drift:.4f} m after planning")
         if not controller_state.get("scaled_joint_trajectory_controller_active"):
             late_guards.append("scaled_joint_trajectory_controller is no longer active")
         if speed_percent is None or not MIN_EXECUTION_SPEED_PERCENT <= speed_percent <= MAX_EXECUTION_SPEED_PERCENT:
-            late_guards.append("speed slider changed outside the required 5%–15% range")
+            late_guards.append(
+                "speed slider changed outside the required "
+                f"{MIN_EXECUTION_SPEED_PERCENT:.0f}%–{MAX_EXECUTION_SPEED_PERCENT:.0f}% range"
+            )
+        if self.latest_robot_program_running is None or not self.latest_robot_program_running.data:
+            late_guards.append("UR External Control program is no longer Running")
+        if self.latest_safety_mode is None or self.latest_safety_mode.mode != SafetyMode.NORMAL:
+            late_guards.append("UR safety mode is no longer NORMAL")
+        if self.latest_robot_mode is None or self.latest_robot_mode.mode != RobotMode.RUNNING:
+            late_guards.append("UR robot mode is no longer RUNNING")
         if late_guards:
             prepared.update(
                 {
@@ -1502,8 +1671,8 @@ def _parse_args() -> argparse.Namespace:
         type=float,
         default=MAX_PLAN_TRANSLATION_M,
         help=(
-            "Per-invocation tool0 translation cap in metres. The default remains 0.30; "
-            "the gross 1.30 m reach bound and MoveIt checks still apply."
+            "Per-invocation tool0 translation cap in metres. The default is the UR10e "
+            "nominal 1.30 m reach; the radial reach guard and MoveIt checks still apply."
         ),
     )
     parser.add_argument(

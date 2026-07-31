@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -46,6 +47,11 @@ def _parse_args() -> argparse.Namespace:
         "--execute",
         action="store_true",
         help="Explicit operator permission for a validated motion-capable tool. Default is plan-only.",
+    )
+    parser.add_argument(
+        "--confirm-real-motion",
+        action="store_true",
+        help="Required in addition to --execute and environment gates for the real backend.",
     )
     parser.add_argument(
         "--validate-only",
@@ -85,6 +91,38 @@ def main() -> int:
     except FeedingToolValidationError as exc:
         print(json.dumps({"success": False, "stage": "validation", "reason": str(exc)}))
         return 2
+
+    backend = os.environ.get("UR10E_BACKEND", "sim").strip().lower() or "sim"
+    if backend not in {"sim", "real"}:
+        print(json.dumps({"success": False, "stage": "backend_selection", "reason": "UR10E_BACKEND must be sim or real"}))
+        return 2
+
+    if backend == "real":
+        if cli.plan_json is not None or len(calls) != 1 or calls[0]["tool"] != "feed_water":
+            print(
+                json.dumps(
+                    {
+                        "success": False,
+                        "stage": "real_tool_policy",
+                        "reason": (
+                            "the real backend exposes only one high-level feed_water call; "
+                            "plans and direct perception, pose, joint, gripper, retreat, or controller tools are refused"
+                        ),
+                    }
+                )
+            )
+            return 2
+        if calls[0]["args"].get("allow_vertical_adjust"):
+            print(
+                json.dumps(
+                    {
+                        "success": False,
+                        "stage": "real_tool_policy",
+                        "reason": "real feed_water does not permit a vertical adjustment, mouth contact, tilt, pour, or automatic retreat",
+                    }
+                )
+            )
+            return 2
 
     if cli.validate_only:
         if cli.execute:
@@ -132,6 +170,25 @@ def main() -> int:
             )
         )
         return 0
+
+    if backend == "real":
+        from robot_layer.arm_ur10e.agent_server.real_feed_water_backend import run_real_feed_water
+
+        call = calls[0]
+        result = run_real_feed_water(
+            execute=bool(call["args"]["execute"]),
+            confirm_real_motion=bool(cli.confirm_real_motion),
+            target_selection=str(call["args"]["target_selection"]),
+            hold_duration_sec=float(call["args"]["hold_duration_sec"]),
+        )
+        print(
+            json.dumps(
+                {"event": "safe_feeding_tool_result", "call": call, "result": result},
+                sort_keys=True,
+                default=str,
+            )
+        )
+        return 0 if result.get("success") else 2
 
     try:
         library = FeedingSkillLibrary()

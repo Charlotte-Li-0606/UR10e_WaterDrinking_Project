@@ -11,6 +11,7 @@ ENTRYPOINT = PROJECT_ROOT / "scripts" / "openclaw_feed_water.sh"
 BRIDGE = PROJECT_ROOT / "scripts" / "openclaw_feeding_tool.sh"
 SIMULATOR_GATE = PROJECT_ROOT / "scripts" / "ensure_ur10e_feeding_sim.sh"
 MOVEIT_LAUNCH = PROJECT_ROOT / "launch" / "ur10e_moveit_with_kinematics.launch.py"
+OPENCLAW_SKILLS = Path("/home/dase-hw101/.openclaw/workspace/skills")
 
 
 class OpenClawReusableEntrypointTest(unittest.TestCase):
@@ -47,6 +48,23 @@ class OpenClawReusableEntrypointTest(unittest.TestCase):
 
         self.assertNotIn('moveit_parameters["sensors"] = []', content)
         self.assertIn('moveit_parameters.pop("sensors", None)', content)
+
+    def test_openclaw_routes_drinking_intent_to_one_guarded_feed_water_call(self) -> None:
+        mission = (OPENCLAW_SKILLS / "MISSION.md").read_text(encoding="utf-8")
+        robot = (OPENCLAW_SKILLS / "ROBOT.md").read_text(encoding="utf-8")
+        service = (OPENCLAW_SKILLS / "SERVICE.md").read_text(encoding="utf-8")
+        skill = (OPENCLAW_SKILLS / "abotclaw-ur10e-feeding" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("I want water", mission)
+        self.assertIn("single high-level `feed_water` tool", mission)
+        self.assertIn("openclaw_feeding_tool.sh", robot)
+        self.assertIn("UR10E_BACKEND=real", robot)
+        self.assertIn("d435i_color_optical_frame", service)
+        self.assertIn("--tool feed_water", skill)
+        self.assertIn("--confirm-real-motion", skill)
+        self.assertIn("does not", skill.lower())
+        self.assertIn("direct-mouth", skill)
 
 
 if __name__ == "__main__":

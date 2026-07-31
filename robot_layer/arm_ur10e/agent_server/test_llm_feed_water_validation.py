@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 import unittest
+from unittest.mock import patch
 
 from robot_layer.arm_ur10e.agent_server.llm_feeding_agent import (
     PlanValidationError,
     SAFE_MODE,
+    execute_validated_plan,
     validate_plan,
 )
 
@@ -90,6 +93,32 @@ class FeedWaterPlanValidationTest(unittest.TestCase):
         )
         with self.assertRaises(PlanValidationError):
             validate_plan(plan, cli_execute=True)
+
+    def test_real_execution_delegates_single_feed_water_call_to_guarded_backend(self) -> None:
+        plan = validate_plan(
+            _plan(
+                {
+                    "target_selection": "center",
+                    "execute": True,
+                    "allow_vertical_adjust": False,
+                    "hold_duration_sec": 3.0,
+                }
+            ),
+            cli_execute=True,
+        )
+        expected = {"success": True, "tool": "feed_water", "final_state": "holding_pre_mouth"}
+        with patch.dict(os.environ, {"UR10E_BACKEND": "real"}), patch(
+            "robot_layer.arm_ur10e.agent_server.real_feed_water_backend.run_real_feed_water",
+            return_value=expected,
+        ) as run:
+            result = execute_validated_plan(plan, confirm_real_motion=True)
+        self.assertEqual(expected, result)
+        run.assert_called_once_with(
+            execute=True,
+            confirm_real_motion=True,
+            target_selection="center",
+            hold_duration_sec=3.0,
+        )
 
 
 if __name__ == "__main__":

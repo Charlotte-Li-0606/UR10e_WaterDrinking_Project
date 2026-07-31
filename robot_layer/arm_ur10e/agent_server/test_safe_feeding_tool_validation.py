@@ -50,10 +50,18 @@ class SafeFeedingToolValidationTest(unittest.TestCase):
             ("select_target", {"strategy": "front"}),
             ("move_tool_to_target", {"tool": "straw_tip", "target": "mouth"}),
             ("feed_water", {"allow_direct_mouth_contact": True}),
+            ("feed_water", {"hold_duration_sec": 1.9}),
+            ("feed_water", {"hold_duration_sec": 5.1}),
         )
         for tool, args in rejected:
             with self.subTest(tool=tool, args=args), self.assertRaises(FeedingToolValidationError):
                 validate_safe_feeding_tool_call(tool, args, cli_execute=True)
+
+    def test_feed_water_defaults_to_pre_mouth_hold_only(self) -> None:
+        call = validate_safe_feeding_tool_call("feed_water", {}, cli_execute=False)
+        self.assertFalse(call["args"]["allow_vertical_adjust"])
+        self.assertEqual(3.0, call["args"]["hold_duration_sec"])
+        self.assertFalse(call["args"]["execute"])
 
     def test_sequence_normalizes_each_safe_step(self) -> None:
         plan = validate_safe_feeding_tool_plan(
