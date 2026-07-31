@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0b0d10">
+    <title>UR10e · Live Pendant</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true"><span>UR</span></div>
+          <div>
+            <p class="eyebrow">UR DRINKING PROJECT</p>
+            <h1>Live Pendant</h1>
+          </div>
+        </div>
+        <div class="topbar-status">
+          <div class="readonly"><span class="lock" aria-hidden="true"></span>READ ONLY</div>
+          <div id="connection-pill" class="connection-pill offline">
+            <span class="status-dot"></span><span id="connection-label">Connecting</span>
+          </div>
+          <div class="clock"><strong id="clock-time">--:--:--</strong><span id="clock-date">---</span></div>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <section class="hero card">
+          <div class="camera-head">
+            <div>
+              <p class="section-kicker">WRIST RGB-D</p>
+              <h2>Live camera</h2>
+            </div>
+            <div class="camera-meta"><span id="camera-dot" class="mini-dot"></span><span id="camera-meta">Waiting for frames</span></div>
+          </div>
+          <div class="camera-stage" id="camera-stage">
+            <img id="camera-feed" alt="Live wrist camera view">
+            <div class="camera-empty" id="camera-empty">
+              <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 14h8l3-4h12l3 4h8a4 4 0 0 1 4 4v19a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V18a4 4 0 0 1 4-4Zm17 5a8 8 0 1 0 0 16 8 8 0 0 0 0-16Z"/></svg>
+              <strong>Camera stream unavailable</strong>
+              <span>Waiting for /wrist_rgbd/image</span>
+            </div>
+            <div class="reticle" aria-hidden="true"><span></span></div>
+            <div class="frame-label"><span class="record-dot"></span>LIVE</div>
+          </div>
+          <div class="camera-foot">
+            <span>Human-aware workspace</span>
+            <span id="camera-resolution">—</span>
+          </div>
+        </section>
+
+        <section class="overview card">
+          <div class="section-heading">
+            <div><p class="section-kicker">SYSTEM</p><h2>Robot overview</h2></div>
+            <span id="last-update" class="muted">No telemetry</span>
+          </div>
+          <div class="state-grid">
+            <article class="state-tile">
+              <span class="state-icon robot-icon" aria-hidden="true"></span>
+              <div><small>ROBOT MODE</small><strong id="robot-mode">—</strong></div>
+              <span id="robot-mode-dot" class="tile-dot"></span>
+            </article>
+            <article class="state-tile">
+              <span class="state-icon shield-icon" aria-hidden="true"></span>
+              <div><small>SAFETY MODE</small><strong id="safety-mode">—</strong></div>
+              <span id="safety-mode-dot" class="tile-dot"></span>
+            </article>
+            <article class="state-tile">
+              <span class="state-icon play-icon" aria-hidden="true"></span>
+              <div><small>PROGRAM</small><strong id="program-state">—</strong><em id="program-name">No program data</em></div>
+              <span id="program-dot" class="tile-dot"></span>
+            </article>
+            <article class="state-tile">
+              <span class="state-icon remote-icon" aria-hidden="true"></span>
+              <div><small>CONTROL</small><strong id="remote-control">—</strong></div>
+              <span id="remote-dot" class="tile-dot"></span>
+            </article>
+          </div>
+          <div class="speed-panel">
+            <div class="speed-copy"><span>Speed scaling</span><strong id="speed-value">—%</strong></div>
+            <div class="speed-track"><span id="speed-bar"></span><i id="speed-marker"></i></div>
+            <div class="speed-labels"><span>0</span><span>25</span><span>50</span><span>75</span><span>100%</span></div>
+          </div>
+        </section>
+
+        <section class="tcp card">
+          <div class="section-heading">
+            <div><p class="section-kicker">TOOL CENTER POINT</p><h2>TCP pose</h2></div>
+            <span id="tcp-frame" class="frame-chip">BASE</span>
+          </div>
+          <div class="axis-grid">
+            <div class="axis axis-x"><span>X</span><strong id="tcp-x">—</strong><small>mm</small></div>
+            <div class="axis axis-y"><span>Y</span><strong id="tcp-y">—</strong><small>mm</small></div>
+            <div class="axis axis-z"><span>Z</span><strong id="tcp-z">—</strong><small>mm</small></div>
+            <div class="axis rotation"><span>RX</span><strong id="tcp-rx">—</strong><small>rad</small></div>
+            <div class="axis rotation"><span>RY</span><strong id="tcp-ry">—</strong><small>rad</small></div>
+            <div class="axis rotation"><span>RZ</span><strong id="tcp-rz">—</strong><small>rad</small></div>
+          </div>
+        </section>
+
+        <section class="joints card">
+          <div class="section-heading">
+            <div><p class="section-kicker">KINEMATICS</p><h2>Joint positions</h2></div>
+            <span class="muted">degrees</span>
+          </div>
+          <div id="joint-list" class="joint-list">
+            <div class="empty-row">Waiting for joint states…</div>
+          </div>
+        </section>
+
+        <section class="io card">
+          <div class="section-heading">
+            <div><p class="section-kicker">SIGNALS</p><h2>Digital I/O</h2></div>
+            <span class="muted">live state</span>
+          </div>
+          <div class="io-columns">
+            <div><div class="io-title"><span>INPUTS</span><b id="input-count">0 active</b></div><div id="digital-inputs" class="bit-grid"></div></div>
+            <div><div class="io-title"><span>OUTPUTS</span><b id="output-count">0 active</b></div><div id="digital-outputs" class="bit-grid"></div></div>
+          </div>
+          <div class="tool-strip">
+            <div><span>Tool voltage</span><strong id="tool-voltage">—</strong></div>
+            <div><span>Current</span><strong id="tool-current">—</strong></div>
+            <div><span>Temperature</span><strong id="tool-temp">—</strong></div>
+          </div>
+        </section>
+
+        <section class="controllers card">
+          <div class="section-heading">
+            <div><p class="section-kicker">ROS 2 CONTROL</p><h2>Controllers</h2></div>
+            <span id="controller-count" class="count-chip">0 active</span>
+          </div>
+          <div id="controller-list" class="controller-list"><div class="empty-row">Waiting for controller manager…</div></div>
+        </section>
+      </main>
+
+      <footer>
+        <span><i class="footer-dot"></i>MONITORING ONLY · NO MOTION COMMANDS</span>
+        <span id="data-source">ROS 2 telemetry</span>
+      </footer>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>

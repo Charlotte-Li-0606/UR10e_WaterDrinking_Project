@@ -20,8 +20,11 @@ server is available. Real planning-only requests do not require the execution
 variable. The real backend caps MoveIt velocity and acceleration scaling at
 `0.05`.
 
-OpenClaw uses the canonical `feed_water` interface. Simulation remains backed
-by `FeedingSkillLibrary`; with `UR10E_BACKEND=real`, the safe-tool runner
+Codex is the preferred operator-facing agent and uses the canonical
+`feed_water` interface through `scripts/codex_feed_water.sh`. The older
+OpenClaw integration remains preserved as a legacy fallback but is not part of
+the Codex route. Simulation remains backed by `FeedingSkillLibrary`; with
+`UR10E_BACKEND=real`, the safe-tool runner
 accepts only one high-level `feed_water` call and delegates it to the same
 corrected camera-ray pre-mouth script that was physically validated. The real
 branch exposes no arbitrary joint, pose, trajectory, controller, gripper,
@@ -29,6 +32,20 @@ direct-mouth, tilt, pour, or retreat action. It plans by default. Execution
 requires `--execute`, `--confirm-real-motion`, and
 `UR10E_ALLOW_REAL_EXECUTION=1`, and terminates at a motionless 2–5 second
 pre-mouth hold.
+
+For an explicitly requested Codex plan without motion:
+
+```bash
+scripts/codex_feed_water.sh --plan-only --hold-duration 3
+```
+
+A standalone user-directed drinking request is explicit motion authorization
+for the Codex skill. Its guarded execution form is:
+
+```bash
+UR10E_ALLOW_REAL_EXECUTION=1 scripts/codex_feed_water.sh \
+  --execute --confirm-real-motion --hold-duration 3
+```
 
 The guarded pre-mouth planner accepts a pendant speed-slider setting from 5%
 through a 60% ceiling. Its per-invocation tool0 displacement ceiling is the
