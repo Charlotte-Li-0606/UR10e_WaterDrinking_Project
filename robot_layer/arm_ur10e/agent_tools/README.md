@@ -9,7 +9,7 @@ pose, or gripper commands.
 - The agent-approved reusable surface: `get_observation()`,
   `detect_target(target_type="mouth", detector="mediapipe")`,
   `active_search(target_type="mouth", detector="mediapipe",
-  max_time_sec=30.0, strategy="safe_scan")`,
+  max_time_sec=15.0, strategy="safe_scan")`,
   `select_target(target_type="mouth", strategy="center")`,
   `move_tool_to_target(tool="straw_tip", target="pre_mouth", execute=False)`,
   `check_progress(task="feed_water", critic="rule_based")`,
@@ -29,10 +29,14 @@ pose, or gripper commands.
   live `/detected_mouth_pose` topic through the active target's bounded pose
   queue, reject missing/stale/jumpy/unstable input, and return a pose in
   `base_link`.
-- `search_for_mouth(max_time_sec=30, selection="center", execute=False)` —
-  returns a stable target immediately when available, otherwise follows only a
-  fixed up/left/right/down/back scan pattern. It caps each increment at 3 cm,
-  caps search at 15 steps/30 seconds, and does not move in dry-run mode.
+- `search_for_mouth(max_time_sec=15, selection="center", execute=False)` —
+  returns a stable target immediately when available, otherwise preflights a
+  translation-only search. The fixed policy first widens camera standoff in
+  three 3 cm segments, then traces a ±2 cm lateral/vertical ring. All targets
+  are absolute from the captured origin, every segment is at most 3 cm, flange
+  rotation is disabled, and the scan stops at the first fresh mouth candidate
+  while three stability samples accumulate. The effective budget is capped at
+  15 seconds; dry-run mode never sends a trajectory.
 - `compute_pre_mouth_target()` — applies the configured 8 cm safety offset,
   workspace checks, and conservative tool reach check.
 - `move_straw_tip_to_pre_mouth(execute=False)` — applies MoveIt human
@@ -65,7 +69,7 @@ source /opt/ros/jazzy/setup.bash
 python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --observe
 python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --active-target-state
 python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --select-target center
-python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --search-mouth --search-timeout 30
+python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --search-mouth --search-timeout 15
 python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --plan-pre-mouth
 python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --move-pre-mouth
 python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --adjust-cup-vertical 0.01
@@ -77,7 +81,7 @@ motion after its preflight succeeds:
 ```bash
 python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --move-pre-mouth --execute
 python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --adjust-cup-vertical 0.01 --execute
-python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --search-mouth --search-timeout 30 --execute
+python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --search-mouth --search-timeout 15 --execute
 ```
 
 ## Deterministic PlanningScene obstacles

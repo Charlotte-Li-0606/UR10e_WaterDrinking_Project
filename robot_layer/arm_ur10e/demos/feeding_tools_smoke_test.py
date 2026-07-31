@@ -71,7 +71,12 @@ def _parse_args() -> argparse.Namespace:
         help="Disable the dynamic PlanningScene obstacle manager for this smoke-test run.",
     )
     parser.add_argument("--wait-timeout-sec", type=float, default=8.0, help="Maximum wait for a stable mouth pose.")
-    parser.add_argument("--search-timeout", type=float, default=30.0, help="Maximum safe mouth-search duration (0.1–30 s).")
+    parser.add_argument(
+        "--search-timeout",
+        type=float,
+        default=15.0,
+        help="Requested mouth-search duration; the local policy caps it at 15 s.",
+    )
     args = parser.parse_args()
     if args.execute and (
         args.observe

@@ -130,7 +130,7 @@ For a feeding request, return this one-step high-level plan:
       "args": {{
         "target_selection": "center",
         "execute": false,
-        "max_search_time_sec": 30.0,
+        "max_search_time_sec": 15.0,
         "allow_vertical_adjust": false,
         "hold_duration_sec": 3.0
       }}
@@ -146,7 +146,7 @@ retreat, feed_water. The recommended feed-water sequence is:
 1) get_observation({{}})
 2) detect_target({{"target_type":"mouth","detector":"mediapipe"}})
 3) active_search only if mouth detection is absent or unstable, with
-   target_type="mouth", detector="mediapipe", max_time_sec at most 30, and
+   target_type="mouth", detector="mediapipe", max_time_sec=15, and
    strategy="safe_scan" or left/center/right
 4) select_target({{"target_type":"mouth","strategy":"center"}})
 5) move_tool_to_target({{"tool":"straw_tip","target":"pre_mouth","execute":false}})
@@ -162,6 +162,8 @@ allowed. Direct mouth contact is forbidden.
 You must not command joints, arbitrary poses, trajectories, controllers,
 grippers, grasping, attach/detach, direct mouth contact, unknown target types,
 unknown detectors, unknown tool/target pairs, or search times above 30 seconds.
+The compatibility validator accepts up to 30 seconds, but active search always
+clamps the effective search budget to 15 seconds.
 feed_water itself selects the backend's fixed safe pipeline. In real mode it
 uses stable D435i MediaPipe perception, the corrected camera transform, the
 validated 5 cm camera-ray pre-mouth target, one guarded MoveIt trajectory, and
@@ -183,7 +185,7 @@ def _mock_plan(task: str, *, request_execute: bool) -> str:
                     "args": {
                         "target_selection": _target_selection_from_task(task),
                         "execute": request_execute,
-                        "max_search_time_sec": 30.0,
+                        "max_search_time_sec": 15.0,
                         "allow_vertical_adjust": False,
                         "hold_duration_sec": 3.0,
                     },

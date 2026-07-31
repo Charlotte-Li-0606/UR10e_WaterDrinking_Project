@@ -265,7 +265,7 @@ def validate_safe_feeding_tool_call(
             "args": {
                 "target_type": _validate_supported_target_type(raw_args.get("target_type", "mouth")),
                 "detector": _validate_supported_detector(raw_args.get("detector", "mediapipe")),
-                "max_time_sec": _validate_safe_search_time(raw_args.get("max_time_sec", 30.0)),
+                "max_time_sec": _validate_safe_search_time(raw_args.get("max_time_sec", 15.0)),
                 "strategy": strategy,
                 "execute": _validated_execute_argument(raw_args.get("execute", False), cli_execute=cli_execute),
             },
@@ -324,7 +324,7 @@ def validate_safe_feeding_tool_call(
         "args": {
             "target_selection": _validate_safe_target_selection(raw_args.get("target_selection", "center")),
             "execute": _validated_execute_argument(raw_args.get("execute", False), cli_execute=cli_execute),
-            "max_search_time_sec": _validate_safe_search_time(raw_args.get("max_search_time_sec", 30.0)),
+            "max_search_time_sec": _validate_safe_search_time(raw_args.get("max_search_time_sec", 15.0)),
             "allow_vertical_adjust": vertical_adjust,
             "hold_duration_sec": _validate_feed_water_hold_duration(raw_args.get("hold_duration_sec", 3.0)),
         },
@@ -363,6 +363,7 @@ class FeedingSafetyConfig:
     # Metadata-preserving multi-face stream.  The legacy mouth_topic remains
     # available for one-person deployments and older consumers.
     mouth_candidates_topic: str = "/detected_mouth_candidates"
+    mouth_status_topic: str = "/mouth_detection/status"
     base_frame: str = "base_link"
     # Legacy/preferred target retained for compatibility with existing logs.
     # Actual pre-mouth execution considers only the constrained standoffs
@@ -395,16 +396,21 @@ class FeedingSafetyConfig:
     max_abs_delta_z_per_call_m: float = 0.03
     allowed_control_point_z_min_m: float = 0.40
     allowed_control_point_z_max_m: float = 1.80
-    search_max_time_sec: float = 30.0
-    search_max_steps: int = 15
+    # Active search is an early-exit recovery action, not an exhaustive robot
+    # exploration.  Older callers may request up to 30 seconds, but the local
+    # policy clamps every run to this 15-second physical/search budget.
+    search_max_time_sec: float = 15.0
+    search_max_steps: int = 12
     search_vertical_step_m: float = 0.02
     search_lateral_step_m: float = 0.02
     # In this UR10e camera mounting, +base_link X increases the wrist-camera
     # standoff from the seated/standing human.  This is the calibrated safe
     # "back" direction, despite the older generic example using -X.
     search_back_x_step_m: float = 0.03
-    search_step_duration_sec: float = 2.0
-    search_observation_wait_sec: float = 0.25
+    search_step_duration_sec: float = 1.0
+    search_observation_wait_sec: float = 0.20
+    search_status_stale_sec: float = 1.0
+    search_stability_reserve_sec: float = 1.25
     # Deterministic MoveIt world objects are independent of Gazebo visuals.
     # They are refreshed from the selected mouth pose before motion preflight.
     use_planning_scene: bool = True
@@ -464,6 +470,8 @@ class FeedingSkillLibrary:
         )
         self._last_input_reason = "mouth pose is missing"
         self._last_candidates_received_monotonic = float("-inf")
+        self._latest_mouth_status: dict[str, Any] | None = None
+        self._latest_mouth_status_received_monotonic = float("-inf")
         self._search_fallback: dict[str, Any] | None = None
         self._mouth_sub = self._node.create_subscription(
             PoseStamped, self.config.mouth_topic, self._mouth_callback, qos
@@ -472,6 +480,12 @@ class FeedingSkillLibrary:
             String,
             self.config.mouth_candidates_topic,
             self._mouth_candidates_callback,
+            qos,
+        )
+        self._mouth_status_sub = self._node.create_subscription(
+            String,
+            self.config.mouth_status_topic,
+            self._mouth_status_callback,
             qos,
         )
         self._tf_buffer = Buffer()
@@ -520,14 +534,18 @@ class FeedingSkillLibrary:
             config.search_lateral_step_m,
             config.search_step_duration_sec,
             config.search_observation_wait_sec,
+            config.search_status_stale_sec,
+            config.search_stability_reserve_sec,
         ) <= 0.0:
             raise ValueError("target queue and search limits must be positive")
-        if abs(config.search_back_x_step_m) > 0.03 or max(
+        if not 0.0 < config.search_back_x_step_m <= 0.03 or max(
             config.search_vertical_step_m, config.search_lateral_step_m
         ) > 0.03:
             raise ValueError("each predefined search step must be no larger than 0.03 m")
         if config.search_max_time_sec > 30.0 or config.search_max_steps < 1:
             raise ValueError("search_max_time_sec must be at most 30 seconds and search_max_steps positive")
+        if config.search_stability_reserve_sec >= config.search_max_time_sec:
+            raise ValueError("search_stability_reserve_sec must be below search_max_time_sec")
         if config.max_abs_delta_z_per_call_m <= 0.0:
             raise ValueError("max_abs_delta_z_per_call_m must be positive")
         axis = np.asarray(config.pre_mouth_approach_axis, dtype=np.float64)
@@ -720,6 +738,50 @@ class FeedingSkillLibrary:
             self._last_input_reason = "mouth candidates are available"
         else:
             self._last_input_reason = str(update.get("reason") or "no valid mouth candidates were supplied")
+
+    def _mouth_status_callback(self, message: String) -> None:
+        """Retain the detector's latest health result for search gating."""
+        try:
+            payload = json.loads(message.data)
+        except (TypeError, json.JSONDecodeError):
+            return
+        if not isinstance(payload, Mapping):
+            return
+        reason = payload.get("reason")
+        detected = payload.get("detected")
+        if not isinstance(reason, str) or not isinstance(detected, bool):
+            return
+        self._latest_mouth_status = _jsonable(payload)
+        self._latest_mouth_status_received_monotonic = time.monotonic()
+
+    def _fresh_mouth_status(self) -> dict[str, Any] | None:
+        """Return a current detector status, or None when none is available."""
+        status = getattr(self, "_latest_mouth_status", None)
+        received = getattr(self, "_latest_mouth_status_received_monotonic", float("-inf"))
+        if status is None or time.monotonic() - received > self.config.search_status_stale_sec:
+            return None
+        return dict(status)
+
+    def _fatal_search_status(self) -> dict[str, Any] | None:
+        """Reject scan motion for detector faults that translation cannot fix."""
+        status = self._fresh_mouth_status()
+        if status is None:
+            return None
+        fatal_reasons = {
+            "invalid_camera_intrinsics",
+            "rgb_conversion_failed",
+            "unsupported_depth_encoding",
+            "missing_camera_frame",
+            "tf_unavailable",
+        }
+        if status.get("reason") not in fatal_reasons:
+            return None
+        return self._failure(
+            "search_for_mouth",
+            "active search cannot recover the current perception fault",
+            perception_status=status,
+            motion_withheld=True,
+        )
 
     def select_active_target(self, selection: str = "center") -> dict[str, Any]:
         """Lock the logical left, center, or right target for later pose reads."""
@@ -916,7 +978,7 @@ class FeedingSkillLibrary:
         if selection is None:
             resolved_selection = requested
         elif fallback_applies:
-            # The user requested (for example) right, the 30 s search found
+            # The user requested (for example) right, the 15 s search found
             # only one stable person, and search explicitly resolved that
             # documented fallback to center. Do not silently switch targets in
             # any other situation.
@@ -1427,48 +1489,79 @@ class FeedingSkillLibrary:
             result,
         )
 
-    def _search_primitive_delta(self, primitive: str) -> np.ndarray:
-        """Return one fixed base-link scan increment; never model-provided."""
-        steps = {
-            "search_up_small": (0.0, 0.0, self.config.search_vertical_step_m),
-            "search_down_small": (0.0, 0.0, -self.config.search_vertical_step_m),
-            "search_left_small": (0.0, self.config.search_lateral_step_m, 0.0),
-            "search_right_small": (0.0, -self.config.search_lateral_step_m, 0.0),
-            "search_back_small": (self.config.search_back_x_step_m, 0.0, 0.0),
-        }
-        if primitive not in steps:
-            raise ValueError(f"unknown safe mouth-search primitive: {primitive}")
-        return np.asarray(steps[primitive], dtype=np.float64)
+    def _search_waypoints(self, origin: Sequence[float]) -> list[dict[str, Any]]:
+        """Return the fixed translation-only scan around one captured origin.
 
-    def _preflight_search_primitive(self, primitive: str) -> dict[str, Any]:
-        """Prepare one fixed, flange-down search target without moving.
-
-        Search is a camera-view recovery operation, so it must retain the
-        current downward wrist yaw.  Resetting to the configured default
-        flange-down RPY would satisfy the vertical constraint while pointing
-        the wrist camera away from the person.
+        Each target is absolute relative to ``origin``.  This prevents the
+        cumulative drift caused by repeatedly adding deltas to measured robot
+        state, and the ordering keeps every adjacent segment at or below 3 cm.
+        No orientation or rotation waypoint exists in this policy.
         """
-        delta = self._search_primitive_delta(primitive)
-        if float(np.linalg.norm(delta)) > 0.03 + 1e-9:
-            return self._failure("search_for_mouth", "configured search increment exceeds 0.03 m", primitive=primitive)
+        start = np.asarray(origin, dtype=np.float64)
+        if start.shape != (3,) or not np.all(np.isfinite(start)):
+            raise ValueError("search origin must contain three finite coordinates")
+        back = float(self.config.search_back_x_step_m)
+        lateral = float(self.config.search_lateral_step_m)
+        vertical = float(self.config.search_vertical_step_m)
+        offsets = (
+            ("retreat_1", (back, 0.0, 0.0)),
+            ("retreat_2", (2.0 * back, 0.0, 0.0)),
+            ("retreat_3", (3.0 * back, 0.0, 0.0)),
+            ("scan_up", (3.0 * back, 0.0, vertical)),
+            ("scan_upper_left", (3.0 * back, lateral, vertical)),
+            ("scan_left", (3.0 * back, lateral, 0.0)),
+            ("scan_lower_left", (3.0 * back, lateral, -vertical)),
+            ("scan_down", (3.0 * back, 0.0, -vertical)),
+            ("scan_lower_right", (3.0 * back, -lateral, -vertical)),
+            ("scan_right", (3.0 * back, -lateral, 0.0)),
+            ("scan_upper_right", (3.0 * back, -lateral, vertical)),
+            ("scan_center", (3.0 * back, 0.0, 0.0)),
+        )
+        return [
+            {
+                "waypoint": name,
+                "offset_from_origin_m": _xyz(offset),
+                "target_straw_tip": _xyz(start + np.asarray(offset, dtype=np.float64)),
+            }
+            for name, offset in offsets
+        ]
+
+    def _preflight_search_waypoint(self, waypoint: Mapping[str, Any]) -> dict[str, Any]:
+        """Plan one fixed translation-only search target without moving."""
+        name = str(waypoint.get("waypoint", ""))
+        try:
+            target = np.asarray(waypoint["target_straw_tip"], dtype=np.float64)
+        except (KeyError, TypeError, ValueError):
+            return self._failure("search_for_mouth", "search waypoint is malformed", waypoint=name)
+        if target.shape != (3,) or not np.all(np.isfinite(target)):
+            return self._failure("search_for_mouth", "search waypoint target is invalid", waypoint=name)
         control, control_error = self._vertical_control_point()
         if control is None:
             return self._failure(
                 "search_for_mouth",
                 control_error or "could not preserve the current flange-down orientation",
-                primitive=primitive,
+                waypoint=name,
             )
         current_rpy = [float(value) for value in control["current_rpy"]]
         try:
             current = np.asarray(self._env.get_straw_tip_pose()["position"], dtype=np.float64)
         except Exception as exc:
-            return self._failure("search_for_mouth", f"could not read the current straw-tip pose: {exc}", primitive=primitive)
-        target = current + delta
+            return self._failure("search_for_mouth", f"could not read the current straw-tip pose: {exc}", waypoint=name)
+        segment_distance = float(np.linalg.norm(target - current))
+        if segment_distance > 0.03 + 1e-6:
+            return self._failure(
+                "search_for_mouth",
+                "current pose is more than 0.03 m from the next fixed search waypoint",
+                waypoint=name,
+                current_straw_tip=_xyz(current),
+                target_straw_tip=_xyz(target),
+                segment_distance_m=round(segment_distance, 6),
+            )
         if not self._within_workspace(target):
             return self._failure(
                 "search_for_mouth",
                 "safe search target is outside the allowed workspace",
-                primitive=primitive,
+                waypoint=name,
                 current_straw_tip=_xyz(current),
                 target_straw_tip=_xyz(target),
             )
@@ -1476,10 +1569,10 @@ class FeedingSkillLibrary:
             planner_target = self._env.plan_straw_tip_to_pose(
                 target.tolist(),
                 flange_down_rpy=current_rpy,
-                label=f"mouth_search_{primitive}",
+                label=f"mouth_search_{name}",
             )
         except Exception as exc:
-            return self._failure("search_for_mouth", f"could not construct safe search target: {exc}", primitive=primitive)
+            return self._failure("search_for_mouth", f"could not construct safe search target: {exc}", waypoint=name)
         tool0_target = np.asarray(planner_target["tool0_target_position"], dtype=np.float64)
         # ``workspace_min/max`` constrain the straw-tip control point (the
         # rigid cup/straw assembly), which was checked above.  The flange/tool0
@@ -1501,7 +1594,7 @@ class FeedingSkillLibrary:
             return self._failure(
                 "search_for_mouth",
                 "safe search tool0 target is outside the conservative reach envelope",
-                primitive=primitive,
+                waypoint=name,
                 current_straw_tip=_xyz(current),
                 target_straw_tip=_xyz(target),
                 tool0_target=_xyz(tool0_target),
@@ -1512,7 +1605,7 @@ class FeedingSkillLibrary:
         try:
             preflight = self._env.move_straw_tip_to_position(
                 target.tolist(),
-                label=f"mouth_search_{primitive}",
+                label=f"mouth_search_{name}",
                 flange_down_rpy=current_rpy,
                 duration=self.config.search_step_duration_sec,
                 plan_only=True,
@@ -1524,37 +1617,41 @@ class FeedingSkillLibrary:
             return self._failure(
                 "search_for_mouth",
                 f"MoveIt search preflight raised an exception: {exc}",
-                primitive=primitive,
+                waypoint=name,
                 target_straw_tip=_xyz(target),
             )
         if not preflight.get("success"):
             return self._failure(
                 "search_for_mouth",
-                "MoveIt could not plan the safe search primitive",
-                primitive=primitive,
+                "MoveIt could not plan the safe search waypoint",
+                waypoint=name,
                 target_straw_tip=_xyz(target),
                 planner_result=preflight,
             )
         return self._success(
             "search_for_mouth",
-            primitive=primitive,
+            waypoint=name,
+            offset_from_origin_m=waypoint.get("offset_from_origin_m"),
             current_straw_tip=_xyz(current),
             target_straw_tip=_xyz(target),
+            segment_distance_m=round(segment_distance, 6),
             planner_target=planner_target,
             planner_result=preflight,
+            translation_only=True,
+            rotation_search_enabled=False,
             keep_flange_down=True,
             flange_down_alignment=round(float(control["flange_down_alignment"]), 6),
             flange_down_rpy=current_rpy,
         )
 
-    def _execute_search_primitive(self, preflight: Mapping[str, Any]) -> dict[str, Any]:
-        """Execute exactly one already-preflighted fixed search primitive."""
-        primitive = str(preflight["primitive"])
+    def _execute_search_waypoint(self, preflight: Mapping[str, Any]) -> dict[str, Any]:
+        """Execute exactly one already-preflighted fixed search waypoint."""
+        waypoint = str(preflight["waypoint"])
         target = preflight["target_straw_tip"]
         try:
             result = self._env.move_straw_tip_to_position(
                 target,
-                label=f"mouth_search_{primitive}",
+                label=f"mouth_search_{waypoint}",
                 flange_down_rpy=preflight["flange_down_rpy"],
                 duration=self.config.search_step_duration_sec,
                 plan_only=False,
@@ -1564,57 +1661,79 @@ class FeedingSkillLibrary:
             return self._failure(
                 "search_for_mouth",
                 f"MoveIt search execution raised an exception: {exc}",
-                primitive=primitive,
+                waypoint=waypoint,
                 target_straw_tip=target,
                 planner_result=preflight.get("planner_result"),
             )
         if not result.get("success"):
             return self._failure(
                 "search_for_mouth",
-                "MoveIt did not complete the safe search primitive",
-                primitive=primitive,
+                "MoveIt did not complete the safe search waypoint",
+                waypoint=waypoint,
                 target_straw_tip=target,
                 planner_result=preflight.get("planner_result"),
                 move_result=result,
             )
         return self._success(
             "search_for_mouth",
-            primitive=primitive,
+            waypoint=waypoint,
             target_straw_tip=target,
             planner_result=preflight.get("planner_result"),
             move_result=result,
+            translation_only=True,
+            rotation_search_enabled=False,
             keep_flange_down=True,
             flange_down_alignment=preflight.get("flange_down_alignment"),
         )
 
+    def _wait_for_search_stability(self, deadline: float) -> dict[str, Any]:
+        """Hold the current pose while a detected candidate becomes stable."""
+        stable = self._stable_mouth_result()
+        while not stable.get("success") and time.monotonic() < deadline:
+            self._spin_for(min(0.10, max(0.0, deadline - time.monotonic())))
+            stable = self._stable_mouth_result()
+        return stable
+
     def search_for_mouth(
         self,
         *,
-        max_time_sec: float = 30.0,
+        max_time_sec: float = 15.0,
         selection: str = "center",
         execute: bool = False,
     ) -> dict[str, Any]:
-        """Find a stable active mouth pose with a bounded fixed scan pattern.
+        """Find a stable mouth with a 15-second translation-only scan.
 
         This method deliberately accepts no direction, pose, joint, or
         controller command from a caller.  In dry-run mode it never moves: it
         either returns a currently stable active target or reports the first
-        preflighted search step that would be used with ``execute=True``.
+        plan-only waypoint that would be used with ``execute=True``.  A fresh
+        candidate always stops the scan while stability samples accumulate.
         """
+        if isinstance(max_time_sec, bool):
+            return self._failure("search_for_mouth", "max_time_sec must be a finite number", execute=execute)
         try:
-            timeout = float(max_time_sec)
+            requested_timeout = float(max_time_sec)
         except (TypeError, ValueError):
             return self._failure("search_for_mouth", "max_time_sec must be a finite number", execute=execute)
-        if not math.isfinite(timeout) or not 0.1 <= timeout <= self.config.search_max_time_sec:
+        if not math.isfinite(requested_timeout) or requested_timeout < 0.1:
             return self._failure(
                 "search_for_mouth",
-                f"max_time_sec must be between 0.1 and {self.config.search_max_time_sec:.1f}",
+                "max_time_sec must be finite and at least 0.1",
                 execute=execute,
             )
+        timeout = min(requested_timeout, float(self.config.search_max_time_sec))
+        policy_fields = {
+            "requested_max_time_sec": round(requested_timeout, 4),
+            "effective_max_time_sec": round(timeout, 4),
+            "translation_only": True,
+            "rotation_search_enabled": False,
+            "trajectory_sent": False,
+        }
         selected = self.select_active_target(selection)
         if not selected.get("success"):
             selected["tool"] = "search_for_mouth"
             selected["execute"] = execute
+            selected.update(policy_fields)
             return selected
         started = time.monotonic()
         deadline = started + timeout
@@ -1639,114 +1758,287 @@ class FeedingSkillLibrary:
                 mouth_pose=initial["mouth_pose"],
                 active_target_label=initial.get("active_target_label"),
                 active_target_id=initial.get("active_target_id"),
+                elapsed_sec=round(time.monotonic() - started, 4),
                 search_steps=[],
+                **policy_fields,
             )
 
-        # The camera's calibrated recovery direction is tried first.  This is
-        # important when the face was lost because the camera was too close or
-        # the face reached the image edge: a small retreat widens the view
-        # before the vertical/lateral scan.  Every item remains one of the
-        # fixed, preflighted primitives; no model-provided direction or pose
-        # can enter this sequence.
-        scan_pattern = (
-            # A no-face view caused by being too close needs several small,
-            # calibrated standoff corrections before lateral exploration. The
-            # 3 cm cap, 15-step cap, and 30-second deadline still apply.
-            "search_back_small",
-            "search_back_small",
-            "search_back_small",
-            "search_back_small",
-            "search_back_small",
-            "search_back_small",
-            "search_back_small",
-            "search_back_small",
-            "search_back_small",
-            "search_up_small",
-            "search_down_small",
-            "search_left_small",
-            "search_right_small",
-        )
-        first_preflight = self._preflight_search_primitive(scan_pattern[0])
-        # The SDK's TF listener is populated asynchronously.  A newly created
-        # library may need a short time to receive the base_link ->
-        # feeding_straw_tip_marker connection after the perception wait.  This
-        # retry is preflight-only, recognizes only that transient read error,
-        # and remains inside the caller's search deadline.
+        # A visible but unstable mouth is already a successful visual
+        # acquisition.  Freeze immediately and spend the remaining budget on
+        # stability rather than risking that a new camera motion loses it.
+        latest = self._active_targets.get_active_latest_pose()
+        if latest.get("success"):
+            stable = self._wait_for_search_stability(deadline)
+            if stable.get("success"):
+                return self._success(
+                    "search_for_mouth",
+                    execute=execute,
+                    selection=selection,
+                    found_without_motion=True,
+                    candidate_detected=True,
+                    stopped_for_stability=True,
+                    mouth_pose=stable["mouth_pose"],
+                    active_target_label=stable.get("active_target_label"),
+                    active_target_id=stable.get("active_target_id"),
+                    elapsed_sec=round(time.monotonic() - started, 4),
+                    search_steps=[],
+                    **policy_fields,
+                )
+            return self._failure(
+                "search_for_mouth",
+                "a mouth candidate was detected but did not become stable; search motion remained stopped",
+                execute=execute,
+                selection=selection,
+                candidate_detected=True,
+                stopped_for_stability=True,
+                elapsed_sec=round(time.monotonic() - started, 4),
+                stability_result=stable,
+                search_steps=[],
+                **policy_fields,
+            )
+
+        fatal_status = self._fatal_search_status()
+        if fatal_status is not None:
+            fatal_status.update(
+                execute=execute,
+                selection=selection,
+                elapsed_sec=round(time.monotonic() - started, 4),
+                **policy_fields,
+            )
+            return fatal_status
+
+        # Reserve the end of the fixed budget for collecting stable samples.
+        # The first three absolute waypoints widen the view by 3, 6, then 9 cm;
+        # the remaining points trace one small lateral/vertical ring at that
+        # standoff.  No cumulative position update and no rotation is allowed.
+        motion_deadline = deadline - self.config.search_stability_reserve_sec
+        origin: np.ndarray | None = None
+        origin_error = "current straw-tip pose is unavailable"
+        while origin is None and time.monotonic() < motion_deadline:
+            try:
+                candidate_origin = np.asarray(self._env.get_straw_tip_pose()["position"], dtype=np.float64)
+                if candidate_origin.shape == (3,) and np.all(np.isfinite(candidate_origin)):
+                    origin = candidate_origin
+                    break
+                origin_error = "current straw-tip pose is invalid"
+            except Exception as exc:
+                origin_error = f"could not read the current straw-tip pose: {exc}"
+            self._spin_for(min(0.10, max(0.0, motion_deadline - time.monotonic())))
+        if origin is None:
+            return self._failure(
+                "search_for_mouth",
+                origin_error,
+                execute=execute,
+                selection=selection,
+                elapsed_sec=round(time.monotonic() - started, 4),
+                search_steps=[],
+                **policy_fields,
+            )
+
+        waypoints = self._search_waypoints(origin)[: self.config.search_max_steps]
+        if not waypoints or time.monotonic() >= motion_deadline:
+            return self._failure(
+                "search_for_mouth",
+                "search budget expired before the first safe waypoint could be planned",
+                execute=execute,
+                selection=selection,
+                search_origin=_xyz(origin),
+                elapsed_sec=round(time.monotonic() - started, 4),
+                search_steps=[],
+                **policy_fields,
+            )
+
+        first_preflight = self._preflight_search_waypoint(waypoints[0])
         while (
             not first_preflight.get("success")
             and str(first_preflight.get("reason", "")).startswith(
                 "could not read the current straw-tip pose:"
             )
-            and time.monotonic() < deadline
+            and time.monotonic() < motion_deadline
         ):
-            self._spin_for(min(0.10, max(0.0, deadline - time.monotonic())))
-            first_preflight = self._preflight_search_primitive(scan_pattern[0])
+            self._spin_for(min(0.10, max(0.0, motion_deadline - time.monotonic())))
+            first_preflight = self._preflight_search_waypoint(waypoints[0])
         if not first_preflight.get("success"):
             first_preflight["execute"] = execute
             first_preflight["selection"] = selection
+            first_preflight["search_origin"] = _xyz(origin)
+            first_preflight["elapsed_sec"] = round(time.monotonic() - started, 4)
+            first_preflight.update(policy_fields)
             return first_preflight
         if not execute:
             return self._failure(
                 "search_for_mouth",
-                "mouth pose is not stable; dry-run search did not send motion",
+                "mouth pose is not stable; plan-only search validated the first waypoint and sent no motion",
                 execute=False,
+                plan_only=True,
+                planning_success=True,
                 selection=selection,
+                search_origin=_xyz(origin),
+                planned_waypoint_count=1,
+                configured_waypoint_count=len(waypoints),
+                elapsed_sec=round(time.monotonic() - started, 4),
                 initial_target_state=initial,
-                next_safe_search_step=first_preflight,
+                next_safe_search_waypoint=first_preflight,
+                search_steps=[],
+                **policy_fields,
             )
 
         steps: list[dict[str, Any]] = []
-        for index in range(self.config.search_max_steps):
-            # Do not begin a trajectory that cannot complete and be observed
-            # within the advertised search deadline.  The small allowance
-            # covers normal MoveIt/action overhead around the requested 2 s
-            # fixed primitive duration.
+        for index, waypoint in enumerate(waypoints):
+            # Never begin a move that would consume the stability reserve.
             required_time = (
                 self.config.search_step_duration_sec
                 + self.config.search_observation_wait_sec
-                + 0.50
+                + 0.25
             )
-            if time.monotonic() + required_time > deadline:
+            if time.monotonic() + required_time > motion_deadline:
                 break
-            primitive = scan_pattern[index % len(scan_pattern)]
-            preflight = first_preflight if index == 0 else self._preflight_search_primitive(primitive)
+
+            # Process queued detector messages before planning and again after
+            # planning.  If either reveals a fresh candidate, freeze without
+            # sending the next trajectory.
+            self._spin_for(min(0.02, max(0.0, motion_deadline - time.monotonic())))
+            latest = self._active_targets.get_active_latest_pose()
+            if latest.get("success"):
+                stable = self._wait_for_search_stability(deadline)
+                if stable.get("success"):
+                    return self._success(
+                        "search_for_mouth",
+                        execute=True,
+                        selection=selection,
+                        found_without_motion=not steps,
+                        candidate_detected=True,
+                        stopped_for_stability=True,
+                        mouth_pose=stable["mouth_pose"],
+                        active_target_label=stable.get("active_target_label"),
+                        active_target_id=stable.get("active_target_id"),
+                        search_origin=_xyz(origin),
+                        elapsed_sec=round(time.monotonic() - started, 4),
+                        search_steps=steps,
+                        **{**policy_fields, "trajectory_sent": bool(steps)},
+                    )
+                return self._failure(
+                    "search_for_mouth",
+                    "a mouth candidate was detected but did not become stable; further search motion was stopped",
+                    execute=True,
+                    selection=selection,
+                    candidate_detected=True,
+                    stopped_for_stability=True,
+                    search_origin=_xyz(origin),
+                    elapsed_sec=round(time.monotonic() - started, 4),
+                    stability_result=stable,
+                    search_steps=steps,
+                    **{**policy_fields, "trajectory_sent": bool(steps)},
+                )
+
+            fatal_status = self._fatal_search_status()
+            if fatal_status is not None:
+                fatal_status.update(
+                    execute=True,
+                    selection=selection,
+                    search_origin=_xyz(origin),
+                    elapsed_sec=round(time.monotonic() - started, 4),
+                    search_steps=steps,
+                    **{**policy_fields, "trajectory_sent": bool(steps)},
+                )
+                return fatal_status
+
+            preflight = first_preflight if index == 0 else self._preflight_search_waypoint(waypoint)
             if not preflight.get("success"):
                 return self._failure(
                     "search_for_mouth",
-                    "safe mouth search stopped because the next primitive could not be planned",
+                    "safe mouth search stopped because the next waypoint could not be planned",
                     execute=True,
                     selection=selection,
+                    search_origin=_xyz(origin),
                     elapsed_sec=round(time.monotonic() - started, 4),
                     search_steps=steps,
                     failed_step=preflight,
+                    **{**policy_fields, "trajectory_sent": bool(steps)},
                 )
-            moved = self._execute_search_primitive(preflight)
+
+            self._spin_for(min(0.02, max(0.0, motion_deadline - time.monotonic())))
+            if self._active_targets.get_active_latest_pose().get("success"):
+                stable = self._wait_for_search_stability(deadline)
+                if stable.get("success"):
+                    return self._success(
+                        "search_for_mouth",
+                        execute=True,
+                        selection=selection,
+                        found_without_motion=not steps,
+                        candidate_detected=True,
+                        stopped_for_stability=True,
+                        mouth_pose=stable["mouth_pose"],
+                        active_target_label=stable.get("active_target_label"),
+                        active_target_id=stable.get("active_target_id"),
+                        search_origin=_xyz(origin),
+                        elapsed_sec=round(time.monotonic() - started, 4),
+                        search_steps=steps,
+                        **{**policy_fields, "trajectory_sent": bool(steps)},
+                    )
+                return self._failure(
+                    "search_for_mouth",
+                    "a mouth candidate was detected during planning but did not become stable; the planned trajectory was withheld",
+                    execute=True,
+                    selection=selection,
+                    candidate_detected=True,
+                    stopped_for_stability=True,
+                    search_origin=_xyz(origin),
+                    elapsed_sec=round(time.monotonic() - started, 4),
+                    stability_result=stable,
+                    search_steps=steps,
+                    **{**policy_fields, "trajectory_sent": bool(steps)},
+                )
+
+            moved = self._execute_search_waypoint(preflight)
             steps.append(moved)
             if not moved.get("success"):
                 return self._failure(
                     "search_for_mouth",
-                    "safe mouth search stopped because a primitive did not complete",
+                    "safe mouth search stopped because a waypoint did not complete",
                     execute=True,
                     selection=selection,
+                    search_origin=_xyz(origin),
                     elapsed_sec=round(time.monotonic() - started, 4),
                     search_steps=steps,
+                    **{**policy_fields, "trajectory_sent": True},
                 )
-            remaining = timeout - (time.monotonic() - started)
+            remaining = deadline - time.monotonic()
             if remaining > 0.0:
                 self._spin_for(min(self.config.search_observation_wait_sec, remaining))
-            stable = self._stable_mouth_result()
-            if stable.get("success"):
-                return self._success(
+            latest = self._active_targets.get_active_latest_pose()
+            if latest.get("success"):
+                stable = self._wait_for_search_stability(deadline)
+                if stable.get("success"):
+                    return self._success(
+                        "search_for_mouth",
+                        execute=True,
+                        selection=selection,
+                        found_without_motion=False,
+                        candidate_detected=True,
+                        stopped_for_stability=True,
+                        mouth_pose=stable["mouth_pose"],
+                        active_target_label=stable.get("active_target_label"),
+                        active_target_id=stable.get("active_target_id"),
+                        search_origin=_xyz(origin),
+                        elapsed_sec=round(time.monotonic() - started, 4),
+                        search_steps=steps,
+                        **{**policy_fields, "trajectory_sent": True},
+                    )
+                return self._failure(
                     "search_for_mouth",
+                    "a mouth candidate was detected but did not become stable; further search motion was stopped",
                     execute=True,
                     selection=selection,
-                    found_without_motion=False,
-                    mouth_pose=stable["mouth_pose"],
-                    active_target_label=stable.get("active_target_label"),
-                    active_target_id=stable.get("active_target_id"),
+                    candidate_detected=True,
+                    stopped_for_stability=True,
+                    search_origin=_xyz(origin),
                     elapsed_sec=round(time.monotonic() - started, 4),
+                    stability_result=stable,
                     search_steps=steps,
+                    **{**policy_fields, "trajectory_sent": True},
                 )
+
         # The requested person was not recovered within the full bounded
         # search.  Honor the user's explicit fallback rule only when exactly
         # one currently visible candidate has itself passed the stable queue.
@@ -1770,23 +2062,27 @@ class FeedingSkillLibrary:
                 mouth_pose=single_fallback["pose"],
                 active_target_label=resolved_selection,
                 active_target_id=resolved_selection,
+                search_origin=_xyz(origin),
                 elapsed_sec=round(time.monotonic() - started, 4),
                 search_steps=steps,
+                **{**policy_fields, "trajectory_sent": bool(steps)},
             )
         return self._failure(
             "search_for_mouth",
             "mouth search timed out before a stable active target was found",
             execute=True,
             selection=selection,
+            search_origin=_xyz(origin),
             elapsed_sec=round(time.monotonic() - started, 4),
             max_time_sec=timeout,
             max_steps=self.config.search_max_steps,
             search_steps=steps,
+            **{**policy_fields, "trajectory_sent": bool(steps)},
         )
 
     def active_search_mouth(
         self,
-        max_search_time_sec: float = 30.0,
+        max_search_time_sec: float = 15.0,
         target_selection: str = "center",
         *,
         execute: bool = False,
@@ -1815,7 +2111,7 @@ class FeedingSkillLibrary:
         self,
         target_type: str = "mouth",
         detector: str = "mediapipe",
-        max_time_sec: float = 30.0,
+        max_time_sec: float = 15.0,
         strategy: str = "safe_scan",
         *,
         execute: bool = False,
@@ -2579,7 +2875,7 @@ class FeedingSkillLibrary:
         self,
         target_selection: str = "center",
         execute: bool = False,
-        max_search_time_sec: float = 30.0,
+        max_search_time_sec: float = 15.0,
         allow_direct_mouth_contact: bool = False,
         allow_vertical_adjust: bool = False,
         hold_duration_sec: float = 3.0,
@@ -2591,9 +2887,9 @@ class FeedingSkillLibrary:
         policy flags, never joints, poses, trajectories, controllers, gripper
         actions, attachment actions, or a mouth-contact command.
 
-        ``max_search_time_sec`` is capped locally at 30 seconds as a defense
-        in depth.  The LLM-plan validator rejects values above that limit, so
-        a model cannot use the cap to request a longer search.
+        ``max_search_time_sec`` is capped locally at 15 seconds as a defense
+        in depth.  The validator still accepts explicit legacy values through
+        30 seconds, but they cannot lengthen the physical/search budget.
         """
         steps: list[dict[str, Any]] = []
 
