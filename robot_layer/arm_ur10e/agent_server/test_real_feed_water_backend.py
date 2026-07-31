@@ -26,6 +26,20 @@ class RealFeedWaterBackendTest(unittest.TestCase):
         self.assertFalse(result["execution_attempted"])
         run.assert_not_called()
 
+    def test_real_backend_refuses_non_center_target_before_pipeline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            backend, "REPORT_DIR", Path(directory)
+        ), patch.object(backend.subprocess, "run") as run:
+            result = backend.run_real_feed_water(
+                execute=False,
+                target_selection="left",
+                environ={"UR10E_BACKEND": "real"},
+            )
+        self.assertFalse(result["success"])
+        self.assertEqual("target_selection", result["stage"])
+        self.assertFalse(result["execution_attempted"])
+        run.assert_not_called()
+
     def test_plan_only_delegates_to_corrected_pipeline_without_execute_flags(self) -> None:
         pipeline = {
             "success": True,
@@ -47,6 +61,8 @@ class RealFeedWaterBackendTest(unittest.TestCase):
             report_argument = command.index("--report-file") + 1
             Path(command[report_argument]).write_text(json.dumps(pipeline), encoding="utf-8")
             self.assertIn("camera-ray", command)
+            target_selection_argument = command.index("--target-selection") + 1
+            self.assertEqual("center", command[target_selection_argument])
             self.assertIn("--no-execute", command)
             self.assertNotIn("--confirm-real-motion", command)
             safe_distance_argument = command.index("--safe-distance") + 1

@@ -32,6 +32,8 @@ MANAGED_OBJECT_IDS = (
     "table_platform_collision",
 )
 
+MULTI_PERSON_OBJECT_PREFIX = "real_human_obstacle_"
+
 
 @dataclass(frozen=True)
 class PlanningSceneObstacleConfig:
@@ -62,8 +64,24 @@ def _add(a: Sequence[float], b: Sequence[float]) -> list[float]:
     return [float(a[index]) + float(b[index]) for index in range(3)]
 
 
-def _is_valid_xyz(value: Sequence[float]) -> bool:
-    return len(value) == 3 and all(math.isfinite(float(component)) for component in value)
+def _scale(vector: Sequence[float], scalar: float) -> list[float]:
+    return [float(component) * float(scalar) for component in vector]
+
+
+def _normalize(vector: Sequence[float]) -> list[float]:
+    magnitude = math.sqrt(sum(float(component) ** 2 for component in vector))
+    if not math.isfinite(magnitude) or magnitude < 1e-6:
+        raise ValueError("camera and mouth positions must not be coincident")
+    return [float(component) / magnitude for component in vector]
+
+
+def _is_valid_xyz(value: Any) -> bool:
+    if isinstance(value, (str, bytes)) or not isinstance(value, Sequence) or len(value) != 3:
+        return False
+    try:
+        return all(math.isfinite(float(component)) for component in value)
+    except (TypeError, ValueError):
+        return False
 
 
 class PlanningSceneObstacleManager(Node):
@@ -201,6 +219,85 @@ class PlanningSceneObstacleManager(Node):
             )
         return objects
 
+    @staticmethod
+    def _person_object_id(person_index: int, shape: str) -> str:
+        return f"{MULTI_PERSON_OBJECT_PREFIX}{person_index}_{shape}"
+
+    def build_collision_objects_for_people(
+        self,
+        mouth_positions: Sequence[Sequence[float]],
+        *,
+        camera_position: Sequence[float],
+    ) -> tuple[list[CollisionObject], list[dict[str, Any]]]:
+        """Build camera-facing head, torso, and face zones for every person.
+
+        The legacy single-person geometry assumes the fixed Gazebo ``+Y``
+        facing direction.  The real wrist camera can approach from another
+        base-link direction, so this variant derives the direction behind each
+        face from the camera-to-mouth ray while retaining the reviewed radii,
+        vertical offsets, and torso dimensions.
+        """
+        if not _is_valid_xyz(camera_position):
+            raise ValueError("camera_position must contain three finite values")
+        if not isinstance(mouth_positions, Sequence) or not mouth_positions:
+            raise ValueError("at least one visible mouth position is required")
+        camera = [float(component) for component in camera_position]
+        head_depth = math.hypot(float(self.config.head_offset_m[0]), float(self.config.head_offset_m[1]))
+        face_depth = math.hypot(
+            float(self.config.face_safety_offset_m[0]),
+            float(self.config.face_safety_offset_m[1]),
+        )
+        torso_depth = math.hypot(
+            float(self.config.torso_offset_m[0]),
+            float(self.config.torso_offset_m[1]),
+        )
+        objects: list[CollisionObject] = []
+        people: list[dict[str, Any]] = []
+        for person_index, raw_mouth in enumerate(mouth_positions):
+            if not _is_valid_xyz(raw_mouth):
+                raise ValueError(f"mouth_positions[{person_index}] must contain three finite values")
+            mouth = [float(component) for component in raw_mouth]
+            behind_face = _normalize([mouth[axis] - camera[axis] for axis in range(3)])
+
+            def center(depth: float, vertical: float) -> list[float]:
+                result = _add(mouth, _scale(behind_face, depth))
+                result[2] += float(vertical)
+                return result
+
+            head_id = self._person_object_id(person_index, "head")
+            torso_id = self._person_object_id(person_index, "torso")
+            face_id = self._person_object_id(person_index, "face_safety")
+            head_center = center(head_depth, self.config.head_offset_m[2])
+            torso_center = center(torso_depth, self.config.torso_offset_m[2])
+            face_center = center(face_depth, self.config.face_safety_offset_m[2])
+            objects.extend(
+                [
+                    self._sphere(head_id, head_center, self.config.head_radius_m),
+                    self._box(torso_id, torso_center, self.config.torso_size_m),
+                    self._sphere(face_id, face_center, self.config.face_safety_radius_m),
+                ]
+            )
+            people.append(
+                {
+                    "person_index": person_index,
+                    "mouth_position": _xyz(mouth),
+                    "behind_face_unit_vector": _xyz(behind_face),
+                    "head_center": _xyz(head_center),
+                    "torso_center": _xyz(torso_center),
+                    "face_safety_center": _xyz(face_center),
+                    "object_ids": [head_id, torso_id, face_id],
+                }
+            )
+        if self.config.include_table:
+            objects.append(
+                self._box(
+                    "table_platform_collision",
+                    self.config.table_center_m,
+                    self.config.table_size_m,
+                )
+            )
+        return objects, people
+
     def _apply_scene(self, scene: PlanningScene) -> dict[str, Any]:
         if not self._apply_client.wait_for_service(timeout_sec=self.config.service_timeout_sec):
             return {"success": False, "reason": "/apply_planning_scene is unavailable"}
@@ -284,6 +381,77 @@ class PlanningSceneObstacleManager(Node):
                 result["reason"] = "PlanningScene update could not be verified"
         return result
 
+    def apply_people(
+        self,
+        mouth_positions: Sequence[Sequence[float]],
+        *,
+        camera_position: Sequence[float],
+        verify: bool = True,
+    ) -> dict[str, Any]:
+        """Replace and verify the complete real-camera multi-person scene."""
+        try:
+            objects, people = self.build_collision_objects_for_people(
+                mouth_positions,
+                camera_position=camera_position,
+            )
+        except ValueError as exc:
+            return {"success": False, "reason": str(exc)}
+        current = self._world_object_ids()
+        if not current.get("success"):
+            return current
+        expected_ids = [collision.id for collision in objects]
+        expected_set = set(expected_ids)
+        stale_ids = sorted(
+            object_id
+            for object_id in current["object_ids"]
+            if (
+                object_id in MANAGED_OBJECT_IDS
+                or object_id.startswith(MULTI_PERSON_OBJECT_PREFIX)
+            )
+            and object_id not in expected_set
+        )
+        scene = PlanningScene()
+        scene.is_diff = True
+        for object_id in stale_ids:
+            collision = CollisionObject()
+            collision.header.frame_id = self.config.base_frame
+            collision.id = object_id
+            collision.operation = CollisionObject.REMOVE
+            scene.world.collision_objects.append(collision)
+        scene.world.collision_objects.extend(objects)
+        applied = self._apply_scene(scene)
+        if not applied.get("success"):
+            return applied
+        result: dict[str, Any] = {
+            "success": True,
+            "operation": "apply_people",
+            "frame_id": self.config.base_frame,
+            "camera_position": _xyz(camera_position),
+            "person_count": len(people),
+            "people": people,
+            "object_ids": expected_ids,
+            "removed_stale_object_ids": stale_ids,
+            "config": asdict(self.config),
+        }
+        if verify:
+            current_after = self._world_object_ids()
+            present = set(current_after.get("object_ids", []))
+            missing = sorted(expected_set - present)
+            stale_present = sorted(set(stale_ids) & present)
+            verification = {
+                "success": bool(current_after.get("success")) and not missing and not stale_present,
+                "present_object_ids": sorted(expected_set & present),
+                "missing_object_ids": missing,
+                "stale_object_ids_still_present": stale_present,
+            }
+            if not current_after.get("success"):
+                verification["reason"] = current_after.get("reason")
+            result["verification"] = verification
+            if not verification["success"]:
+                result["success"] = False
+                result["reason"] = "multi-person PlanningScene update could not be verified"
+        return result
+
     def remove(self, *, verify: bool = True) -> dict[str, Any]:
         """Remove all collision IDs managed by this module from MoveIt's world scene."""
         # MoveIt can reject a REMOVE diff for an absent object.  Read the
@@ -292,7 +460,11 @@ class PlanningSceneObstacleManager(Node):
         current = self._world_object_ids()
         if not current.get("success"):
             return current
-        object_ids = sorted(set(MANAGED_OBJECT_IDS) & set(current["object_ids"]))
+        object_ids = sorted(
+            object_id
+            for object_id in current["object_ids"]
+            if object_id in MANAGED_OBJECT_IDS or object_id.startswith(MULTI_PERSON_OBJECT_PREFIX)
+        )
         if not object_ids:
             return {
                 "success": True,

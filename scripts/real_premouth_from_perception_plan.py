@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guarded real-UR10e pre-mouth probe driven by /detected_mouth_pose.
+"""Guarded real-UR10e pre-mouth probe driven by mouth candidates.
 
 This is deliberately independent of LLM, OpenClaw, feeding execution, and raw
 trajectory actions.  Planning uses MoveIt's /move_action with ``plan_only``.
@@ -16,7 +16,6 @@ import math
 import os
 import sys
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +36,7 @@ import rclpy  # noqa: E402
 import rclpy.time  # noqa: E402
 import tf2_ros  # noqa: E402
 from controller_manager_msgs.srv import ListControllers  # noqa: E402
-from geometry_msgs.msg import Pose, PoseStamped, Vector3Stamped  # noqa: E402
+from geometry_msgs.msg import Pose  # noqa: E402
 from moveit_msgs.action import ExecuteTrajectory, MoveGroup  # noqa: E402
 from moveit_msgs.msg import BoundingVolume, Constraints, OrientationConstraint, PositionConstraint  # noqa: E402
 from rclpy.action import ActionClient  # noqa: E402
@@ -49,6 +48,15 @@ from shape_msgs.msg import SolidPrimitive  # noqa: E402
 from std_msgs.msg import Bool, Float64, String  # noqa: E402
 from ur_dashboard_msgs.msg import RobotMode, SafetyMode  # noqa: E402
 
+from robot_layer.arm_ur10e.agent_tools.planning_scene_manager import (  # noqa: E402
+    PlanningSceneObstacleConfig,
+    PlanningSceneObstacleManager,
+)
+from robot_layer.arm_ur10e.perception.real_mouth_target_tracker import (  # noqa: E402
+    RealMouthTargetTracker,
+    validate_target_selection,
+)
+
 
 BASE_FRAME = "base_link"
 UR_BASE_FRAME = "base"
@@ -56,7 +64,7 @@ TOOL_FRAME = "tool0"
 CAMERA_OPTICAL_FRAME = "d435i_color_optical_frame"
 CAMERA_LINK_FRAME = "d435i_link"
 MOUTH_TOPIC = "/detected_mouth_pose"
-MOUTH_NORMAL_TOPIC = "/detected_mouth_normal"
+MOUTH_CANDIDATES_TOPIC = "/detected_mouth_candidates"
 MOUTH_STATUS_TOPIC = "/mouth_detection/status"
 MOVE_ACTION = "/move_action"
 EXECUTE_TRAJECTORY_ACTION = "/execute_trajectory"
@@ -95,7 +103,6 @@ MIN_FACE_CLEARANCE_M = 0.050
 # must not demand the final stand-off before a move that is itself increasing
 # the separation to the final 80 mm pre-mouth point.
 MIN_CURRENT_SIDE_MARGIN_M = 0.005
-MAX_NORMAL_ANGULAR_SPREAD_RAD = math.radians(12.0)
 MOUNT_CALIBRATION_CONFIG = PROJECT_ROOT / "config/ur10e_real/d435i_mount_calibration.json"
 
 # The nominal UR10e reach is 1.30 m.  Exact reachability and collision checks
@@ -134,6 +141,8 @@ TF_DISCOVERY_TIMEOUT_SEC = 8.0
 MOVE_GROUP_DISCOVERY_TIMEOUT_SEC = 8.0
 MAX_CAMERA_MOUNT_TRANSLATION_ERROR_M = 0.001
 MAX_CAMERA_MOUNT_ROTATION_ERROR_RAD = math.radians(0.5)
+MAX_PRE_EXECUTION_TARGET_DRIFT_M = 0.030
+MAX_PRE_EXECUTION_OBSTACLE_DRIFT_M = 0.050
 
 
 def _jsonable(value: Any) -> Any:
@@ -158,6 +167,16 @@ def _add(left: list[float], right: tuple[float, float, float] | list[float]) -> 
     return [float(a) + float(b) for a, b in zip(left, right)]
 
 
+def _finite_xyz(value: Any) -> list[float] | None:
+    if not isinstance(value, (list, tuple)) or len(value) != 3:
+        return None
+    try:
+        converted = [float(component) for component in value]
+    except (TypeError, ValueError):
+        return None
+    return converted if all(math.isfinite(component) for component in converted) else None
+
+
 def _scale(vector: tuple[float, float, float], scalar: float) -> list[float]:
     return [float(component) * float(scalar) for component in vector]
 
@@ -170,10 +189,6 @@ def _normalize_feeding_vector(vector: tuple[float, float, float]) -> list[float]
     if magnitude < 1e-6:
         raise ValueError("feeding vector norm is too small to define an approach direction")
     return [float(component) / magnitude for component in vector]
-
-
-def _dot(first: list[float], second: tuple[float, float, float]) -> float:
-    return sum(float(a) * float(b) for a, b in zip(first, second))
 
 
 def _rotate_tool_vector(
@@ -233,14 +248,6 @@ def _trajectory_summary(trajectory: Any) -> dict[str, Any]:
     }
 
 
-@dataclass(frozen=True)
-class MouthSample:
-    position_m: tuple[float, float, float]
-    frame_id: str
-    received_monotonic: float
-    stamp_sec: float
-
-
 class RealPreMouthFromPerceptionPlan(Node):
     """Read perception, validate it, then plan or guarded-execute in MoveIt."""
 
@@ -252,6 +259,7 @@ class RealPreMouthFromPerceptionPlan(Node):
         maximum_plan_translation_m: float = MAX_PLAN_TRANSLATION_M,
         feeding_vector: tuple[float, float, float] = DEFAULT_FEEDING_VECTOR,
         feeding_vector_sign: str = "plus",
+        target_selection: str = "center",
         mouth_sample_seconds: float = DEFAULT_MOUTH_SAMPLE_SECONDS,
         trajectory_velocity_scaling: float = DEFAULT_TRAJECTORY_VELOCITY_SCALING,
         trajectory_acceleration_scaling: float = DEFAULT_TRAJECTORY_ACCELERATION_SCALING,
@@ -293,6 +301,8 @@ class RealPreMouthFromPerceptionPlan(Node):
         self.feeding_vector_input = [float(component) for component in feeding_vector]
         self.feeding_vector_normalized = normalized_feeding_vector
         self.feeding_vector_sign = feeding_vector_sign
+        self.target_selection = validate_target_selection(target_selection)
+        self.target_tracker = RealMouthTargetTracker(self.target_selection, base_frame=BASE_FRAME)
         self.mouth_sample_seconds = float(mouth_sample_seconds)
         self.trajectory_velocity_scaling = float(trajectory_velocity_scaling)
         self.trajectory_acceleration_scaling = float(trajectory_acceleration_scaling)
@@ -301,8 +311,6 @@ class RealPreMouthFromPerceptionPlan(Node):
         self.latest_robot_program_running: Bool | None = None
         self.latest_safety_mode: SafetyMode | None = None
         self.latest_robot_mode: RobotMode | None = None
-        self.mouth_samples: list[MouthSample] = []
-        self.normal_samples: list[MouthSample] = []
         self.latest_mouth_status: dict[str, Any] | None = None
         self.latest_mouth_status_received_monotonic: float | None = None
         self._validated_trajectory: Any | None = None
@@ -331,8 +339,7 @@ class RealPreMouthFromPerceptionPlan(Node):
             self._robot_mode_callback,
             latched_robot_state_qos,
         )
-        self.create_subscription(PoseStamped, MOUTH_TOPIC, self._mouth_callback, 20)
-        self.create_subscription(Vector3Stamped, MOUTH_NORMAL_TOPIC, self._normal_callback, 20)
+        self.create_subscription(String, MOUTH_CANDIDATES_TOPIC, self._mouth_candidates_callback, 20)
         self.create_subscription(String, MOUTH_STATUS_TOPIC, self._mouth_status_callback, 20)
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self, spin_thread=False)
@@ -364,41 +371,11 @@ class RealPreMouthFromPerceptionPlan(Node):
     def _robot_mode_callback(self, message: RobotMode) -> None:
         self.latest_robot_mode = message
 
-    def _mouth_callback(self, message: PoseStamped) -> None:
-        frame_id = message.header.frame_id.strip().lstrip("/")
-        position = message.pose.position
-        values = (float(position.x), float(position.y), float(position.z))
-        if not all(math.isfinite(value) for value in values):
-            return
-        self.mouth_samples.append(
-            MouthSample(
-                position_m=values,
-                frame_id=frame_id,
-                received_monotonic=time.monotonic(),
-                stamp_sec=float(message.header.stamp.sec) + float(message.header.stamp.nanosec) * 1e-9,
-            )
-        )
-        # Retain enough history for an 8-second check while bounding memory.
-        if len(self.mouth_samples) > 512:
-            del self.mouth_samples[:-256]
-
-    def _normal_callback(self, message: Vector3Stamped) -> None:
-        frame_id = message.header.frame_id.strip().lstrip("/")
-        values = (float(message.vector.x), float(message.vector.y), float(message.vector.z))
-        magnitude = _norm(values)
-        if frame_id != BASE_FRAME or not math.isfinite(magnitude) or magnitude < 1e-8:
-            return
-        normalized = tuple(value / magnitude for value in values)
-        self.normal_samples.append(
-            MouthSample(
-                position_m=normalized,
-                frame_id=frame_id,
-                received_monotonic=time.monotonic(),
-                stamp_sec=float(message.header.stamp.sec) + float(message.header.stamp.nanosec) * 1e-9,
-            )
-        )
-        if len(self.normal_samples) > 512:
-            del self.normal_samples[:-256]
+    def _mouth_candidates_callback(self, message: String) -> None:
+        """Update the guarded real target lock from all visible candidates."""
+        result = self.target_tracker.update_json(message.data)
+        if not result.get("success") and result.get("identity_unsafe"):
+            self.get_logger().warning(str(result.get("reason") or "mouth target identity became unsafe"))
 
     def _mouth_status_callback(self, message: String) -> None:
         """Keep the detector's diagnosis so a missing pose is actionable."""
@@ -570,15 +547,18 @@ class RealPreMouthFromPerceptionPlan(Node):
         }
 
     def _collect_mouth_samples(self, duration_sec: float) -> dict[str, Any]:
+        """Collect and validate the explicitly selected multi-face target."""
         start = time.monotonic()
         self._spin_for(duration_sec)
-        received = [sample for sample in self.mouth_samples if sample.received_monotonic >= start]
         now = time.monotonic()
-        valid = [
-            sample
-            for sample in received
-            if sample.frame_id == BASE_FRAME and now - sample.received_monotonic <= MAX_MOUTH_POSE_AGE_SEC
-        ]
+        result = self.target_tracker.observation(
+            started_monotonic=start,
+            now_monotonic=now,
+            max_age_sec=MAX_MOUTH_POSE_AGE_SEC,
+            minimum_samples=MIN_STABLE_SAMPLES,
+            max_spread_m=MAX_POSE_SPREAD_M,
+        )
+        result["sample_duration_sec"] = duration_sec
         status = None
         if (
             self.latest_mouth_status is not None
@@ -587,90 +567,11 @@ class RealPreMouthFromPerceptionPlan(Node):
         ):
             status = dict(self.latest_mouth_status)
             status["latest_received_age_sec"] = now - self.latest_mouth_status_received_monotonic
-        if not received:
-            reason = f"no {MOUTH_TOPIC} messages received in {duration_sec:.1f} seconds"
-            if status is not None and status.get("reason"):
-                reason += f"; {MOUTH_STATUS_TOPIC} reports {status['reason']}"
-            result: dict[str, Any] = {"available": False, "reason": reason}
-            if status is not None:
-                result["perception_status"] = status
-            return result
-        wrong_frame = sorted({sample.frame_id for sample in received if sample.frame_id != BASE_FRAME})
-        if wrong_frame:
-            return {
-                "available": False,
-                "reason": f"mouth pose must use {BASE_FRAME}; received {wrong_frame}",
-                "received_count": len(received),
-            }
-        if not valid:
-            result = {
-                "available": False,
-                "reason": f"mouth pose is stale (over {MAX_MOUTH_POSE_AGE_SEC:.1f} s old)",
-                "received_count": len(received),
-            }
-            if status is not None:
-                result["perception_status"] = status
-                if status.get("reason"):
-                    result["reason"] += f"; {MOUTH_STATUS_TOPIC} reports {status['reason']}"
-            return result
-        coordinates = list(zip(*(sample.position_m for sample in valid)))
-        mean = [sum(values) / len(values) for values in coordinates]
-        std = [math.sqrt(sum((value - average) ** 2 for value in values) / len(values)) for values, average in zip(coordinates, mean)]
-        max_distance = max(_norm(_subtract(list(sample.position_m), mean)) for sample in valid)
-        latest = valid[-1]
-        normal_received = [sample for sample in self.normal_samples if sample.received_monotonic >= start]
-        normal_valid = [
-            sample
-            for sample in normal_received
-            if sample.frame_id == BASE_FRAME and now - sample.received_monotonic <= MAX_MOUTH_POSE_AGE_SEC
-        ]
-        normal: dict[str, Any]
-        if not normal_valid:
-            normal = {"available": False, "reason": f"no recent {MOUTH_NORMAL_TOPIC} messages"}
-        else:
-            average_normal = [sum(values) / len(values) for values in zip(*(sample.position_m for sample in normal_valid))]
-            normal_magnitude = _norm(average_normal)
-            if normal_magnitude < 1e-8:
-                normal = {"available": False, "reason": "mouth normals cancel instead of agreeing"}
-            else:
-                average_normal = [value / normal_magnitude for value in average_normal]
-                angles = [
-                    math.acos(max(-1.0, min(1.0, _dot(list(sample.position_m), tuple(average_normal)))))
-                    for sample in normal_valid
-                ]
-                normal = {
-                    "available": True,
-                    "frame_id": BASE_FRAME,
-                    "sample_count": len(normal_valid),
-                    "mean_vector": average_normal,
-                    "max_angular_spread_rad": max(angles),
-                    "max_angular_spread_deg": math.degrees(max(angles)),
-                    "stable": len(normal_valid) >= MIN_STABLE_SAMPLES
-                    and max(angles) <= MAX_NORMAL_ANGULAR_SPREAD_RAD,
-                    "stability_requirements": {
-                        "minimum_samples": MIN_STABLE_SAMPLES,
-                        "maximum_angular_spread_deg": math.degrees(MAX_NORMAL_ANGULAR_SPREAD_RAD),
-                    },
-                }
-        return {
-            "available": True,
-            "frame_id": BASE_FRAME,
-            "sample_duration_sec": duration_sec,
-            "sample_count": len(valid),
-            "mean_position_m": mean,
-            "latest_position_m": list(latest.position_m),
-            "jitter_stddev_m": std,
-            "max_distance_from_mean_m": max_distance,
-            "latest_received_age_sec": now - latest.received_monotonic,
-            "latest_source_stamp_sec": latest.stamp_sec,
-            "stable": len(valid) >= MIN_STABLE_SAMPLES and max_distance <= MAX_POSE_SPREAD_M,
-            "stability_requirements": {
-                "minimum_samples": MIN_STABLE_SAMPLES,
-                "maximum_spread_m": MAX_POSE_SPREAD_M,
-                "maximum_age_sec": MAX_MOUTH_POSE_AGE_SEC,
-            },
-            "surface_normal": normal,
-        }
+        if status is not None:
+            result["perception_status"] = status
+            if not result.get("available") and status.get("reason"):
+                result["reason"] = f"{result.get('reason', 'selected target unavailable')}; {MOUTH_STATUS_TOPIC} reports {status['reason']}"
+        return result
 
     def snapshot(self, mouth_sample_sec: float, *, inspect_controllers: bool = False) -> dict[str, Any]:
         self._wait_for_joint_state()
@@ -740,6 +641,68 @@ class RealPreMouthFromPerceptionPlan(Node):
             "mount_calibration": calibration,
         }
 
+    def _apply_multi_person_planning_scene(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+        """Apply and verify deterministic collision geometry before planning."""
+        mouth = snapshot.get("mouth_pose", {})
+        visible = mouth.get("visible_candidates")
+        selected_index = mouth.get("selected_candidate_index")
+        selected_mean = mouth.get("mean_position_m")
+        camera_position = snapshot.get("camera_tf", {}).get("position_m")
+        if not isinstance(visible, list) or not visible:
+            return {"success": False, "reason": "no fresh visible candidates are available for obstacle geometry"}
+        if not isinstance(selected_index, int) or not 0 <= selected_index < len(visible):
+            return {"success": False, "reason": "selected candidate index is invalid for obstacle geometry"}
+        if not isinstance(selected_mean, list) or len(selected_mean) != 3:
+            return {"success": False, "reason": "stable selected mouth mean is unavailable for obstacle geometry"}
+        if (
+            not isinstance(camera_position, list)
+            or len(camera_position) != 3
+            or not all(isinstance(component, (int, float)) and math.isfinite(float(component)) for component in camera_position)
+        ):
+            return {"success": False, "reason": "camera position is unavailable for obstacle geometry"}
+        mouth_positions: list[list[float]] = []
+        try:
+            for candidate in visible:
+                position = candidate["position_m"]
+                values = [float(component) for component in position]
+                if len(values) != 3 or not all(math.isfinite(component) for component in values):
+                    raise ValueError
+                mouth_positions.append(values)
+            frozen_selected = [float(component) for component in selected_mean]
+            if len(frozen_selected) != 3 or not all(math.isfinite(component) for component in frozen_selected):
+                raise ValueError
+            mouth_positions[selected_index] = frozen_selected
+        except (KeyError, TypeError, ValueError):
+            return {"success": False, "reason": "visible candidate positions are invalid"}
+
+        manager: PlanningSceneObstacleManager | None = None
+        try:
+            manager = PlanningSceneObstacleManager(
+                PlanningSceneObstacleConfig(
+                    base_frame=BASE_FRAME,
+                    mouth_topic=MOUTH_TOPIC,
+                    include_table=False,
+                    service_timeout_sec=5.0,
+                    mouth_wait_timeout_sec=1.0,
+                )
+            )
+            result = manager.apply_people(
+                mouth_positions,
+                camera_position=camera_position,
+                verify=True,
+            )
+        except Exception as exc:
+            result = {"success": False, "reason": f"PlanningScene obstacle manager raised {exc.__class__.__name__}: {exc}"}
+        finally:
+            if manager is not None:
+                manager.destroy_node()
+        result["target_selection"] = self.target_selection
+        result["selected_candidate_index"] = selected_index
+        result["frozen_candidate_positions_m"] = mouth_positions
+        result["selected_mouth_position_m"] = frozen_selected
+        result["dynamic_octomap_enabled"] = False
+        return result
+
     @staticmethod
     def readiness_failures(
         snapshot: dict[str, Any], *, require_stable_mouth: bool, require_controller_inspection: bool = False
@@ -773,7 +736,7 @@ class RealPreMouthFromPerceptionPlan(Node):
                 failures.append("scaled_joint_trajectory_controller is not active")
         mouth = snapshot["mouth_pose"]
         if not mouth.get("available"):
-            failures.append(mouth.get("reason", f"{MOUTH_TOPIC} is unavailable"))
+            failures.append(mouth.get("reason", f"{MOUTH_CANDIDATES_TOPIC} is unavailable"))
         elif require_stable_mouth and not mouth.get("stable"):
             failures.append(
                 "mouth pose is not stable: "
@@ -1190,6 +1153,19 @@ class RealPreMouthFromPerceptionPlan(Node):
         if failures:
             return 2, {"success": False, "mode": "plan", "stage": "readiness", "failures": failures, "checks": snapshot, "execution_sent": False}
 
+        planning_scene = self._apply_multi_person_planning_scene(snapshot)
+        snapshot["planning_scene_obstacles"] = planning_scene
+        if not planning_scene.get("success"):
+            return 2, {
+                "success": False,
+                "mode": "plan",
+                "stage": "planning_scene_obstacles",
+                "reason": str(planning_scene.get("reason") or "deterministic multi-person PlanningScene update failed"),
+                "target_selection": self.target_selection,
+                "checks": snapshot,
+                "execution_sent": False,
+            }
+
         mouth = list(snapshot["mouth_pose"]["mean_position_m"])
         straw = list(snapshot["current_straw_tip_pose"]["position_m"])
         current_tool0 = snapshot["tool0_pose"]
@@ -1324,6 +1300,8 @@ class RealPreMouthFromPerceptionPlan(Node):
             "success": bool(plan_result.get("success")),
             "mode": "plan",
             "premouth_policy": self.premouth_policy,
+            "target_selection": self.target_selection,
+            "selected_candidate_index": snapshot["mouth_pose"].get("selected_candidate_index"),
             "safe_distance_m": self.safe_distance_m,
             "timing_profile": {
                 "mouth_sample_seconds": self.mouth_sample_seconds,
@@ -1366,6 +1344,8 @@ class RealPreMouthFromPerceptionPlan(Node):
     def _execution_guards(self, prepared: dict[str, Any], *, confirm_real_motion: bool) -> list[str]:
         """Return every reason the already-planned trajectory cannot move."""
         guards: list[str] = []
+        if self.target_selection != "center":
+            guards.append("guarded real execution supports only the center mouth target")
         if not confirm_real_motion:
             guards.append("--confirm-real-motion is required")
         if os.environ.get("UR10E_ALLOW_REAL_EXECUTION") != "1":
@@ -1471,6 +1451,17 @@ class RealPreMouthFromPerceptionPlan(Node):
                 "execution_sent": False,
                 "execution_disabled": True,
             }
+        if self.target_selection != "center":
+            return 2, {
+                "success": False,
+                "mode": "execute",
+                "stage": "target_selection_execution_gate",
+                "reason": "guarded real execution supports only the center mouth target",
+                "target_selection": self.target_selection,
+                "execution_attempted": False,
+                "execution_sent": False,
+                "execution_disabled": True,
+            }
         policy_execution_allowed = (
             self.premouth_policy == "camera-ray" and allow_validated_camera_ray_execute
         ) or (
@@ -1572,6 +1563,8 @@ class RealPreMouthFromPerceptionPlan(Node):
         prepared["pre_execution_robot_mode_running"] = bool(
             self.latest_robot_mode is not None and self.latest_robot_mode.mode == RobotMode.RUNNING
         )
+        perception_state = self.target_tracker.current_state(max_age_sec=MAX_MOUTH_POSE_AGE_SEC)
+        prepared["pre_execution_perception_state"] = perception_state
         late_guards: list[str] = []
         if start_drift > 0.01:
             late_guards.append(f"tool0 moved {start_drift:.4f} m after planning")
@@ -1588,6 +1581,62 @@ class RealPreMouthFromPerceptionPlan(Node):
             late_guards.append("UR safety mode is no longer NORMAL")
         if self.latest_robot_mode is None or self.latest_robot_mode.mode != RobotMode.RUNNING:
             late_guards.append("UR robot mode is no longer RUNNING")
+        if not perception_state.get("available"):
+            late_guards.append(
+                "selected mouth target is unavailable immediately before execution: "
+                f"{perception_state.get('reason', 'unknown perception failure')}"
+            )
+        else:
+            frozen_target = _finite_xyz(
+                prepared.get("frozen_detected_mouth_pose", {}).get("position_m")
+                if isinstance(prepared.get("frozen_detected_mouth_pose"), dict)
+                else None
+            )
+            current_target = _finite_xyz(perception_state.get("selected_position_m"))
+            if frozen_target is None or current_target is None:
+                late_guards.append("selected mouth target coordinates are invalid immediately before execution")
+            else:
+                target_drift = _norm(_subtract(current_target, frozen_target))
+                prepared["pre_execution_target_drift_m"] = target_drift
+                if target_drift > MAX_PRE_EXECUTION_TARGET_DRIFT_M:
+                    late_guards.append(
+                        f"selected mouth target moved {target_drift:.4f} m after planning, above the "
+                        f"{MAX_PRE_EXECUTION_TARGET_DRIFT_M:.4f} m limit"
+                    )
+
+            frozen_candidates = prepared.get("checks", {}).get(
+                "planning_scene_obstacles", {}
+            ).get("frozen_candidate_positions_m")
+            current_candidates = perception_state.get("visible_candidates")
+            if not isinstance(frozen_candidates, list) or not isinstance(current_candidates, list):
+                late_guards.append("multi-person obstacle coordinates are unavailable immediately before execution")
+            elif len(frozen_candidates) != len(current_candidates):
+                late_guards.append(
+                    "visible person count changed after planning "
+                    f"({len(frozen_candidates)} to {len(current_candidates)})"
+                )
+            else:
+                frozen_positions = [_finite_xyz(position) for position in frozen_candidates]
+                current_positions = [
+                    _finite_xyz(candidate.get("position_m")) if isinstance(candidate, dict) else None
+                    for candidate in current_candidates
+                ]
+                if any(position is None for position in frozen_positions + current_positions):
+                    late_guards.append("multi-person obstacle coordinates are invalid immediately before execution")
+                else:
+                    obstacle_drifts = [
+                        _norm(_subtract(current, frozen))
+                        for current, frozen in zip(current_positions, frozen_positions)
+                    ]
+                    maximum_obstacle_drift = max(obstacle_drifts, default=0.0)
+                    prepared["pre_execution_obstacle_drifts_m"] = obstacle_drifts
+                    prepared["pre_execution_maximum_obstacle_drift_m"] = maximum_obstacle_drift
+                    if maximum_obstacle_drift > MAX_PRE_EXECUTION_OBSTACLE_DRIFT_M:
+                        late_guards.append(
+                            "a visible person's collision geometry moved "
+                            f"{maximum_obstacle_drift:.4f} m after planning, above the "
+                            f"{MAX_PRE_EXECUTION_OBSTACLE_DRIFT_M:.4f} m limit"
+                        )
         if late_guards:
             prepared.update(
                 {
@@ -1665,6 +1714,15 @@ def _parse_args() -> argparse.Namespace:
         type=float,
         default=DEFAULT_SAFE_DISTANCE_M,
         help="Pre-mouth stand-off distance in metres (default: 0.080).",
+    )
+    parser.add_argument(
+        "--target-selection",
+        choices=("left", "center", "right"),
+        default="center",
+        help=(
+            "Select the initially left, center, or right visible mouth and retain that 3D identity. "
+            "Guarded real execution remains center-only."
+        ),
     )
     parser.add_argument(
         "--maximum-plan-translation",
@@ -1815,6 +1873,7 @@ def main() -> int:
         maximum_plan_translation_m=args.maximum_plan_translation,
         feeding_vector=(args.feeding_vector_x, args.feeding_vector_y, args.feeding_vector_z),
         feeding_vector_sign=args.feeding_vector_sign,
+        target_selection=args.target_selection,
         mouth_sample_seconds=args.mouth_sample_seconds,
         trajectory_velocity_scaling=args.trajectory_velocity_scaling,
         trajectory_acceleration_scaling=args.trajectory_acceleration_scaling,
@@ -1829,6 +1888,7 @@ def main() -> int:
                 "success": not failures,
                 "mode": "check",
                 "premouth_policy": args.premouth_policy,
+                "target_selection": args.target_selection,
                 "safe_distance_m": args.safe_distance,
                 "feeding_vector_input": [args.feeding_vector_x, args.feeding_vector_y, args.feeding_vector_z],
                 "feeding_vector_normalized": _normalize_feeding_vector(

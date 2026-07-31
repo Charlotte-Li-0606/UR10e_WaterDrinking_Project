@@ -54,7 +54,12 @@ def _write_report(path: Path, report: Mapping[str, Any]) -> None:
     path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _pipeline_command(*, execute: bool, report_path: Path) -> list[str]:
+def _pipeline_command(
+    *,
+    execute: bool,
+    report_path: Path,
+    target_selection: str,
+) -> list[str]:
     command = [
         sys.executable,
         str(REAL_PREMOUTH_SCRIPT),
@@ -62,6 +67,8 @@ def _pipeline_command(*, execute: bool, report_path: Path) -> list[str]:
         "execute" if execute else "plan",
         "--premouth-policy",
         "camera-ray",
+        "--target-selection",
+        target_selection,
         "--safe-distance",
         str(SAFE_DISTANCE_M),
         "--maximum-plan-translation",
@@ -291,7 +298,11 @@ def run_real_feed_water(
     started = time.monotonic()
     try:
         completed = subprocess.run(
-            _pipeline_command(execute=execute, report_path=pipeline_report_path),
+            _pipeline_command(
+                execute=execute,
+                report_path=pipeline_report_path,
+                target_selection=target_selection,
+            ),
             cwd=PROJECT_ROOT,
             env=child_environment,
             text=True,
