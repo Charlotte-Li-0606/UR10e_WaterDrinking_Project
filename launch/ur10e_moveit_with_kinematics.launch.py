@@ -71,6 +71,11 @@ def declare_arguments():
             ),
             DeclareLaunchArgument("launch_servo", default_value="false", description="Launch Servo?"),
             DeclareLaunchArgument(
+                "allow_trajectory_execution",
+                default_value="true",
+                description="Allow move_group to execute trajectories as well as plan them.",
+            ),
+            DeclareLaunchArgument(
                 "use_sim_time",
                 default_value="true",
                 description="Using or not time from simulation",
@@ -107,6 +112,9 @@ def _launch_setup(context):
     ur_type = LaunchConfiguration("ur_type")
     warehouse_sqlite_path = LaunchConfiguration("warehouse_sqlite_path")
     launch_servo = LaunchConfiguration("launch_servo")
+    allow_trajectory_execution = _as_bool(
+        LaunchConfiguration("allow_trajectory_execution").perform(context)
+    )
     use_sim_time = LaunchConfiguration("use_sim_time")
     publish_robot_description_semantic = LaunchConfiguration("publish_robot_description_semantic")
     use_octomap = _as_bool(LaunchConfiguration("use_octomap").perform(context))
@@ -186,6 +194,7 @@ def _launch_setup(context):
             {
                 "use_sim_time": use_sim_time,
                 "publish_robot_description_semantic": publish_robot_description_semantic,
+                "allow_trajectory_execution": allow_trajectory_execution,
             },
         ],
     )

@@ -42,6 +42,14 @@ pose, or gripper commands.
 - `move_straw_tip_to_pre_mouth(execute=False)` — applies MoveIt human
   keepouts, preflights the existing SDK primitive, and only executes when
   `execute=True`.
+- `move_straw_tip_to_pre_mouth_with_dynamic_avoidance(execute=False)` — an
+  independent, non-agent-exposed simulation capability that freezes the selected
+  pre-mouth coordinate and flange orientation, then uses the existing
+  MoveGroup server with `ompl/RRTConnect`, OctoMap path monitoring, and three
+  immediate same-target replan attempts. It never waits for an obstacle to
+  clear: if no alternate route exists, the result fails and motion remains
+  stopped. The real backend is hard-blocked and uses the separate calibrated,
+  execution-disabled `scripts/real_dynamic_obstacle_avoidance_plan.py` instead.
 - `retreat_to_ready(execute=False)` — the equivalent predefined ready retreat.
 - `adjust_cup_vertical(delta_z, execute=False)` — keeps the rigid control
   point's base-frame X/Y and current flange-down orientation fixed, then plans
@@ -72,6 +80,7 @@ python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --select-target 
 python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --search-mouth --search-timeout 15
 python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --plan-pre-mouth
 python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --move-pre-mouth
+python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --dynamic-avoidance
 python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --adjust-cup-vertical 0.01
 ```
 
@@ -83,6 +92,12 @@ python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --move-pre-mouth
 python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --adjust-cup-vertical 0.01 --execute
 python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py --search-mouth --search-timeout 15 --execute
 ```
+
+The dynamic-avoidance command requires `USE_OCTOMAP=true` and a fresh
+`/wrist_rgbd/points` stream even in dry-run mode. Its bounded simulation
+execution and obstacle-injection proof are documented in
+`docs/octomap_mvp.md`; it is deliberately not added to the LLM/agent tool
+dispatcher or the proven real `feed_water` path.
 
 ## Deterministic PlanningScene obstacles
 

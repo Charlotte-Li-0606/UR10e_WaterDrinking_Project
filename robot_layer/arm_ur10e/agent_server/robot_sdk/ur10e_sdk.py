@@ -57,7 +57,7 @@ from rclpy.action import ActionClient
 from rclpy.duration import Duration as RclpyDuration
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
-from sensor_msgs.msg import CameraInfo, Image, JointState
+from sensor_msgs.msg import CameraInfo, Image, JointState, PointCloud2
 from shape_msgs.msg import SolidPrimitive
 import tf2_ros
 
@@ -82,6 +82,8 @@ _PROJECT_CONFIG = _PROJECT_ROOT / "config" / "ur10e_sdk_config.yaml"
 # backend policy.  The package-local file remains only as a compatibility
 # fallback for out-of-tree users of this SDK.
 _DEFAULT_CONFIG = str(_PROJECT_CONFIG if _PROJECT_CONFIG.is_file() else Path(_ROBOT_SDK_DIR) / "config.yaml")
+DYNAMIC_FILTERED_CLOUD_TOPIC = "/wrist_rgbd/filtered_cloud"
+DYNAMIC_FILTERED_CLOUD_STALE_SEC = 0.75
 
 
 def _load_config() -> dict:
@@ -138,6 +140,7 @@ class _UR10eRosNode(Node):
         self.latest_rgb_image: Optional[Image] = None
         self.latest_depth_image: Optional[Image] = None
         self.latest_camera_info: Optional[CameraInfo] = None
+        self.latest_filtered_obstacle_cloud_monotonic: Optional[float] = None
         self.create_subscription(
             JointState,
             self.joint_state_topic,
@@ -152,6 +155,12 @@ class _UR10eRosNode(Node):
             CameraInfo,
             self.camera_info_topic,
             self._camera_info_cb,
+            qos_profile_sensor_data,
+        )
+        self.create_subscription(
+            PointCloud2,
+            DYNAMIC_FILTERED_CLOUD_TOPIC,
+            self._filtered_obstacle_cloud_cb,
             qos_profile_sensor_data,
         )
 
@@ -184,6 +193,9 @@ class _UR10eRosNode(Node):
 
     def _camera_info_cb(self, msg: CameraInfo):
         self.latest_camera_info = msg
+
+    def _filtered_obstacle_cloud_cb(self, _msg: PointCloud2):
+        self.latest_filtered_obstacle_cloud_monotonic = time.monotonic()
 
 
 class UR10eRobotEnv:
@@ -495,9 +507,15 @@ class UR10eRobotEnv:
         enforce_path_orientation: bool = False,
         planning_pipeline: Optional[str] = None,
         planner_id: Optional[str] = None,
+        dynamic_obstacle_replanning: bool = False,
     ) -> Dict[str, object]:
         if not self.node.move_group_client.wait_for_server(timeout_sec=10.0):
             raise RuntimeError("/move_action is not available. Start MoveIt move_group first.")
+        if dynamic_obstacle_replanning and self.backend.is_real and not plan_only:
+            raise RuntimeError(
+                "dynamic obstacle replanning is simulation/plan-only until its staged "
+                "real-robot validation is complete"
+            )
         if not plan_only:
             self._ensure_execution_ready()
         try:
@@ -506,15 +524,21 @@ class UR10eRobotEnv:
             raise ValueError("orientation_tolerance_rad must be a finite value in (0, 0.05]") from exc
         if not math.isfinite(orientation_tolerance) or not 0.0 < orientation_tolerance <= 0.05:
             raise ValueError("orientation_tolerance_rad must be a finite value in (0, 0.05]")
+        if dynamic_obstacle_replanning:
+            planning_pipeline = "ompl"
+            planner_id = "RRTConnectkConfigDefault"
+            enforce_path_orientation = True
         if (planning_pipeline, planner_id) not in {
             (None, None),
             ("pilz_industrial_motion_planner", "LIN"),
+            ("ompl", "RRTConnectkConfigDefault"),
         }:
             raise ValueError(
-                "only the reviewed Pilz LIN planner may be selected explicitly "
-                "for a real UR10e pose goal"
+                "explicit planner selection is limited to reviewed Pilz LIN or "
+                "the bounded OMPL dynamic-obstacle profile"
             )
-
+        if planning_pipeline == "ompl" and not dynamic_obstacle_replanning:
+            raise ValueError("the explicit OMPL profile is reserved for dynamic obstacle replanning")
         if self.node.latest_joint_state is None:
             self._spin_until_joint_state(timeout=2.0)
 
@@ -570,9 +594,24 @@ class UR10eRobotEnv:
         goal.planning_options.look_around = False
         goal.planning_options.replan = True
         goal.planning_options.replan_attempts = 3
-        goal.planning_options.replan_delay = 0.2
+        # The dynamic profile never waits for the obstacle to disappear.  A
+        # PlanningScene invalidation causes an immediate bounded OMPL attempt
+        # from the stopped state to this same immutable goal constraint.  If
+        # no alternative exists, MoveGroup returns failure and remains
+        # stopped.  Preserve the older 0.2 s delay for all existing callers.
+        goal.planning_options.replan_delay = 0.0 if dynamic_obstacle_replanning else 0.2
 
-        send_future = self.node.move_group_client.send_goal_async(goal)
+        feedback_states: list[str] = []
+
+        def record_feedback(feedback_message) -> None:
+            state = str(feedback_message.feedback.state)
+            if not feedback_states or feedback_states[-1] != state:
+                feedback_states.append(state)
+
+        send_future = self.node.move_group_client.send_goal_async(
+            goal,
+            feedback_callback=record_feedback,
+        )
         rclpy.spin_until_future_complete(self.node, send_future, timeout_sec=5.0)
         handle = send_future.result()
         if handle is None or not handle.accepted:
@@ -580,11 +619,61 @@ class UR10eRobotEnv:
 
         result_future = handle.get_result_async()
         timeout = max(30.0, (duration or self.default_duration) + 25.0)
-        rclpy.spin_until_future_complete(self.node, result_future, timeout_sec=timeout)
+        if dynamic_obstacle_replanning and not plan_only:
+            deadline = time.monotonic() + timeout
+            watchdog_started = time.monotonic()
+            while not result_future.done() and time.monotonic() < deadline:
+                rclpy.spin_once(self.node, timeout_sec=0.05)
+                latest_cloud = self.node.latest_filtered_obstacle_cloud_monotonic
+                cloud_is_stale = (
+                    latest_cloud is None
+                    and time.monotonic() - watchdog_started > DYNAMIC_FILTERED_CLOUD_STALE_SEC
+                ) or (
+                    latest_cloud is not None
+                    and time.monotonic() - latest_cloud > DYNAMIC_FILTERED_CLOUD_STALE_SEC
+                )
+                if cloud_is_stale:
+                    cancel_future = handle.cancel_goal_async()
+                    rclpy.spin_until_future_complete(self.node, cancel_future, timeout_sec=5.0)
+                    return {
+                        "success": False,
+                        "stage": "dynamic_obstacle_cloud_watchdog",
+                        "reason": (
+                            "MoveIt-filtered PointCloud2 became stale during motion; "
+                            "the MoveGroup goal was cancelled"
+                        ),
+                        "planning_pipeline": "ompl",
+                        "planner_id": "RRTConnectkConfigDefault",
+                        "dynamic_obstacle_replanning": True,
+                        "replan_enabled": True,
+                        "replan_attempts": 3,
+                        "replan_delay_sec": 0.0,
+                        "move_group_feedback_states": feedback_states,
+                        "replanning_observed": sum(
+                            state.upper() == "PLANNING" for state in feedback_states
+                        )
+                        > 1,
+                        "execution_cancel_requested": True,
+                    }
+        else:
+            rclpy.spin_until_future_complete(self.node, result_future, timeout_sec=timeout)
         if result_future.result() is None:
+            if dynamic_obstacle_replanning and not plan_only:
+                cancel_future = handle.cancel_goal_async()
+                rclpy.spin_until_future_complete(self.node, cancel_future, timeout_sec=5.0)
+                return {
+                    "success": False,
+                    "stage": "dynamic_obstacle_execution_timeout",
+                    "reason": "MoveGroup dynamic execution timed out; cancel requested",
+                    "planning_pipeline": "ompl",
+                    "planner_id": "RRTConnectkConfigDefault",
+                    "dynamic_obstacle_replanning": True,
+                    "execution_cancel_requested": True,
+                }
             raise RuntimeError("MoveGroup planning/execution timed out")
         result = result_future.result().result
         points = len(result.planned_trajectory.joint_trajectory.points)
+        planning_state_entries = sum(state.upper() == "PLANNING" for state in feedback_states)
         return {
             "success": result.error_code.val == 1,
             "stage": "move_group_plan_execute" if not plan_only else "move_group_plan_only",
@@ -593,6 +682,18 @@ class UR10eRobotEnv:
             "planning_time": result.planning_time,
             "planning_pipeline": planning_pipeline or "default",
             "planner_id": planner_id or "default",
+            "dynamic_obstacle_replanning": bool(dynamic_obstacle_replanning),
+            "replan_enabled": True,
+            "replan_attempts": 3,
+            "replan_delay_sec": 0.0 if dynamic_obstacle_replanning else 0.2,
+            "move_group_feedback_states": feedback_states,
+            "replanning_observed": planning_state_entries > 1,
+            "target_policy": (
+                "same immutable pose/orientation goal; stop and immediately seek an "
+                "alternate collision-free route"
+                if dynamic_obstacle_replanning
+                else "existing MoveGroup pose policy"
+            ),
         }
 
     def _retime_trajectory(self, robot_trajectory, duration: float):
@@ -991,6 +1092,7 @@ class UR10eRobotEnv:
         duration: Optional[float] = None,
         plan_only: bool = False,
         planning_mode: str = "move_group",
+        dynamic_obstacle_replanning: bool = False,
     ) -> Dict[str, object]:
         """Move the flange-mounted straw tip to a target while keeping flange down."""
         plan = self.plan_straw_tip_to_pose(
@@ -1003,11 +1105,16 @@ class UR10eRobotEnv:
             # The real backend has no direct controller/joint command path;
             # retain the same constrained target but let MoveIt execute it.
             planning_mode = "move_group"
+        if dynamic_obstacle_replanning and planning_mode != "move_group":
+            raise ValueError("dynamic obstacle replanning requires MoveGroup plan-and-execute")
         if planning_mode == "move_group":
             move_result = self._move_group_to_pose(
                 self._convert_endpose(plan["tool0_target_endpose"]),
                 duration=duration,
                 plan_only=plan_only,
+                orientation_tolerance_rad=0.01 if dynamic_obstacle_replanning else 0.05,
+                enforce_path_orientation=dynamic_obstacle_replanning,
+                dynamic_obstacle_replanning=dynamic_obstacle_replanning,
             )
             planner_name = "moveit_move_group"
         elif planning_mode == "cartesian":
@@ -1046,6 +1153,7 @@ class UR10eRobotEnv:
         duration: Optional[float] = None,
         plan_only: bool = False,
         planning_mode: str = "move_group",
+        dynamic_obstacle_replanning: bool = False,
     ) -> Dict[str, object]:
         """Move the flange-mounted straw tip to the pre-mouth target.
 
@@ -1063,6 +1171,7 @@ class UR10eRobotEnv:
             duration=duration,
             plan_only=plan_only,
             planning_mode=planning_mode,
+            dynamic_obstacle_replanning=dynamic_obstacle_replanning,
         )
         result["plan"]["pre_mouth_safe_position"] = result["plan"]["target_straw_tip_position"]
         return result

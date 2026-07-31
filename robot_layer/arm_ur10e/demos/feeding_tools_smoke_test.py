@@ -48,6 +48,14 @@ def _parse_args() -> argparse.Namespace:
     )
     actions.add_argument("--plan-pre-mouth", action="store_true", help="Validate and plan the detected pre-mouth target.")
     actions.add_argument("--move-pre-mouth", action="store_true", help="Preflight the detected pre-mouth target; --execute sends it.")
+    actions.add_argument(
+        "--dynamic-avoidance",
+        action="store_true",
+        help=(
+            "Use the independent same-target OMPL/OctoMap replanning function. "
+            "Plan-only by default; --execute is simulation-only."
+        ),
+    )
     actions.add_argument("--retreat", action="store_true", help="Preflight the configured ready retreat; --execute sends it.")
     actions.add_argument(
         "--adjust-cup-vertical",
@@ -83,9 +91,20 @@ def _parse_args() -> argparse.Namespace:
         or args.active_target_state
         or args.select_target is not None
         or args.plan_pre_mouth
-        or not any((args.search_mouth, args.move_pre_mouth, args.retreat, args.adjust_cup_vertical is not None))
+        or not any(
+            (
+                args.search_mouth,
+                args.move_pre_mouth,
+                args.dynamic_avoidance,
+                args.retreat,
+                args.adjust_cup_vertical is not None,
+            )
+        )
     ):
-        parser.error("--execute is valid only with --search-mouth, --move-pre-mouth, --retreat, or --adjust-cup-vertical")
+        parser.error(
+            "--execute is valid only with --search-mouth, --move-pre-mouth, "
+            "--dynamic-avoidance (simulation only), --retreat, or --adjust-cup-vertical"
+        )
     if not any(
         (
             args.observe,
@@ -94,6 +113,7 @@ def _parse_args() -> argparse.Namespace:
             args.search_mouth,
             args.plan_pre_mouth,
             args.move_pre_mouth,
+            args.dynamic_avoidance,
             args.retreat,
             args.adjust_cup_vertical is not None,
         )
@@ -139,6 +159,22 @@ def main() -> int:
                 tools.move_straw_tip_to_pre_mouth(mouth["mouth_pose"], execute=args.execute)
                 if mouth.get("success")
                 else {"success": False, "tool": "move_straw_tip_to_pre_mouth", "reason": mouth.get("reason"), "mouth": mouth}
+            )
+        elif args.dynamic_avoidance:
+            mouth = tools.wait_for_stable_mouth_pose(timeout_sec=args.wait_timeout_sec)
+            result = (
+                tools.move_straw_tip_to_pre_mouth_with_dynamic_avoidance(
+                    mouth["mouth_pose"],
+                    execute=args.execute,
+                )
+                if mouth.get("success")
+                else {
+                    "success": False,
+                    "tool": "dynamic_obstacle_avoidance",
+                    "reason": mouth.get("reason"),
+                    "mouth": mouth,
+                    "execution_sent": False,
+                }
             )
         elif args.adjust_cup_vertical is not None:
             result = tools.adjust_cup_vertical(args.adjust_cup_vertical, execute=args.execute)

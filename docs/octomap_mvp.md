@@ -39,6 +39,19 @@ and `/wrist_rgbd/camera_info` to `/wrist_rgbd/points`.  Its defaults are
 stride 4 and a valid-depth range of 0.15--2.50 m.  Run it with `--help` for
 topic, frame, stride, and range overrides.
 
+For the physical D435i, use the separate no-motion wrapper:
+
+```bash
+scripts/run_real_depth_to_pointcloud.sh
+```
+
+It reads the aligned real depth and color camera-info topics but publishes the
+same `/wrist_rgbd/points` interface. Its conservative defaults are stride 4,
+5 Hz, and 0.20--2.00 m. The 20 cm lower bound intentionally rejects the
+camera/tool near field; a 10 mm trigger is not feasible with the D435i, the
+3 cm occupancy voxels, or this point-cloud update rate. This wrapper starts no
+MoveIt node and sends no robot or controller command.
+
 ## MoveIt configuration and verification
 
 `config/sensors_3d.yaml` selects
@@ -145,6 +158,72 @@ the previously successful pre-mouth request was safely rejected after the
 OctoMap update.  This demonstrates an occupancy-planning effect, not a
 safety-certified collision layer.
 
+## Same-target dynamic replanning
+
+`FeedingSkillLibrary.move_straw_tip_to_pre_mouth_with_dynamic_avoidance()` is
+the independent simulation active-avoidance function. The real backend is
+hard-blocked there and uses
+`scripts/real_dynamic_obstacle_avoidance_plan.py`, which reuses the calibrated
+real camera-ray target, reach, identity, and PlanningScene guards and has no
+execution mode. Neither path uses MoveIt Hybrid Planning or replaces the
+current MoveIt launch structure. The simulation function sends a normal
+MoveGroup plan-and-execute request with:
+
+- one frozen pre-mouth coordinate and final flange-down orientation;
+- `ompl/RRTConnectkConfigDefault`, so a non-linear detour is possible;
+- the existing deterministic human collision objects plus the OctoMap;
+- MoveGroup path monitoring and exactly three replan attempts;
+- zero replan delay, so it never enters a wait-until-clear mode.
+
+When an occupancy update invalidates the remaining trajectory, MoveGroup
+stops execution and immediately replans from the stopped state to the same
+goal constraints. If no route exists, the action fails and remains stopped.
+The target is not recomputed from newer mouth perception during that action.
+
+Plan it without motion:
+
+```bash
+python3 robot_layer/arm_ur10e/demos/feeding_tools_smoke_test.py \
+  --dynamic-avoidance --use-planning-scene
+```
+
+The command fails closed unless `/move_group` reports the OctoMap updater and
+both a non-empty `/wrist_rgbd/points` input and MoveIt's non-empty
+`/wrist_rgbd/filtered_cloud` output have arrived within 0.75 seconds. Requiring
+the filtered stream prevents a live camera with a broken TF/updater path from
+being mistaken for a working occupancy map.
+
+Real execution of this new function is hard-blocked in both the high-level
+library and the SDK. The existing guarded real `feed_water` path is unchanged.
+The next promotion gate is real D435i point-cloud/OctoMap plan-only validation,
+including cup/straw/camera self-filtering; only after repeatable results should
+runtime real execution be considered separately.
+
+For that no-motion promotion gate, use the dedicated MoveIt launcher after
+stopping the ordinary real MoveIt instance. It sets MoveGroup's
+`allow_trajectory_execution` parameter to false:
+
+```bash
+# Terminal 1: D435i driver and the calibrated real perception/TF process run
+# as usual. Terminal 2 publishes only the bounded cloud:
+scripts/run_real_depth_to_pointcloud.sh
+
+# Terminal 3: plan-only MoveIt with the OctoMap updater:
+scripts/start_ur10e_real_moveit_octomap_plan_only.sh
+
+# Terminal 4: the independent dynamic profile; no --execute flag:
+UR10E_BACKEND=real python3 \
+  scripts/real_dynamic_obstacle_avoidance_plan.py
+```
+
+The result must report `execution_sent: false`, a fresh cloud, the verified
+OctoMap parameters, the frozen target, and a successful OMPL plan. Do not use
+this setup for real motion. Repeated plan-only trials with the cup/straw fully
+installed must first show no self-occupied voxels blocking the start state.
+The real plan keeps the final orientation at the proven 0.001 rad tolerance
+and permits at most 0.05 rad (2.86 degrees) per orientation-error axis along a
+detour; this is a bounded planner tolerance, not a camera-search rotation.
+
 ## Constrained pre-mouth standoff range
 
 The original fixed 8 cm policy is recorded in
@@ -175,6 +254,13 @@ filtering has been added.  Depth noise or self-points can therefore make a
 plan conservative or fail.  The converter only applies depth-range and stride
 filtering.
 
+The wrist camera also has occlusion and field-of-view blind spots. OctoMap is
+therefore a planning input, not a protective safety sensor. The UR safety
+system, conservative speed, and operator stop remain necessary. Reliable
+real deployment will require a calibrated cup/straw/camera exclusion model or
+mask and should ideally add a fixed external depth view for coverage behind
+the wrist camera.
+
 To return to the proven deterministic collision-object setup, restart without
 the flag:
 
@@ -182,5 +268,7 @@ the flag:
 USE_OCTOMAP=false scripts/start_ur10e_feeding_sim.sh
 ```
 
-No controller, SDK, gripper, Gazebo human model, or point-cloud occupancy
-implementation outside MoveIt's experimental OctoMap monitor is changed.
+No controller, gripper, Gazebo human model, or point-cloud occupancy
+implementation outside MoveIt's experimental OctoMap monitor is changed. The
+SDK addition is limited to constructing the guarded OMPL MoveGroup request and
+reporting feedback; it does not publish raw controller trajectories.

@@ -28,8 +28,9 @@ from geometry_msgs.msg import PoseStamped, TransformStamped
 from rcl_interfaces.srv import GetParameters
 from rclpy.duration import Duration
 from rclpy.node import Node
-from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
+from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from rclpy.time import Time
+from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import String
 from tf2_ros import Buffer, TransformListener
 
@@ -411,6 +412,15 @@ class FeedingSafetyConfig:
     search_observation_wait_sec: float = 0.20
     search_status_stale_sec: float = 1.0
     search_stability_reserve_sec: float = 1.25
+    # Dynamic obstacle replanning is a separate opt-in capability.  It uses
+    # MoveGroup's standard plan-execute monitor with OMPL; no Hybrid Planning
+    # nodes or replacement MoveIt structure are required.
+    dynamic_obstacle_cloud_topic: str = "/wrist_rgbd/points"
+    dynamic_obstacle_filtered_cloud_topic: str = "/wrist_rgbd/filtered_cloud"
+    dynamic_obstacle_cloud_stale_sec: float = 0.75
+    dynamic_obstacle_replan_attempts: int = 3
+    dynamic_obstacle_replan_delay_sec: float = 0.0
+    dynamic_obstacle_final_tolerance_m: float = 0.02
     # Deterministic MoveIt world objects are independent of Gazebo visuals.
     # They are refreshed from the selected mouth pose before motion preflight.
     use_planning_scene: bool = True
@@ -472,6 +482,10 @@ class FeedingSkillLibrary:
         self._last_candidates_received_monotonic = float("-inf")
         self._latest_mouth_status: dict[str, Any] | None = None
         self._latest_mouth_status_received_monotonic = float("-inf")
+        self._latest_obstacle_cloud_received_monotonic = float("-inf")
+        self._latest_obstacle_cloud: dict[str, Any] | None = None
+        self._latest_filtered_obstacle_cloud_received_monotonic = float("-inf")
+        self._latest_filtered_obstacle_cloud: dict[str, Any] | None = None
         self._search_fallback: dict[str, Any] | None = None
         self._mouth_sub = self._node.create_subscription(
             PoseStamped, self.config.mouth_topic, self._mouth_callback, qos
@@ -487,6 +501,18 @@ class FeedingSkillLibrary:
             self.config.mouth_status_topic,
             self._mouth_status_callback,
             qos,
+        )
+        self._obstacle_cloud_sub = self._node.create_subscription(
+            PointCloud2,
+            self.config.dynamic_obstacle_cloud_topic,
+            self._obstacle_cloud_callback,
+            qos_profile_sensor_data,
+        )
+        self._filtered_obstacle_cloud_sub = self._node.create_subscription(
+            PointCloud2,
+            self.config.dynamic_obstacle_filtered_cloud_topic,
+            self._filtered_obstacle_cloud_callback,
+            qos_profile_sensor_data,
         )
         self._tf_buffer = Buffer()
         # The public wait methods spin this node, avoiding a hidden executor.
@@ -536,6 +562,8 @@ class FeedingSkillLibrary:
             config.search_observation_wait_sec,
             config.search_status_stale_sec,
             config.search_stability_reserve_sec,
+            config.dynamic_obstacle_cloud_stale_sec,
+            config.dynamic_obstacle_final_tolerance_m,
         ) <= 0.0:
             raise ValueError("target queue and search limits must be positive")
         if not 0.0 < config.search_back_x_step_m <= 0.03 or max(
@@ -546,6 +574,14 @@ class FeedingSkillLibrary:
             raise ValueError("search_max_time_sec must be at most 30 seconds and search_max_steps positive")
         if config.search_stability_reserve_sec >= config.search_max_time_sec:
             raise ValueError("search_stability_reserve_sec must be below search_max_time_sec")
+        if config.dynamic_obstacle_replan_attempts != 3:
+            raise ValueError("dynamic obstacle replanning is fixed to three bounded attempts")
+        if config.dynamic_obstacle_replan_delay_sec != 0.0:
+            raise ValueError("dynamic obstacle replanning must not wait for obstacle clearance")
+        if not config.dynamic_obstacle_cloud_topic.startswith("/") or not (
+            config.dynamic_obstacle_filtered_cloud_topic.startswith("/")
+        ):
+            raise ValueError("dynamic obstacle cloud topics must be absolute ROS topics")
         if config.max_abs_delta_z_per_call_m <= 0.0:
             raise ValueError("max_abs_delta_z_per_call_m must be positive")
         axis = np.asarray(config.pre_mouth_approach_axis, dtype=np.float64)
@@ -753,6 +789,74 @@ class FeedingSkillLibrary:
             return
         self._latest_mouth_status = _jsonable(payload)
         self._latest_mouth_status_received_monotonic = time.monotonic()
+
+    def _obstacle_cloud_callback(self, message: PointCloud2) -> None:
+        """Retain only compact freshness metadata, never the cloud payload."""
+        self._latest_obstacle_cloud_received_monotonic = time.monotonic()
+        self._latest_obstacle_cloud = {
+            "frame_id": str(message.header.frame_id),
+            "height": int(message.height),
+            "point_count": int(message.width) * int(message.height),
+            "width": int(message.width),
+        }
+
+    def _filtered_obstacle_cloud_callback(self, message: PointCloud2) -> None:
+        """Record proof that MoveIt's occupancy updater processed the input."""
+        self._latest_filtered_obstacle_cloud_received_monotonic = time.monotonic()
+        self._latest_filtered_obstacle_cloud = {
+            "frame_id": str(message.header.frame_id),
+            "height": int(message.height),
+            "point_count": int(message.width) * int(message.height),
+            "width": int(message.width),
+        }
+
+    def _dynamic_obstacle_cloud_status(self) -> dict[str, Any]:
+        """Return whether the occupancy input is current enough for motion."""
+        now = time.monotonic()
+        received = getattr(self, "_latest_obstacle_cloud_received_monotonic", float("-inf"))
+        filtered_received = getattr(
+            self,
+            "_latest_filtered_obstacle_cloud_received_monotonic",
+            float("-inf"),
+        )
+        metadata = getattr(self, "_latest_obstacle_cloud", None)
+        filtered_metadata = getattr(self, "_latest_filtered_obstacle_cloud", None)
+        age = now - received
+        filtered_age = now - filtered_received
+        input_fresh = bool(
+            metadata is not None
+            and metadata.get("frame_id")
+            and int(metadata.get("point_count", 0)) > 0
+            and age <= self.config.dynamic_obstacle_cloud_stale_sec
+        )
+        filtered_fresh = bool(
+            filtered_metadata is not None
+            and filtered_metadata.get("frame_id")
+            and int(filtered_metadata.get("point_count", 0)) > 0
+            and filtered_age <= self.config.dynamic_obstacle_cloud_stale_sec
+        )
+        fresh = input_fresh and filtered_fresh
+        return {
+            "active": fresh,
+            "maximum_age_sec": self.config.dynamic_obstacle_cloud_stale_sec,
+            "input": {
+                "active": input_fresh,
+                "age_sec": None if metadata is None else round(max(0.0, age), 6),
+                "topic": self.config.dynamic_obstacle_cloud_topic,
+                "metadata": metadata,
+            },
+            "filtered": {
+                "active": filtered_fresh,
+                "age_sec": None if filtered_metadata is None else round(max(0.0, filtered_age), 6),
+                "topic": self.config.dynamic_obstacle_filtered_cloud_topic,
+                "metadata": filtered_metadata,
+            },
+            "reason": (
+                None
+                if fresh
+                else "raw and MoveIt-filtered non-empty PointCloud2 streams must both be fresh"
+            ),
+        }
 
     def _fresh_mouth_status(self) -> dict[str, Any] | None:
         """Return a current detector status, or None when none is available."""
@@ -1451,6 +1555,204 @@ class FeedingSkillLibrary:
         else:
             stage = "pre_mouth_blocked"
         return self._remember_safe_tool_result(stage, result)
+
+    def move_straw_tip_to_pre_mouth_with_dynamic_avoidance(
+        self,
+        mouth_pose: Mapping[str, Any] | None = None,
+        *,
+        execute: bool = False,
+    ) -> dict[str, Any]:
+        """Keep one frozen pre-mouth target while MoveGroup reroutes around obstacles.
+
+        This is intentionally independent of the agent/LLM tool surface.  It
+        uses the existing MoveGroup server with OMPL, strict flange
+        orientation, PlanningScene monitoring, three immediate replan
+        attempts, and no wait-for-clear state.  Real execution stays blocked
+        until the simulation and staged plan-only validation documented for
+        this feature have been completed.
+        """
+        tool = "dynamic_obstacle_avoidance"
+        backend = self._env.backend.status()
+        if self._env.backend.is_real:
+            return self._failure(
+                tool,
+                (
+                    "this reusable helper uses simulation workspace geometry; use the independent "
+                    "real_dynamic_obstacle_avoidance_plan.py for calibrated real plan-only validation"
+                ),
+                execute=execute,
+                execution_sent=False,
+                real_execution_blocked=True,
+                backend=backend,
+            )
+
+        octomap = self._octomap_status()
+        cloud = self._dynamic_obstacle_cloud_status()
+        if not octomap.get("verified") or not octomap.get("enabled") or not cloud.get("active"):
+            return self._failure(
+                tool,
+                "a verified MoveIt OctoMap and fresh wrist PointCloud2 are required",
+                execute=execute,
+                execution_sent=False,
+                octomap=octomap,
+                obstacle_cloud=cloud,
+                backend=backend,
+            )
+
+        # Reuse the established pre-mouth policy to select a collision-free
+        # standoff, then freeze that exact coordinate.  Every later plan and
+        # replan receives this same immutable pose goal; perception changes do
+        # not move the destination during the action.
+        baseline = self._move_straw_tip_to_pre_mouth_impl(mouth_pose, execute=False)
+        if not baseline.get("success"):
+            return self._failure(
+                tool,
+                str(baseline.get("reason") or "the standard pre-mouth preflight failed"),
+                execute=execute,
+                execution_sent=False,
+                baseline_preflight=baseline,
+                octomap=octomap,
+                obstacle_cloud=cloud,
+                backend=backend,
+            )
+        frozen_target = [float(value) for value in baseline["pre_mouth_target"]]
+        frozen_mouth = baseline["mouth_pose"]
+        selected = self.compute_pre_mouth_target(
+            frozen_mouth,
+            standoff_m=float(baseline["selected_standoff_m"]),
+        )
+        if not selected.get("success") or not np.allclose(
+            np.asarray(selected.get("pre_mouth_target"), dtype=np.float64),
+            np.asarray(frozen_target, dtype=np.float64),
+            rtol=0.0,
+            atol=1e-9,
+        ):
+            return self._failure(
+                tool,
+                "the selected pre-mouth coordinate could not be reproduced exactly before freezing",
+                execute=execute,
+                execution_sent=False,
+                baseline_preflight=baseline,
+                recomputed_target=selected,
+                backend=backend,
+            )
+        flange_down_rpy = [
+            float(value) for value in selected["planner_target"]["flange_down_rpy"]
+        ]
+
+        try:
+            dynamic_preflight = self._env.move_straw_tip_to_pre_mouth(
+                pre_mouth_safe_position=frozen_target,
+                flange_down_rpy=flange_down_rpy,
+                duration=self.config.duration_sec,
+                plan_only=True,
+                planning_mode="move_group",
+                dynamic_obstacle_replanning=True,
+            )
+        except Exception as exc:
+            return self._failure(
+                tool,
+                f"OMPL same-target preflight raised an exception: {exc}",
+                execute=execute,
+                execution_sent=False,
+                frozen_pre_mouth_target=frozen_target,
+                baseline_preflight=baseline,
+                octomap=octomap,
+                obstacle_cloud=cloud,
+                backend=backend,
+            )
+
+        common = {
+            "execute": execute,
+            "frozen_pre_mouth_target": frozen_target,
+            "frozen_flange_down_rpy": flange_down_rpy,
+            "selected_standoff_m": baseline["selected_standoff_m"],
+            "baseline_preflight": baseline,
+            "dynamic_preflight": dynamic_preflight,
+            "octomap": octomap,
+            "obstacle_cloud": cloud,
+            "backend": backend,
+            "planning_structure": "existing MoveGroup plan-and-execute; Hybrid Planning disabled",
+            "planner": "ompl/RRTConnectkConfigDefault",
+            "same_target_replanning": True,
+            "wait_for_clear": False,
+            "maximum_replan_attempts": self.config.dynamic_obstacle_replan_attempts,
+            "replan_delay_sec": self.config.dynamic_obstacle_replan_delay_sec,
+            "orientation_preserved": True,
+        }
+        if not dynamic_preflight.get("success"):
+            return self._failure(
+                tool,
+                "OMPL could not plan a collision-free route to the frozen pre-mouth target",
+                execution_sent=False,
+                **common,
+            )
+        if not execute:
+            return self._success(
+                tool,
+                execution_sent=False,
+                plan_only=True,
+                note="Plan-only validation succeeded; no trajectory or controller command was sent.",
+                **common,
+            )
+
+        try:
+            move_result = self._env.move_straw_tip_to_pre_mouth(
+                pre_mouth_safe_position=frozen_target,
+                flange_down_rpy=flange_down_rpy,
+                duration=self.config.duration_sec,
+                plan_only=False,
+                planning_mode="move_group",
+                dynamic_obstacle_replanning=True,
+            )
+        except Exception as exc:
+            return self._failure(
+                tool,
+                f"MoveGroup dynamic execution raised an exception: {exc}",
+                execution_sent=True,
+                **common,
+            )
+        if not move_result.get("success"):
+            return self._failure(
+                tool,
+                "no collision-free alternate route reached the frozen target; motion remains stopped",
+                execution_sent=True,
+                move_result=move_result,
+                **common,
+            )
+
+        try:
+            final_position = np.asarray(self._env.get_straw_tip_pose()["position"], dtype=np.float64)
+            final_error = float(np.linalg.norm(final_position - np.asarray(frozen_target, dtype=np.float64)))
+        except Exception as exc:
+            return self._failure(
+                tool,
+                f"the final frozen-target pose could not be verified: {exc}",
+                execution_sent=True,
+                move_result=move_result,
+                **common,
+            )
+        if final_error > self.config.dynamic_obstacle_final_tolerance_m:
+            return self._failure(
+                tool,
+                "MoveGroup completed but the straw tip missed the frozen pre-mouth target",
+                execution_sent=True,
+                move_result=move_result,
+                final_straw_tip_position=_xyz(final_position),
+                final_target_error_m=round(final_error, 6),
+                **common,
+            )
+        return self._success(
+            tool,
+            execution_sent=True,
+            plan_only=False,
+            move_result=move_result,
+            final_straw_tip_position=_xyz(final_position),
+            final_target_error_m=round(final_error, 6),
+            target_reached=True,
+            note="Reached the original frozen coordinate; no direct mouth contact or retreat was commanded.",
+            **common,
+        )
 
     def move_tool_to_target(
         self,
