@@ -63,6 +63,10 @@ class OpenClawReusableEntrypointTest(unittest.TestCase):
         self.assertIn("d435i_color_optical_frame", service)
         self.assertIn("--tool feed_water", skill)
         self.assertIn("--confirm-real-motion", skill)
+        self.assertIn("run_feed_water_real_direct.py", skill)
+        self.assertIn("I'm ready", skill)
+        self.assertIn("80 mm", skill)
+        self.assertIn("without separate check-only or plan-only", mission)
         self.assertIn("does not", skill.lower())
         self.assertIn("direct-mouth", skill)
 

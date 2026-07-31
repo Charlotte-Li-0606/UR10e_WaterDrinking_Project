@@ -84,7 +84,7 @@ STRAW_TIP_OFFSET_TOOL0_M = (0.110, 0.0, 0.0)
 PRE_MOUTH_APPROACH_AXIS_BASE_LINK = (1.0, 0.0, 0.0)
 DEFAULT_PREMOUTH_POLICY = "camera-ray"
 PREMOUTH_POLICIES = ("tcp-forward", "base-x", "camera-ray", "feeding-vector")
-DEFAULT_SAFE_DISTANCE_M = 0.050
+DEFAULT_SAFE_DISTANCE_M = 0.080
 MIN_SAFE_DISTANCE_M = 0.030
 MAX_SAFE_DISTANCE_M = 0.080
 DEFAULT_FEEDING_VECTOR = (0.0, -1.0, 0.0)
@@ -93,7 +93,7 @@ MAX_ABS_FEEDING_VECTOR_Z = 0.30
 MIN_FACE_CLEARANCE_M = 0.050
 # This start-state check only prevents crossing through the mouth plane.  It
 # must not demand the final stand-off before a move that is itself increasing
-# the separation to the final 5 cm pre-mouth point.
+# the separation to the final 80 mm pre-mouth point.
 MIN_CURRENT_SIDE_MARGIN_M = 0.005
 MAX_NORMAL_ANGULAR_SPREAD_RAD = math.radians(12.0)
 MOUNT_CALIBRATION_CONFIG = PROJECT_ROOT / "config/ur10e_real/d435i_mount_calibration.json"
@@ -1664,7 +1664,7 @@ def _parse_args() -> argparse.Namespace:
         "--safe-distance",
         type=float,
         default=DEFAULT_SAFE_DISTANCE_M,
-        help="Pre-mouth stand-off distance in metres (default: 0.05).",
+        help="Pre-mouth stand-off distance in metres (default: 0.080).",
     )
     parser.add_argument(
         "--maximum-plan-translation",

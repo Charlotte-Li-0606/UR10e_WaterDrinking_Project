@@ -49,6 +49,8 @@ class RealFeedWaterBackendTest(unittest.TestCase):
             self.assertIn("camera-ray", command)
             self.assertIn("--no-execute", command)
             self.assertNotIn("--confirm-real-motion", command)
+            safe_distance_argument = command.index("--safe-distance") + 1
+            self.assertEqual("0.08", command[safe_distance_argument])
             maximum_translation_argument = command.index("--maximum-plan-translation") + 1
             self.assertEqual("1.3", command[maximum_translation_argument])
             mouth_sample_argument = command.index("--mouth-sample-seconds") + 1

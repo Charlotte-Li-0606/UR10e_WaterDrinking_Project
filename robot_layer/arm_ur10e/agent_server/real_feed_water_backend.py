@@ -5,7 +5,7 @@ This module deliberately contains no perception projection, target geometry,
 MoveIt planning, trajectory, joint, controller, cup-tilt, or pour logic.  It
 invokes ``scripts/real_premouth_from_perception_plan.py``, the exact guarded
 camera-ray path validated on the physical UR10e, then optionally performs a
-motionless dwell at the resulting 5 cm pre-mouth pose.
+motionless dwell at the resulting 80 mm pre-mouth pose.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ REAL_PREMOUTH_SCRIPT = PROJECT_ROOT / "scripts/real_premouth_from_perception_pla
 REPORT_DIR = PROJECT_ROOT / "reports"
 
 REAL_BACKEND = "real"
-SAFE_DISTANCE_M = 0.05
+SAFE_DISTANCE_M = 0.080
 MAXIMUM_PLAN_TRANSLATION_M = 1.30
 MOUTH_SAMPLE_SECONDS = 1.0
 MIN_HOLD_SECONDS = 2.0
@@ -324,7 +324,7 @@ def run_real_feed_water(
 
     if execute and pipeline.get("success"):
         # Deliberate no-command dwell. The validated MoveIt action is
-        # synchronous and has already reached the 5 cm pre-mouth target.
+        # synchronous and has already reached the 80 mm pre-mouth target.
         time.sleep(duration)
     elapsed = time.monotonic() - started
     return _tool_report(

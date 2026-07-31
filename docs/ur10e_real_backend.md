@@ -35,6 +35,8 @@ through a 60% ceiling. Its per-invocation tool0 displacement ceiling is the
 UR10e's nominal 1.30 m reach; target radius, inverse-kinematics, joint-limit,
 and collision checks still apply independently. The mature adapter retains
 0.10 MoveIt velocity and acceleration scaling for its generated trajectory.
+The real camera-ray pre-mouth stand-off is 80 mm, which is 30 mm farther from
+the detected mouth than the saved 50 mm successful-execution snapshot.
 Short-lived execution requests subscribe to the UR driver's latched robot,
 safety, and program state with matching transient-local QoS, and use a
 one-second stable-mouth sampling window to avoid a separate preflight delay.
