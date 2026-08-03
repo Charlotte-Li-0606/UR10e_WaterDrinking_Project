@@ -38,12 +38,18 @@ retreat action. It plans by default. Execution requires `--execute`,
 pre-mouth hold.
 
 The active search freezes the initial flange orientation and applies the
-calibrated flange-to-D435i extrinsic to every direction. It first moves 40 mm
-opposite the camera optical viewing axis to obtain a wider frame, then checks
-50 mm image-left, image-right, image-up, and image-down offsets around that
-wider-view center. It never rotates the flange, plans and collision-checks
-each translation independently, and requests cancellation as soon as any
-face candidate appears. The complete search remains bounded to 15 seconds.
+calibrated flange-to-D435i extrinsic to every direction. It first attempts 40
+mm opposite the camera optical viewing axis to obtain a wider frame, then
+checks 50 mm image-left, image-right, image-up, and image-down offsets around
+that wider-view center. If a nominal endpoint is unreachable from the current
+fixed-orientation robot pose, it tries bounded smaller distances (30/20 mm for
+backward and 40/30/20 mm for a directional scan). Every failed attempt is
+classified with an IK/collision/path diagnostic; if all bounded alternatives
+for one direction fail, that direction is reported and skipped so the other
+directions can still be searched. It never rotates the flange, plans and
+collision-checks each translation independently, and requests cancellation as
+soon as any face candidate appears. The complete search remains bounded to 15
+seconds.
 
 For an explicitly requested Codex plan without motion:
 

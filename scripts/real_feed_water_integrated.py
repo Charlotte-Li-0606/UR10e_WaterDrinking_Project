@@ -30,7 +30,9 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import rclpy  # noqa: E402
+from geometry_msgs.msg import PoseStamped  # noqa: E402
 from moveit_msgs.action import ExecuteTrajectory  # noqa: E402
+from moveit_msgs.srv import GetPositionIK  # noqa: E402
 from ur_dashboard_msgs.msg import RobotMode, SafetyMode  # noqa: E402
 
 from scripts.real_dynamic_obstacle_avoidance_plan import (  # noqa: E402
@@ -48,6 +50,7 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
     DEFAULT_SAFE_DISTANCE_M,
     EXPECTED_JOINTS,
     FINAL_ORIENTATION_TOLERANCE_RAD,
+    GROUP_NAME,
     MAX_MOUTH_POSE_AGE_SEC,
     MAX_PLAN_TRANSLATION_M,
     MAX_POSE_SPREAD_M,
@@ -79,6 +82,8 @@ SEARCH_FINAL_POSITION_TOLERANCE_M = 0.010
 SEARCH_MAX_STATIONARY_JOINT_SPEED_RAD_SEC = 0.010
 SEARCH_STATIONARY_SAMPLE_COUNT = 2
 SEARCH_STATIONARY_TIMEOUT_SEC = 0.75
+SEARCH_BACK_CANDIDATE_DISTANCES_M = (0.040, 0.030, 0.020)
+SEARCH_DIRECTIONAL_CANDIDATE_DISTANCES_M = (0.050, 0.040, 0.030, 0.020)
 SEARCH_OFFSETS_CAMERA_OPTICAL = (
     ("backward_wide", (0.0, 0.0, -SEARCH_BACK_DISTANCE_M)),
     (
@@ -121,21 +126,15 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             trajectory_acceleration_scaling=trajectory_acceleration_scaling,
         )
         self._frozen_execution_mouth_position: list[float] | None = None
+        self._search_ik_client = self.create_client(GetPositionIK, "/compute_ik")
 
     @staticmethod
-    def search_waypoints(
+    def _search_waypoints_from_offsets(
         origin: list[float],
         tool_orientation_xyzw: list[float],
         camera_orientation_xyzw: list[float],
+        offsets: tuple[tuple[str, tuple[float, float, float]], ...],
     ) -> list[dict[str, Any]]:
-        """Return camera-corrected directions frozen at the initial flange pose.
-
-        Search semantics follow the camera view rigidly attached to ``tool0``:
-        optical -Z moves backward for a wider frame, optical -/+X scans image
-        left/right, and optical -/+Y scans image up/down.  Transforming those
-        vectors with the live camera orientation applies the calibrated camera
-        extrinsic instead of incorrectly adding fixed ``base_link`` offsets.
-        """
         if len(origin) != 3 or not all(math.isfinite(float(value)) for value in origin):
             raise ValueError("search origin must contain three finite values")
         for label, orientation in (
@@ -154,7 +153,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             float(tool_orientation_xyzw[3]),
         ]
         waypoints: list[dict[str, Any]] = []
-        for name, camera_offset in SEARCH_OFFSETS_CAMERA_OPTICAL:
+        for name, camera_offset in offsets:
             base_offset = _rotate_tool_vector(
                 camera_orientation_xyzw,
                 camera_offset,
@@ -179,6 +178,74 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 }
             )
         return waypoints
+
+    @staticmethod
+    def search_waypoints(
+        origin: list[float],
+        tool_orientation_xyzw: list[float],
+        camera_orientation_xyzw: list[float],
+    ) -> list[dict[str, Any]]:
+        """Return camera-corrected directions frozen at the initial flange pose.
+
+        Search semantics follow the camera view rigidly attached to ``tool0``:
+        optical -Z moves backward for a wider frame, optical -/+X scans image
+        left/right, and optical -/+Y scans image up/down.  Transforming those
+        vectors with the live camera orientation applies the calibrated camera
+        extrinsic instead of incorrectly adding fixed ``base_link`` offsets.
+        """
+        return RealIntegratedFeedWater._search_waypoints_from_offsets(
+            origin,
+            tool_orientation_xyzw,
+            camera_orientation_xyzw,
+            SEARCH_OFFSETS_CAMERA_OPTICAL,
+        )
+
+    @staticmethod
+    def search_waypoint_variants(
+        origin: list[float],
+        tool_orientation_xyzw: list[float],
+        camera_orientation_xyzw: list[float],
+        *,
+        name: str,
+        back_distance_m: float,
+    ) -> list[dict[str, Any]]:
+        """Return nominal-to-small bounded alternatives for one search direction."""
+        if name == "backward_wide":
+            offsets = tuple(
+                (name, (0.0, 0.0, -distance))
+                for distance in SEARCH_BACK_CANDIDATE_DISTANCES_M
+            )
+        else:
+            axes = {
+                "scan_left": (-1.0, 0.0),
+                "scan_right": (1.0, 0.0),
+                "scan_up": (0.0, -1.0),
+                "scan_down": (0.0, 1.0),
+            }
+            if name not in axes:
+                raise ValueError(f"unsupported search waypoint {name!r}")
+            x_sign, y_sign = axes[name]
+            offsets = tuple(
+                (
+                    name,
+                    (
+                        x_sign * distance,
+                        y_sign * distance,
+                        -float(back_distance_m),
+                    ),
+                )
+                for distance in SEARCH_DIRECTIONAL_CANDIDATE_DISTANCES_M
+            )
+        variants = RealIntegratedFeedWater._search_waypoints_from_offsets(
+            origin,
+            tool_orientation_xyzw,
+            camera_orientation_xyzw,
+            offsets,
+        )
+        for index, variant in enumerate(variants):
+            variant["adaptive_candidate_index"] = index
+            variant["adaptive_scale_applied"] = index > 0
+        return variants
 
     @staticmethod
     def _base_readiness_failures(snapshot: dict[str, Any]) -> list[str]:
@@ -331,6 +398,115 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "planned_trajectory": _trajectory_summary(result.planned_trajectory),
             "execution_sent": False,
         }, trajectory
+
+    def _target_ik_diagnostic(
+        self,
+        target: dict[str, Any],
+        *,
+        deadline: float,
+    ) -> dict[str, Any]:
+        """Classify a generic MoveGroup search-plan failure without motion."""
+        diagnostic: dict[str, Any] = {
+            "classification": "IK_DIAGNOSTIC_UNAVAILABLE",
+            "reason": "MoveIt IK diagnostic did not complete",
+            "target": target,
+            "checks": {},
+        }
+        if self.latest_joint_state is None:
+            diagnostic["reason"] = "fresh joint state is unavailable for IK diagnosis"
+            return diagnostic
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.0 or not self._search_ik_client.wait_for_service(
+            timeout_sec=min(0.25, remaining)
+        ):
+            diagnostic["reason"] = "/compute_ik is unavailable within the search deadline"
+            return diagnostic
+
+        def solve(*, avoid_collisions: bool) -> dict[str, Any]:
+            request = GetPositionIK.Request()
+            request.ik_request.group_name = GROUP_NAME
+            request.ik_request.ik_link_name = TOOL_FRAME
+            request.ik_request.pose_stamped = PoseStamped()
+            request.ik_request.pose_stamped.header.frame_id = BASE_FRAME
+            pose = request.ik_request.pose_stamped.pose
+            pose.position.x, pose.position.y, pose.position.z = target["position_m"]
+            (
+                pose.orientation.x,
+                pose.orientation.y,
+                pose.orientation.z,
+                pose.orientation.w,
+            ) = target["orientation_quat_xyzw"]
+            request.ik_request.avoid_collisions = avoid_collisions
+            request.ik_request.timeout.nanosec = 250_000_000
+            request.ik_request.robot_state.joint_state = self.latest_joint_state
+            request.ik_request.robot_state.is_diff = False
+            future = self._search_ik_client.call_async(request)
+            rclpy.spin_until_future_complete(
+                self,
+                future,
+                timeout_sec=max(0.0, min(0.5, deadline - time.monotonic())),
+            )
+            response = future.result()
+            if response is None:
+                return {"response_received": False, "success": False}
+            code = int(response.error_code.val)
+            return {
+                "response_received": True,
+                "success": code == 1,
+                "error_code": code,
+            }
+
+        collision_disabled = solve(avoid_collisions=False)
+        diagnostic["checks"]["collision_disabled"] = collision_disabled
+        if not collision_disabled.get("response_received"):
+            diagnostic["reason"] = (
+                "/compute_ik did not return the collision-disabled diagnostic "
+                "before the bounded search deadline"
+            )
+            return diagnostic
+        if not collision_disabled.get("success"):
+            diagnostic.update(
+                {
+                    "classification": "NO_IK_SOLUTION",
+                    "reason": (
+                        "MoveIt found no IK solution for the fixed-orientation "
+                        "tool0 search target, even with collision checking disabled"
+                    ),
+                }
+            )
+            return diagnostic
+
+        collision_enabled = solve(avoid_collisions=True)
+        diagnostic["checks"]["collision_enabled"] = collision_enabled
+        if not collision_enabled.get("response_received"):
+            diagnostic["reason"] = (
+                "/compute_ik did not return the collision-enabled diagnostic "
+                "before the bounded search deadline"
+            )
+            return diagnostic
+        if not collision_enabled.get("success"):
+            diagnostic.update(
+                {
+                    "classification": "GOAL_IN_COLLISION",
+                    "reason": (
+                        "the tool0 search target has IK but no collision-free IK "
+                        "solution in the current PlanningScene"
+                    ),
+                }
+            )
+            return diagnostic
+
+        diagnostic.update(
+            {
+                "classification": "PILZ_CARTESIAN_PATH_FAILED",
+                "reason": (
+                    "the target has collision-free IK, but Pilz could not generate "
+                    "the fixed-orientation Cartesian path; an intermediate IK or "
+                    "joint dynamic limit was rejected"
+                ),
+            }
+        )
+        return diagnostic
 
     def _wait_for_search_stationary(self, deadline: float) -> dict[str, Any]:
         """Require fresh stationary joint samples before each Pilz LIN plan.
@@ -516,9 +692,15 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "scan_up",
                 "scan_down",
             ],
+            "adaptive_distance_policy_m": {
+                "backward": list(SEARCH_BACK_CANDIDATE_DISTANCES_M),
+                "directional": list(SEARCH_DIRECTIONAL_CANDIDATE_DISTANCES_M),
+                "skip_if_all_bounded_candidates_fail": True,
+            },
             "trajectory_sent": False,
             "checks": snapshot,
             "search_steps": [],
+            "skipped_search_waypoints": [],
         }
         failures = self._base_readiness_failures(snapshot)
         if execute:
@@ -585,8 +767,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             orientation,
             camera_orientation,
         )
+        active_back_distance = SEARCH_BACK_DISTANCE_M
         motion_deadline = deadline - SEARCH_STABILITY_RESERVE_SEC
-        for waypoint in waypoints:
+        for requested_waypoint in waypoints:
             if time.monotonic() >= motion_deadline:
                 break
             if self._candidate_visible():
@@ -598,7 +781,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         "candidate_detected": True,
                         "stopped_for_stability": True,
                         "selected_mouth": stable,
-                        "trajectory_sent": bool(response["search_steps"]),
+                        "trajectory_sent": bool(response["trajectory_sent"]),
                         "elapsed_sec": time.monotonic() - started,
                     }
                 )
@@ -633,19 +816,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             current_orientation = [
                 float(value) for value in current["orientation_quat_xyzw"]
             ]
-            segment = _norm(
-                _subtract(waypoint["target_tool0_position_m"], current_position)
-            )
             orientation_error = _quaternion_distance_rad(current_orientation, orientation)
-            if segment > SEARCH_MAX_ACTUAL_SEGMENT_M:
-                response.update(
-                    {
-                        "stage": "active_search_segment_guard",
-                        "reason": "actual robot pose is too far from the next bounded search waypoint",
-                        "segment_distance_m": segment,
-                    }
-                )
-                return response
             if orientation_error > FINAL_ORIENTATION_TOLERANCE_RAD:
                 response.update(
                     {
@@ -656,51 +827,111 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 )
                 return response
 
-            target_in_ur_base = self._point_in_ur_base(
-                waypoint["target_tool0_position_m"],
-                snapshot["ur_base_tf"],
+            variants = self.search_waypoint_variants(
+                origin_tool0,
+                orientation,
+                camera_orientation,
+                name=str(requested_waypoint["name"]),
+                back_distance_m=active_back_distance,
             )
-            radius = _norm(target_in_ur_base)
-            if radius > MAX_TOOL0_RADIUS_FROM_UR_BASE_M:
-                response.update(
-                    {
-                        "stage": "active_search_reach_guard",
-                        "reason": "search waypoint exceeds the UR10e nominal reach envelope",
-                        "target_tool0_radius_from_ur_base_m": radius,
+            planning_attempts: list[dict[str, Any]] = []
+            waypoint: dict[str, Any] | None = None
+            step: dict[str, Any] | None = None
+            trajectory: Any | None = None
+            for variant in variants:
+                if time.monotonic() >= motion_deadline:
+                    break
+                segment = _norm(
+                    _subtract(variant["target_tool0_position_m"], current_position)
+                )
+                target_in_ur_base = self._point_in_ur_base(
+                    variant["target_tool0_position_m"],
+                    snapshot["ur_base_tf"],
+                )
+                radius = _norm(target_in_ur_base)
+                attempt: dict[str, Any] = {
+                    **variant,
+                    "segment_distance_m": segment,
+                    "orientation_error_rad": orientation_error,
+                    "target_tool0_radius_from_ur_base_m": radius,
+                    "plan_result": None,
+                    "failure_diagnostic": None,
+                }
+                if segment > SEARCH_MAX_ACTUAL_SEGMENT_M:
+                    attempt["failure_diagnostic"] = {
+                        "classification": "SEGMENT_LIMIT_EXCEEDED",
+                        "reason": (
+                            "actual robot pose is too far from this bounded "
+                            "search candidate"
+                        ),
+                    }
+                    planning_attempts.append(attempt)
+                    continue
+                if radius > MAX_TOOL0_RADIUS_FROM_UR_BASE_M:
+                    attempt["failure_diagnostic"] = {
+                        "classification": "NOMINAL_REACH_EXCEEDED",
+                        "reason": "search candidate exceeds the UR10e nominal reach envelope",
+                    }
+                    planning_attempts.append(attempt)
+                    continue
+                target = {
+                    "frame_id": BASE_FRAME,
+                    "link_name": TOOL_FRAME,
+                    "position_m": variant["target_tool0_position_m"],
+                    "orientation_quat_xyzw": orientation,
+                }
+                plan, candidate_trajectory = self._search_plan(
+                    target,
+                    deadline=motion_deadline,
+                    stationary_verified=bool(
+                        stationary is not None and stationary.get("success")
+                    ),
+                )
+                attempt["plan_result"] = plan
+                if not plan.get("success") or candidate_trajectory is None:
+                    attempt["failure_diagnostic"] = self._target_ik_diagnostic(
+                        target,
+                        deadline=motion_deadline,
+                    )
+                    planning_attempts.append(attempt)
+                    continue
+                planning_attempts.append(dict(attempt))
+                waypoint = variant
+                trajectory = candidate_trajectory
+                step = {
+                    **attempt,
+                    "execution_result": None,
+                    "stationary_joint_state": stationary,
+                    "planning_attempts": planning_attempts,
+                }
+                break
+
+            if step is None or waypoint is None or trajectory is None:
+                last_diagnostic = (
+                    planning_attempts[-1].get("failure_diagnostic")
+                    if planning_attempts
+                    else {
+                        "classification": "SEARCH_DEADLINE_EXPIRED",
+                        "reason": "search deadline expired before a candidate could be planned",
                     }
                 )
-                return response
-            target = {
-                "frame_id": BASE_FRAME,
-                "link_name": TOOL_FRAME,
-                "position_m": waypoint["target_tool0_position_m"],
-                "orientation_quat_xyzw": orientation,
-            }
-            plan, trajectory = self._search_plan(
-                target,
-                deadline=motion_deadline,
-                stationary_verified=bool(
-                    stationary is not None and stationary.get("success")
-                ),
-            )
-            step = {
-                **waypoint,
-                "segment_distance_m": segment,
-                "orientation_error_rad": orientation_error,
-                "target_tool0_radius_from_ur_base_m": radius,
-                "plan_result": plan,
-                "execution_result": None,
-                "stationary_joint_state": stationary,
-            }
-            if not plan.get("success") or trajectory is None:
-                response["search_steps"].append(step)
-                response.update(
+                skipped = {
+                    **requested_waypoint,
+                    "skipped": True,
+                    "planning_attempts": planning_attempts,
+                    "failure_diagnostic": last_diagnostic,
+                }
+                response["search_steps"].append(skipped)
+                response["skipped_search_waypoints"].append(
                     {
-                        "stage": "active_search_plan",
-                        "reason": "MoveIt could not plan the next bounded search waypoint",
+                        "name": requested_waypoint["name"],
+                        "classification": last_diagnostic.get("classification"),
+                        "reason": last_diagnostic.get("reason"),
                     }
                 )
-                return response
+                if requested_waypoint["name"] == "backward_wide":
+                    active_back_distance = 0.0
+                continue
             if not execute:
                 response["search_steps"].append(step)
                 response.update(
@@ -741,12 +972,26 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             )
             step["execution_result"] = execution
             response["search_steps"].append(step)
-            response["trajectory_sent"] = bool(execution.get("execution_attempted"))
+            response["trajectory_sent"] = bool(
+                response["trajectory_sent"] or execution.get("execution_attempted")
+            )
             if not execution.get("success"):
+                detail = (
+                    execution.get("reason")
+                    or execution.get("error_message")
+                    or f"MoveIt execution error code {execution.get('error_code')}"
+                )
                 response.update(
                     {
                         "stage": "active_search_execution",
-                        "reason": "bounded search segment did not complete safely",
+                        "reason": f"bounded search segment failed: {detail}",
+                        "failure_diagnostic": {
+                            "classification": "SEARCH_EXECUTION_FAILED",
+                            "reason": detail,
+                            "execution_stage": execution.get("stage"),
+                            "error_code": execution.get("error_code"),
+                            "error_message": execution.get("error_message"),
+                        },
                     }
                 )
                 return response
@@ -788,6 +1033,10 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     }
                 )
                 return response
+            if waypoint["name"] == "backward_wide":
+                active_back_distance = abs(
+                    float(waypoint["offset_camera_optical_m"][2])
+                )
 
         stable = self._wait_for_selected_stability(started, deadline)
         response.update(
@@ -796,11 +1045,17 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "stage": "mouth_found_after_search" if stable.get("stable") else "active_search_timeout",
                 "selected_mouth": stable,
                 "elapsed_sec": time.monotonic() - started,
-                "trajectory_sent": bool(response["search_steps"]),
+                "trajectory_sent": bool(response["trajectory_sent"]),
             }
         )
         if not response["success"]:
+            skipped_summary = "; ".join(
+                f"{item['name']}: {item.get('classification')}"
+                for item in response["skipped_search_waypoints"]
+            )
             response["reason"] = "selected mouth was not found within the bounded 15-second search"
+            if skipped_summary:
+                response["reason"] += f"; skipped unreachable candidates: {skipped_summary}"
         return response
 
     def plan(self) -> tuple[int, dict[str, Any]]:
@@ -813,6 +1068,12 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "frozen real pre-mouth target"
             )
             response["planning_error_code"] = plan_result.get("error_code")
+            response["failure_diagnostic"] = {
+                "classification": "OMPL_CONSTRAINED_PLANNING_FAILED",
+                "reason": response["reason"],
+                "error_code": plan_result.get("error_code"),
+                "error_message": plan_result.get("error_message"),
+            }
         detected = response.get("detected_mouth_pose")
         if response.get("success") and isinstance(detected, dict):
             position = detected.get("position_m")
@@ -897,8 +1158,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "execution_attempted": True,
             }
         result = wrapped.result
-        return {
-            "success": int(result.error_code.val) == 1,
+        success = int(result.error_code.val) == 1
+        response = {
+            "success": success,
             "stage": "dynamic_move_group_plan_and_execute",
             "result_status": int(wrapped.status),
             "error_code": int(result.error_code.val),
@@ -912,6 +1174,19 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "replan_delay_sec": REPLAN_DELAY_SEC,
             "wait_for_clear": False,
         }
+        if not success:
+            detail = result.error_code.message or (
+                f"MoveGroup plan-and-execute failed with error code "
+                f"{int(result.error_code.val)}"
+            )
+            response["reason"] = detail
+            response["failure_diagnostic"] = {
+                "classification": "DYNAMIC_PLAN_OR_EXECUTION_FAILED",
+                "reason": detail,
+                "error_code": int(result.error_code.val),
+                "error_message": result.error_code.message,
+            }
+        return response
 
     def run_integrated(
         self,
@@ -938,6 +1213,11 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "scan_up",
                 "scan_down",
             ],
+            "adaptive_search_distances_m": {
+                "backward": list(SEARCH_BACK_CANDIDATE_DISTANCES_M),
+                "directional": list(SEARCH_DIRECTIONAL_CANDIDATE_DISTANCES_M),
+                "skip_unreachable_direction": True,
+            },
             "dynamic_obstacle_avoidance": True,
             "same_target_replanning": True,
             "wait_for_clear": False,

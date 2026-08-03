@@ -45,7 +45,7 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
 
 
 OMPL_PIPELINE = "ompl"
-OMPL_PLANNER = "RRTConnectkConfigDefault"
+OMPL_PLANNER = "RRTConnect"
 RAW_CLOUD_TOPIC = "/wrist_rgbd/points"
 FILTERED_CLOUD_TOPIC = "/wrist_rgbd/filtered_cloud"
 CLOUD_MAX_AGE_SEC = 0.75

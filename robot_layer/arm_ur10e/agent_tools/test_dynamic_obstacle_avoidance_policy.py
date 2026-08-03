@@ -382,6 +382,7 @@ class RealPlanOnlyDynamicProfileTest(unittest.TestCase):
 
         self.assertEqual(module.OMPL_PIPELINE, goal.request.pipeline_id)
         self.assertEqual(module.OMPL_PLANNER, goal.request.planner_id)
+        self.assertEqual("RRTConnect", module.OMPL_PLANNER)
         self.assertEqual(module.REPLAN_ATTEMPTS, goal.request.num_planning_attempts)
         self.assertEqual(1, len(goal.request.goal_constraints))
         self.assertEqual(1, len(goal.request.path_constraints.orientation_constraints))

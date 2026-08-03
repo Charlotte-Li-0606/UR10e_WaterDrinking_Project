@@ -108,6 +108,30 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             backward["offset_initial_tool0_m"],
         )
 
+    def test_search_waypoint_variants_shrink_without_changing_direction(self) -> None:
+        origin = [-0.25, -0.04, 0.61]
+        identity = [0.0, 0.0, 0.0, 1.0]
+
+        variants = RealIntegratedFeedWater.search_waypoint_variants(
+            origin,
+            identity,
+            identity,
+            name="scan_left",
+            back_distance_m=0.04,
+        )
+
+        self.assertEqual(
+            [-0.05, -0.04, -0.03, -0.02],
+            [item["offset_camera_optical_m"][0] for item in variants],
+        )
+        self.assertTrue(
+            all(item["offset_camera_optical_m"][2] == -0.04 for item in variants)
+        )
+        self.assertEqual(
+            [False, True, True, True],
+            [item["adaptive_scale_applied"] for item in variants],
+        )
+
     def test_stable_selected_mouth_skips_search_motion(self) -> None:
         mouth = {
             "available": True,
@@ -141,6 +165,74 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertFalse(result["trajectory_sent"])
         self.assertEqual(1, len(result["search_steps"]))
         node._search_plan.assert_called_once()
+
+    def test_unreachable_direction_is_reported_and_remaining_search_continues(self) -> None:
+        mouth = {"available": False, "stable": False, "reason": "no face"}
+        node = self._policy_only_node(mouth)
+        node._search_plan = Mock(
+            return_value=(
+                {
+                    "success": False,
+                    "stage": "search_plan_only",
+                    "error_code": -31,
+                    "error_message": "",
+                    "execution_sent": False,
+                },
+                None,
+            )
+        )
+        node._target_ik_diagnostic = Mock(
+            return_value={
+                "classification": "NO_IK_SOLUTION",
+                "reason": "fixed-orientation target has no IK solution",
+            }
+        )
+        node._wait_for_selected_stability = Mock(
+            return_value={"available": False, "stable": False}
+        )
+
+        result = node.active_search(execute=False, confirm_real_motion=False)
+
+        self.assertEqual("active_search_timeout", result["stage"])
+        self.assertFalse(result["trajectory_sent"])
+        self.assertEqual(5, len(result["skipped_search_waypoints"]))
+        self.assertEqual(19, node._search_plan.call_count)
+        self.assertIn("NO_IK_SOLUTION", result["reason"])
+
+    def test_smaller_search_candidate_is_selected_after_nominal_ik_failure(self) -> None:
+        mouth = {"available": False, "stable": False, "reason": "no face"}
+        node = self._policy_only_node(mouth)
+        failed = {
+            "success": False,
+            "stage": "search_plan_only",
+            "error_code": -31,
+            "error_message": "",
+            "execution_sent": False,
+        }
+        succeeded = {
+            "success": True,
+            "stage": "search_plan_only",
+            "error_code": 1,
+            "error_message": "",
+            "execution_sent": False,
+        }
+        node._search_plan = Mock(side_effect=[(failed, None), (succeeded, object())])
+        node._target_ik_diagnostic = Mock(
+            return_value={
+                "classification": "NO_IK_SOLUTION",
+                "reason": "fixed-orientation target has no IK solution",
+            }
+        )
+
+        result = node.active_search(execute=False, confirm_real_motion=False)
+
+        self.assertEqual("active_search_plan_only", result["stage"])
+        self.assertTrue(result["next_search_waypoint"]["adaptive_scale_applied"])
+        self.assertEqual(
+            0.03,
+            result["next_search_waypoint"]["offset_camera_optical_m"][2] * -1,
+        )
+        self.assertEqual(2, len(result["next_search_waypoint"]["planning_attempts"]))
 
     def test_canonical_execute_command_selects_integrated_real_pipeline(self) -> None:
         command = backend._pipeline_command(
