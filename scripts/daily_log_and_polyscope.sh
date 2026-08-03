@@ -14,8 +14,9 @@ LIVE_PENDANT_PID="${PROJECT_DIR}/logs/live_pendant.pid"
 mkdir -p "${PROJECT_DIR}/logs"
 
 append_snapshot() {
-  local timestamp branch tracked_changes recent_commits robot_route robot_ping
+  local timestamp branch tracked_changes recent_commits robot_route robot_ping daily_note_file
   timestamp="$(date --iso-8601=seconds)"
+  daily_note_file="${PROJECT_DIR}/logs/daily_notes/$(date +%F).txt"
   branch="$(git -C "${PROJECT_DIR}" branch --show-current 2>/dev/null || true)"
   tracked_changes="$(git -C "${PROJECT_DIR}" status --short --untracked-files=no 2>/dev/null || true)"
   recent_commits="$(git -C "${PROJECT_DIR}" log --since='today 00:00' --pretty='format:%h %ad %s' --date=short 2>/dev/null || true)"
@@ -33,6 +34,10 @@ append_snapshot() {
     printf 'Tracked working-tree changes:\n%s\n' "${tracked_changes:-  none}"
     printf 'Real UR10e network: %s (%s)\n' "${robot_ping}" "${REAL_ROBOT_IP}"
     printf 'Real UR10e route: %s\n' "${robot_route:-unavailable}"
+    if [ -s "${daily_note_file}" ]; then
+      printf 'Recorded test notes (%s):\n' "${daily_note_file}"
+      sed 's/^/  /' "${daily_note_file}"
+    fi
   } >&9
 }
 
