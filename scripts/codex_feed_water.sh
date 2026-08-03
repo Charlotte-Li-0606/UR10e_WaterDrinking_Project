@@ -28,6 +28,9 @@ fi
 # This entrypoint is intentionally real-only. Simulation remains available
 # through the preserved OpenClaw compatibility scripts, but Codex never infers
 # or inherits the backend from a long-running gateway process.
+unset ROS_STATIC_PEERS
+export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+export ROS_LOCALHOST_ONLY=0
 export UR10E_BACKEND=real
 cd "${PROJECT_DIR}"
 exec "${PYTHON_BIN}" "${PROJECT_DIR}/scripts/run_feed_water_real_direct.py" "$@"
