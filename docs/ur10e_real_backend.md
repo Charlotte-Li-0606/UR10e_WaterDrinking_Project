@@ -38,7 +38,7 @@ retreat action. It plans by default. Execution requires `--execute`,
 pre-mouth hold.
 
 The active search freezes the initial flange orientation and applies the
-calibrated flange-to-D435i extrinsic to every direction. It first moves 80 mm
+calibrated flange-to-D435i extrinsic to every direction. It first moves 40 mm
 opposite the camera optical viewing axis to obtain a wider frame, then checks
 50 mm image-left, image-right, image-up, and image-down offsets around that
 wider-view center. It never rotates the flange, plans and collision-checks

@@ -5,7 +5,7 @@ This is an independent, execution-disabled real-hardware validation entry
 point.  It consumes the physical robot joint/TF state and the real D435i
 mouth-perception stream.  A stable visible mouth ends the search without a
 plan.  When the detector explicitly reports ``no_face``, it asks MoveIt to
-plan exactly one 80 mm camera-backward translation while preserving the
+plan exactly one 40 mm camera-backward translation while preserving the
 current tool0 orientation.  The camera direction is transformed through the
 live calibrated flange-to-camera extrinsic instead of being treated as a
 fixed ``base_link`` direction.  The script has no execution mode and never
@@ -44,7 +44,7 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
 )
 
 
-SEARCH_BACK_DISTANCE_M = 0.080
+SEARCH_BACK_DISTANCE_M = 0.040
 SEARCH_BACK_OFFSET_CAMERA_OPTICAL = (0.0, 0.0, -SEARCH_BACK_DISTANCE_M)
 MOUTH_SAMPLE_SECONDS = 1.0
 MOVE_GROUP_PARAMETER_SERVICE = "/move_group/get_parameters"

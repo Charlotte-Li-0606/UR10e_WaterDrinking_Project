@@ -71,7 +71,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             ["backward_wide", "scan_left", "scan_right", "scan_up", "scan_down"],
             [item["name"] for item in waypoints],
         )
-        self.assertEqual([0.0, 0.0, -0.08], waypoints[0]["offset_from_origin_m"])
+        self.assertEqual([0.0, 0.0, -0.04], waypoints[0]["offset_from_origin_m"])
         positions = [origin] + [item["target_tool0_position_m"] for item in waypoints]
         segment_lengths = [
             sum((float(a) - float(b)) ** 2 for a, b in zip(current, previous)) ** 0.5
@@ -100,7 +100,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         )
 
         backward = waypoints[0]
-        self.assertAlmostEqual(-0.08, backward["offset_from_origin_m"][0])
+        self.assertAlmostEqual(-0.04, backward["offset_from_origin_m"][0])
         self.assertAlmostEqual(0.0, backward["offset_from_origin_m"][1])
         self.assertAlmostEqual(0.0, backward["offset_from_origin_m"][2])
         self.assertEqual(
