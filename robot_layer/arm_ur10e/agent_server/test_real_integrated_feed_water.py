@@ -7,7 +7,11 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from robot_layer.arm_ur10e.agent_server import real_feed_water_backend as backend
-from scripts.real_dynamic_obstacle_avoidance_plan import RealDynamicObstacleAvoidancePlan
+from scripts.real_dynamic_obstacle_avoidance_plan import (
+    DETOUR_ROUTE_STRATEGY,
+    DIRECT_ROUTE_STRATEGY,
+    RealDynamicObstacleAvoidancePlan,
+)
 from scripts.real_feed_water_integrated import RealIntegratedFeedWater
 
 
@@ -291,9 +295,30 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             code, result = node.plan()
 
         self.assertEqual(2, code)
-        self.assertEqual("dynamic_ompl_plan_only", result["stage"])
+        self.assertEqual("dynamic_route_plan_only", result["stage"])
         self.assertEqual(99999, result["planning_error_code"])
-        self.assertIn("collision-free route", result["reason"])
+        self.assertIn("direct fixed-orientation path", result["reason"])
+        self.assertEqual(
+            "DIRECT_AND_DETOUR_PLANNING_FAILED",
+            result["failure_diagnostic"]["classification"],
+        )
+
+    def test_execution_reuses_the_selected_dynamic_route_profile(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        direct_goal = object()
+        detour_goal = object()
+        node._direct_goal_for_target = Mock(return_value=direct_goal)
+        node._goal_for_target = Mock(return_value=detour_goal)
+        target = {"position_m": [0.0, 0.0, 0.0]}
+
+        node._selected_dynamic_route_strategy = DIRECT_ROUTE_STRATEGY
+        self.assertIs(direct_goal, node._goal_for_selected_dynamic_route(target))
+        node._direct_goal_for_target.assert_called_once_with(target)
+        node._goal_for_target.assert_not_called()
+
+        node._selected_dynamic_route_strategy = DETOUR_ROUTE_STRATEGY
+        self.assertIs(detour_goal, node._goal_for_selected_dynamic_route(target))
+        node._goal_for_target.assert_called_once_with(target)
 
     def test_verified_stationary_search_goal_uses_exact_zero_start_velocity(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)

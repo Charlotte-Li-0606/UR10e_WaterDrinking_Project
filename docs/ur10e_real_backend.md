@@ -51,6 +51,14 @@ collision-checks each translation independently, and requests cancellation as
 soon as any face candidate appears. The complete search remains bounded to 15
 seconds.
 
+For the final pre-mouth route, the real workflow keeps both the static
+collision objects and live wrist-camera OctoMap enabled in one combined
+PlanningScene. It first checks an exact-orientation Pilz LIN path. If that path
+is clear, it uses it directly; only a rejected direct path triggers the bounded
+orientation-constrained OMPL detour to the same frozen target. No obstacle
+layer is disabled, and a failure of both planners is reported separately from
+IK failure.
+
 For an explicitly requested Codex plan without motion:
 
 ```bash

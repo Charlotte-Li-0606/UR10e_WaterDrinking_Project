@@ -36,7 +36,11 @@ from moveit_msgs.srv import GetPositionIK  # noqa: E402
 from ur_dashboard_msgs.msg import RobotMode, SafetyMode  # noqa: E402
 
 from scripts.real_dynamic_obstacle_avoidance_plan import (  # noqa: E402
+    DETOUR_ROUTE_STRATEGY,
+    DIRECT_ROUTE_STRATEGY,
     FILTERED_CLOUD_TOPIC,
+    OMPL_PIPELINE,
+    OMPL_PLANNER,
     RAW_CLOUD_TOPIC,
     REPLAN_ATTEMPTS,
     REPLAN_DELAY_SEC,
@@ -59,6 +63,8 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
     MAX_EXECUTION_SPEED_PERCENT,
     MIN_EXECUTION_SPEED_PERCENT,
     MIN_STABLE_SAMPLES,
+    PILZ_PIPELINE,
+    PILZ_PLANNER,
     STRAW_TIP_OFFSET_TOOL0_M,
     TOOL_FRAME,
     RealPreMouthFromPerceptionPlan,
@@ -1060,19 +1066,28 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
 
     def plan(self) -> tuple[int, dict[str, Any]]:
         code, response = super().plan()
+        plan_result = response.get("plan_result", {})
+        if isinstance(plan_result, dict):
+            if "planner" in plan_result:
+                response["planner"] = plan_result["planner"]
+            if "route_strategy" in plan_result:
+                response["route_strategy"] = plan_result["route_strategy"]
         if not response.get("success") and not response.get("stage"):
-            plan_result = response.get("plan_result", {})
-            response["stage"] = "dynamic_ompl_plan_only"
+            response["stage"] = "dynamic_route_plan_only"
             response["reason"] = (
-                "OMPL could not find a constrained collision-free route to the "
-                "frozen real pre-mouth target"
+                "the direct fixed-orientation path and the constrained OMPL "
+                "detour both failed for the frozen real pre-mouth target"
             )
             response["planning_error_code"] = plan_result.get("error_code")
             response["failure_diagnostic"] = {
-                "classification": "OMPL_CONSTRAINED_PLANNING_FAILED",
+                "classification": "DIRECT_AND_DETOUR_PLANNING_FAILED",
                 "reason": response["reason"],
                 "error_code": plan_result.get("error_code"),
                 "error_message": plan_result.get("error_message"),
+                "direct_path_plan_result": plan_result.get(
+                    "direct_path_plan_result"
+                ),
+                "obstacle_layer_attribution": "combined_scene_only",
             }
         detected = response.get("detected_mouth_pose")
         if response.get("success") and isinstance(detected, dict):
@@ -1080,6 +1095,15 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             if isinstance(position, list) and len(position) == 3:
                 self._frozen_execution_mouth_position = [float(value) for value in position]
         return code, response
+
+    def _goal_for_selected_dynamic_route(self, target: dict[str, Any]):
+        """Rebuild the validated route profile for guarded plan-and-execute."""
+        strategy = getattr(self, "_selected_dynamic_route_strategy", None)
+        if strategy == DIRECT_ROUTE_STRATEGY:
+            return self._direct_goal_for_target(target)
+        if strategy == DETOUR_ROUTE_STRATEGY:
+            return self._goal_for_target(target)
+        raise RuntimeError("no validated dynamic route strategy is available")
 
     def _execute_validated_trajectory(self) -> dict[str, Any]:
         """MoveGroup plan-and-execute with same-target scene-change replanning."""
@@ -1091,6 +1115,20 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "reason": "no validated frozen dynamic target is available",
                 "execution_attempted": False,
             }
+        route_strategy = getattr(self, "_selected_dynamic_route_strategy", None)
+        if route_strategy not in (DIRECT_ROUTE_STRATEGY, DETOUR_ROUTE_STRATEGY):
+            return {
+                "success": False,
+                "stage": "dynamic_route_strategy",
+                "reason": "no validated direct or detour route strategy is available",
+                "route_strategy": route_strategy,
+                "execution_attempted": False,
+            }
+        planner = (
+            f"{PILZ_PIPELINE}/{PILZ_PLANNER}"
+            if route_strategy == DIRECT_ROUTE_STRATEGY
+            else f"{OMPL_PIPELINE}/{OMPL_PLANNER}"
+        )
         readiness = self.dynamic_readiness(execution_mode=True)
         if not readiness.get("success"):
             return {
@@ -1098,9 +1136,11 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "stage": "dynamic_execution_readiness",
                 "reason": "; ".join(readiness.get("failures", [])),
                 "dynamic_octomap_readiness": readiness,
+                "route_strategy": route_strategy,
+                "planner": planner,
                 "execution_attempted": False,
             }
-        goal = self._goal_for_target(target)
+        goal = self._goal_for_selected_dynamic_route(target)
         goal.planning_options.plan_only = False
         goal.planning_options.replan = True
         goal.planning_options.replan_attempts = REPLAN_ATTEMPTS
@@ -1113,6 +1153,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "success": False,
                 "stage": "dynamic_move_group_goal",
                 "reason": "MoveGroup rejected the guarded same-target plan-and-execute goal",
+                "route_strategy": route_strategy,
+                "planner": planner,
                 "execution_attempted": False,
             }
         result_future = handle.get_result_async()
@@ -1148,6 +1190,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "execution_attempted": True,
                 "cancel_requested": True,
                 "same_target_replanning": True,
+                "route_strategy": route_strategy,
+                "planner": planner,
             }
         wrapped = result_future.result()
         if wrapped is None:
@@ -1155,6 +1199,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "success": False,
                 "stage": "dynamic_execution_result",
                 "reason": "MoveGroup returned no dynamic execution result",
+                "route_strategy": route_strategy,
+                "planner": planner,
                 "execution_attempted": True,
             }
         result = wrapped.result
@@ -1169,6 +1215,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "planned_trajectory": _trajectory_summary(result.planned_trajectory),
             "execution_attempted": True,
             "controller_goal_type": "MoveGroup plan-and-execute with scene monitoring",
+            "route_strategy": route_strategy,
+            "planner": planner,
             "same_target_replanning": True,
             "maximum_replan_attempts": REPLAN_ATTEMPTS,
             "replan_delay_sec": REPLAN_DELAY_SEC,
@@ -1219,6 +1267,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "skip_unreachable_direction": True,
             },
             "dynamic_obstacle_avoidance": True,
+            "direct_clear_path_first": True,
+            "constrained_detour_only_after_direct_rejection": True,
+            "combined_static_and_dynamic_scene_checks": True,
             "same_target_replanning": True,
             "wait_for_clear": False,
         }

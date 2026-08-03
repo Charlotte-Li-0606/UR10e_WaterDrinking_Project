@@ -7,7 +7,7 @@ import os
 from types import SimpleNamespace
 from pathlib import Path
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from geometry_msgs.msg import Pose
 from sensor_msgs.msg import PointCloud2
@@ -408,6 +408,111 @@ class RealPlanOnlyDynamicProfileTest(unittest.TestCase):
         self.assertTrue(goal.planning_options.replan)
         self.assertEqual(module.REPLAN_ATTEMPTS, goal.planning_options.replan_attempts)
         self.assertEqual(0.0, goal.planning_options.replan_delay)
+
+    def test_direct_profile_preserves_exact_orientation_pilz_path(self) -> None:
+        module = importlib.import_module(
+            "scripts.real_dynamic_obstacle_avoidance_plan"
+        )
+        planner = module.RealDynamicObstacleAvoidancePlan.__new__(
+            module.RealDynamicObstacleAvoidancePlan
+        )
+        planner.trajectory_velocity_scaling = 0.10
+        planner.trajectory_acceleration_scaling = 0.10
+        planner.latest_joint_state = None
+        target = {
+            "position_m": [-0.55, -0.10, 0.40],
+            "orientation_quat_xyzw": [0.60, 0.79, 0.02, 0.04],
+        }
+
+        goal = planner._direct_goal_for_target(target)
+
+        self.assertEqual(module.PILZ_PIPELINE, goal.request.pipeline_id)
+        self.assertEqual(module.PILZ_PLANNER, goal.request.planner_id)
+        path_orientation = goal.request.path_constraints.orientation_constraints[0]
+        self.assertEqual(
+            module.ORIENTATION_TOLERANCE_RAD,
+            path_orientation.absolute_x_axis_tolerance,
+        )
+        self.assertFalse(goal.planning_options.replan)
+
+    def test_direct_route_is_selected_without_trying_ompl(self) -> None:
+        module = importlib.import_module(
+            "scripts.real_dynamic_obstacle_avoidance_plan"
+        )
+        planner = module.RealDynamicObstacleAvoidancePlan.__new__(
+            module.RealDynamicObstacleAvoidancePlan
+        )
+        direct_goal = object()
+        planner._direct_goal_for_target = Mock(return_value=direct_goal)
+        planner._goal_for_target = Mock()
+        planner._run_goal = Mock(
+            return_value={
+                "success": True,
+                "stage": "move_group_plan_only",
+                "planned_trajectory": {"points": 10},
+            }
+        )
+        target = {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "position_m": [-0.55, -0.10, 0.40],
+            "orientation_quat_xyzw": [0.60, 0.79, 0.02, 0.04],
+        }
+
+        result = planner._run_plan(target)
+
+        self.assertTrue(result["success"])
+        self.assertEqual(module.DIRECT_ROUTE_STRATEGY, result["route_strategy"])
+        self.assertEqual(
+            f"{module.PILZ_PIPELINE}/{module.PILZ_PLANNER}", result["planner"]
+        )
+        self.assertFalse(result["detour_attempted"])
+        planner._run_goal.assert_called_once_with(direct_goal)
+        planner._goal_for_target.assert_not_called()
+
+    def test_ompl_detour_is_tried_only_after_direct_rejection(self) -> None:
+        module = importlib.import_module(
+            "scripts.real_dynamic_obstacle_avoidance_plan"
+        )
+        planner = module.RealDynamicObstacleAvoidancePlan.__new__(
+            module.RealDynamicObstacleAvoidancePlan
+        )
+        direct_goal = object()
+        detour_goal = object()
+        planner._direct_goal_for_target = Mock(return_value=direct_goal)
+        planner._goal_for_target = Mock(return_value=detour_goal)
+        direct_failure = {
+            "success": False,
+            "stage": "move_group_plan_only",
+            "error_code": -1,
+        }
+        planner._run_goal = Mock(
+            side_effect=[
+                direct_failure,
+                {
+                    "success": True,
+                    "stage": "move_group_plan_only",
+                    "planned_trajectory": {"points": 20},
+                },
+            ]
+        )
+        target = {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "position_m": [-0.55, -0.10, 0.40],
+            "orientation_quat_xyzw": [0.60, 0.79, 0.02, 0.04],
+        }
+
+        result = planner._run_plan(target)
+
+        self.assertTrue(result["success"])
+        self.assertEqual(module.DETOUR_ROUTE_STRATEGY, result["route_strategy"])
+        self.assertTrue(result["detour_attempted"])
+        self.assertEqual(direct_failure, result["direct_path_plan_result"])
+        self.assertEqual(
+            [direct_goal, detour_goal],
+            [call.args[0] for call in planner._run_goal.call_args_list],
+        )
 
 
 if __name__ == "__main__":

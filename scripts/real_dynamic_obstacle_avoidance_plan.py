@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Independent no-motion OMPL/OctoMap plan for the calibrated real UR10e.
+"""Independent no-motion direct-first/OctoMap plan for the calibrated UR10e.
 
 This wrapper deliberately reuses the proven real pre-mouth perception,
-coordinate, reach, orientation, and PlanningScene guards.  It changes only the
-plan-only MoveGroup planner profile from Pilz LIN to OMPL RRTConnect so a
-non-linear route to the same frozen 80 mm pre-mouth target can be evaluated.
-It has no execution mode and never creates an ExecuteTrajectory client.
+coordinate, reach, orientation, and combined PlanningScene guards.  It first
+checks the exact-orientation Pilz LIN route.  Only when that route is rejected
+does it ask OMPL RRTConnect for a bounded non-linear route to the same frozen
+80 mm pre-mouth target.  It has no execution mode and never creates an
+ExecuteTrajectory client.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from rclpy.qos import qos_profile_sensor_data  # noqa: E402
 from sensor_msgs.msg import PointCloud2  # noqa: E402
 
 from scripts.real_premouth_from_perception_plan import (  # noqa: E402
+    ACTION_TIMEOUT_SEC,
     DEFAULT_FEEDING_VECTOR,
     DEFAULT_MOUTH_SAMPLE_SECONDS,
     DEFAULT_SAFE_DISTANCE_M,
@@ -38,9 +40,13 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
     MAX_MOUTH_SAMPLE_SECONDS,
     MAX_TOOL0_RADIUS_FROM_UR_BASE_M,
     MIN_MOUTH_SAMPLE_SECONDS,
+    ORIENTATION_TOLERANCE_RAD,
+    PILZ_PIPELINE,
+    PILZ_PLANNER,
     PREMOUTH_POLICIES,
     RealPreMouthFromPerceptionPlan,
     _jsonable,
+    _trajectory_summary,
 )
 
 
@@ -58,6 +64,9 @@ REPLAN_DELAY_SEC = 0.0
 # (2.86 degrees) on any tool-orientation axis along a detour.  This is a small
 # bounded deviation, not a search rotation or an arbitrary wrist pose.
 MAX_PATH_ORIENTATION_DEVIATION_RAD = 0.05
+DIRECT_ROUTE_STRATEGY = "direct_fixed_orientation_clear_path"
+DETOUR_ROUTE_STRATEGY = "ompl_detour_after_direct_path_rejected"
+COMBINED_SCENE_DESCRIPTION = "static_collision_objects_plus_live_octomap"
 
 
 class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
@@ -202,6 +211,57 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
         goal.planning_options.replan_delay = REPLAN_DELAY_SEC
         return goal
 
+    def _direct_goal_for_target(self, target: dict[str, Any]):
+        """Build the proven fixed-orientation Pilz request without dispatch."""
+        return RealPreMouthFromPerceptionPlan._goal_for_target(self, target)
+
+    def _run_goal(self, goal: Any) -> dict[str, Any]:
+        """Run one plan-only MoveGroup goal against the current combined scene."""
+        self._validated_trajectory = None
+        future = self.move_group.send_goal_async(goal)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=8.0)
+        handle = future.result()
+        if handle is None or not handle.accepted:
+            return {
+                "success": False,
+                "stage": "move_group_goal",
+                "reason": "MoveGroup rejected the plan-only goal",
+                "execution_sent": False,
+            }
+        result_future = handle.get_result_async()
+        rclpy.spin_until_future_complete(
+            self,
+            result_future,
+            timeout_sec=ACTION_TIMEOUT_SEC,
+        )
+        wrapped_result = result_future.result()
+        if wrapped_result is None:
+            cancel_future = handle.cancel_goal_async()
+            rclpy.spin_until_future_complete(self, cancel_future, timeout_sec=5.0)
+            return {
+                "success": False,
+                "stage": "move_group_timeout",
+                "reason": (
+                    "MoveGroup did not return a plan within "
+                    f"{ACTION_TIMEOUT_SEC:.0f} seconds; cancel requested"
+                ),
+                "execution_sent": False,
+            }
+        result = wrapped_result.result
+        success = int(result.error_code.val) == 1
+        if success:
+            self._validated_trajectory = result.planned_trajectory
+        return {
+            "success": success,
+            "stage": "move_group_plan_only",
+            "result_status": int(wrapped_result.status),
+            "error_code": int(result.error_code.val),
+            "error_message": result.error_code.message,
+            "planning_time_sec": float(result.planning_time),
+            "planned_trajectory": _trajectory_summary(result.planned_trajectory),
+            "execution_sent": False,
+        }
+
     def _run_plan(self, target: dict[str, Any]) -> dict[str, Any]:
         self._frozen_dynamic_target = {
             "frame_id": str(target["frame_id"]),
@@ -211,10 +271,41 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
                 float(value) for value in target["orientation_quat_xyzw"]
             ],
         }
-        result = super()._run_plan(target)
+        direct_result = self._run_goal(self._direct_goal_for_target(target))
+        if direct_result.get("success"):
+            self._selected_dynamic_route_strategy = DIRECT_ROUTE_STRATEGY
+            direct_result.update(
+                {
+                    "route_strategy": DIRECT_ROUTE_STRATEGY,
+                    "planner": f"{PILZ_PIPELINE}/{PILZ_PLANNER}",
+                    "combined_planning_scene_checked": True,
+                    "planning_scene": COMBINED_SCENE_DESCRIPTION,
+                    "direct_path_accepted": True,
+                    "detour_attempted": False,
+                    "same_target_replanning": True,
+                    "maximum_replan_attempts": REPLAN_ATTEMPTS,
+                    "replan_delay_sec": REPLAN_DELAY_SEC,
+                    "wait_for_clear": False,
+                    "orientation_path_constraint": True,
+                    "maximum_path_orientation_deviation_rad": ORIENTATION_TOLERANCE_RAD,
+                    "execution_sent": False,
+                }
+            )
+            return direct_result
+
+        result = self._run_goal(self._goal_for_target(target))
+        self._selected_dynamic_route_strategy = (
+            DETOUR_ROUTE_STRATEGY if result.get("success") else None
+        )
         result.update(
             {
+                "route_strategy": self._selected_dynamic_route_strategy,
                 "planner": f"{OMPL_PIPELINE}/{OMPL_PLANNER}",
+                "combined_planning_scene_checked": True,
+                "planning_scene": COMBINED_SCENE_DESCRIPTION,
+                "direct_path_accepted": False,
+                "direct_path_plan_result": direct_result,
+                "detour_attempted": True,
                 "same_target_replanning": True,
                 "maximum_replan_attempts": REPLAN_ATTEMPTS,
                 "replan_delay_sec": REPLAN_DELAY_SEC,
@@ -224,6 +315,20 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
                 "execution_sent": False,
             }
         )
+        if not result.get("success"):
+            result["failure_diagnostic"] = {
+                "classification": "DIRECT_AND_DETOUR_PLANNING_FAILED",
+                "reason": (
+                    "the combined static-and-dynamic PlanningScene rejected or "
+                    "could not plan both the fixed-orientation direct route and "
+                    "the bounded constrained OMPL detour"
+                ),
+                "direct_error_code": direct_result.get("error_code"),
+                "direct_error_message": direct_result.get("error_message"),
+                "detour_error_code": result.get("error_code"),
+                "detour_error_message": result.get("error_message"),
+                "obstacle_layer_attribution": "combined_scene_only",
+            }
         return result
 
 
@@ -274,9 +379,10 @@ def main() -> int:
             exit_code, response = node.plan()
             if not response.get("success") and not response.get("stage"):
                 plan_result = response.get("plan_result", {})
-                response["stage"] = "dynamic_ompl_plan_only"
+                response["stage"] = "dynamic_route_plan_only"
                 response["reason"] = (
-                    "OMPL could not find a constrained collision-free route to the frozen real pre-mouth target"
+                    "neither the direct fixed-orientation route nor the bounded "
+                    "constrained OMPL detour reached the frozen real pre-mouth target"
                 )
                 response["planning_error_code"] = plan_result.get("error_code")
         else:
@@ -294,12 +400,18 @@ def main() -> int:
                 "dynamic_octomap_readiness": readiness,
                 "execution_disabled": True,
                 "execution_sent": False,
-                "planner": f"{OMPL_PIPELINE}/{OMPL_PLANNER}",
                 "same_target_replanning": True,
                 "wait_for_clear": False,
                 "real_execution_supported": False,
             }
         )
+        plan_result = response.get("plan_result", {})
+        response.setdefault(
+            "planner",
+            plan_result.get("planner", f"{OMPL_PIPELINE}/{OMPL_PLANNER}"),
+        )
+        if isinstance(plan_result, dict) and "route_strategy" in plan_result:
+            response.setdefault("route_strategy", plan_result["route_strategy"])
         report = json.dumps(_jsonable(response), indent=2, sort_keys=True)
         if args.report_file is not None:
             args.report_file.parent.mkdir(parents=True, exist_ok=True)
