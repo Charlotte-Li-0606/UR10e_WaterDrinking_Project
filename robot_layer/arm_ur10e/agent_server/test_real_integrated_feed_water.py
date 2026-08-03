@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from robot_layer.arm_ur10e.agent_server import real_feed_water_backend as backend
@@ -170,6 +171,36 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertEqual("dynamic_ompl_plan_only", result["stage"])
         self.assertEqual(99999, result["planning_error_code"])
         self.assertIn("collision-free route", result["reason"])
+
+    def test_verified_stationary_search_goal_uses_exact_zero_start_velocity(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.move_group = Mock()
+        node.move_group.send_goal_async.return_value = Mock()
+        fake_goal = SimpleNamespace(
+            request=SimpleNamespace(
+                start_state=SimpleNamespace(
+                    joint_state=SimpleNamespace(
+                        name=["joint_1", "joint_2"],
+                        velocity=[0.004, -0.003],
+                    )
+                )
+            )
+        )
+
+        with patch(
+            "scripts.real_feed_water_integrated.RealPreMouthFromPerceptionPlan._goal_for_target",
+            return_value=fake_goal,
+        ), patch(
+            "scripts.real_feed_water_integrated.rclpy.spin_until_future_complete"
+        ):
+            node.move_group.send_goal_async.return_value.result.return_value = None
+            node._search_plan(
+                {},
+                deadline=10_000_000_000.0,
+                stationary_verified=True,
+            )
+
+        self.assertEqual([0.0, 0.0], fake_goal.request.start_state.joint_state.velocity)
 
 
 if __name__ == "__main__":

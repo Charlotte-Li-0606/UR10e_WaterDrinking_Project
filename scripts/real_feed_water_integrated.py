@@ -46,6 +46,7 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
     CAMERA_OPTICAL_FRAME,
     DEFAULT_MOUTH_SAMPLE_SECONDS,
     DEFAULT_SAFE_DISTANCE_M,
+    EXPECTED_JOINTS,
     FINAL_ORIENTATION_TOLERANCE_RAD,
     MAX_MOUTH_POSE_AGE_SEC,
     MAX_PLAN_TRANSLATION_M,
@@ -75,6 +76,9 @@ SEARCH_LATERAL_STEP_M = 0.020
 SEARCH_VERTICAL_STEP_M = 0.020
 SEARCH_MAX_ACTUAL_SEGMENT_M = 0.035
 SEARCH_FINAL_POSITION_TOLERANCE_M = 0.010
+SEARCH_MAX_STATIONARY_JOINT_SPEED_RAD_SEC = 0.010
+SEARCH_STATIONARY_SAMPLE_COUNT = 2
+SEARCH_STATIONARY_TIMEOUT_SEC = 0.75
 SEARCH_OFFSETS = (
     ("retreat_1", (SEARCH_BACK_STEP_M, 0.0, 0.0)),
     ("retreat_2", (2.0 * SEARCH_BACK_STEP_M, 0.0, 0.0)),
@@ -232,6 +236,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         target: dict[str, Any],
         *,
         deadline: float,
+        stationary_verified: bool = False,
     ) -> tuple[dict[str, Any], Any | None]:
         """Plan one Pilz-LIN search segment while preserving orientation."""
         remaining = deadline - time.monotonic()
@@ -243,6 +248,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "execution_sent": False,
             }, None
         goal = RealPreMouthFromPerceptionPlan._goal_for_target(self, target)
+        if stationary_verified:
+            start_joint_state = goal.request.start_state.joint_state
+            start_joint_state.velocity = [0.0] * len(start_joint_state.name)
         future = self.move_group.send_goal_async(goal)
         rclpy.spin_until_future_complete(
             self,
@@ -286,6 +294,83 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "planned_trajectory": _trajectory_summary(result.planned_trajectory),
             "execution_sent": False,
         }, trajectory
+
+    def _wait_for_search_stationary(self, deadline: float) -> dict[str, Any]:
+        """Require fresh stationary joint samples before each Pilz LIN plan.
+
+        The UR controller can report one final nonzero velocity sample after a
+        trajectory result succeeds. Pilz rejects any nonzero start velocity,
+        so wait for two new stationary samples before representing the
+        verified start state with exact zero velocities in the planning goal.
+        """
+        settle_deadline = min(
+            deadline,
+            time.monotonic() + SEARCH_STATIONARY_TIMEOUT_SEC,
+        )
+        consecutive = 0
+        last_state: Any | None = None
+        latest_max_speed: float | None = None
+        latest_reason = "no fresh joint-state sample received"
+        while rclpy.ok() and time.monotonic() < settle_deadline:
+            state = self.latest_joint_state
+            if state is not None and state is not last_state:
+                last_state = state
+                names = list(state.name)
+                velocities = list(state.velocity)
+                if len(names) != len(velocities):
+                    consecutive = 0
+                    latest_reason = "joint-state velocity vector is incomplete"
+                else:
+                    by_name = dict(zip(names, velocities))
+                    if not all(name in by_name for name in EXPECTED_JOINTS):
+                        consecutive = 0
+                        latest_reason = "joint-state velocity vector is missing a UR10e joint"
+                    else:
+                        expected_velocities = [
+                            float(by_name[name]) for name in EXPECTED_JOINTS
+                        ]
+                        if not all(math.isfinite(value) for value in expected_velocities):
+                            consecutive = 0
+                            latest_reason = "joint-state velocity vector contains a non-finite value"
+                        else:
+                            latest_max_speed = max(
+                                (abs(value) for value in expected_velocities),
+                                default=0.0,
+                            )
+                            if (
+                                latest_max_speed
+                                <= SEARCH_MAX_STATIONARY_JOINT_SPEED_RAD_SEC
+                            ):
+                                consecutive += 1
+                                latest_reason = "stationary"
+                            else:
+                                consecutive = 0
+                                latest_reason = "UR10e joints are still settling"
+                            if consecutive >= SEARCH_STATIONARY_SAMPLE_COUNT:
+                                return {
+                                    "success": True,
+                                    "maximum_joint_speed_rad_sec": latest_max_speed,
+                                    "maximum_allowed_joint_speed_rad_sec": (
+                                        SEARCH_MAX_STATIONARY_JOINT_SPEED_RAD_SEC
+                                    ),
+                                    "stationary_sample_count": consecutive,
+                                }
+            rclpy.spin_once(
+                self,
+                timeout_sec=min(
+                    0.02,
+                    max(0.0, settle_deadline - time.monotonic()),
+                ),
+            )
+        return {
+            "success": False,
+            "reason": latest_reason,
+            "maximum_joint_speed_rad_sec": latest_max_speed,
+            "maximum_allowed_joint_speed_rad_sec": (
+                SEARCH_MAX_STATIONARY_JOINT_SPEED_RAD_SEC
+            ),
+            "stationary_sample_count": consecutive,
+        }
 
     def _cancel_goal(self, handle: Any) -> None:
         cancel = handle.cancel_goal_async()
@@ -463,6 +548,22 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 )
                 return response
 
+            stationary: dict[str, Any] | None = None
+            if execute:
+                stationary = self._wait_for_search_stationary(motion_deadline)
+                if not stationary.get("success"):
+                    response.update(
+                        {
+                            "stage": "active_search_stationary_guard",
+                            "reason": (
+                                "UR10e did not report a stationary joint state before "
+                                "the next bounded search plan"
+                            ),
+                            "stationary_joint_state": stationary,
+                        }
+                    )
+                    return response
+
             current = self._tool0_pose()
             if not current.get("available"):
                 response.update(
@@ -519,7 +620,13 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "position_m": waypoint["target_tool0_position_m"],
                 "orientation_quat_xyzw": orientation,
             }
-            plan, trajectory = self._search_plan(target, deadline=motion_deadline)
+            plan, trajectory = self._search_plan(
+                target,
+                deadline=motion_deadline,
+                stationary_verified=bool(
+                    stationary is not None and stationary.get("success")
+                ),
+            )
             step = {
                 **waypoint,
                 "segment_distance_m": segment,
@@ -527,6 +634,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "target_tool0_radius_from_ur_base_m": radius,
                 "plan_result": plan,
                 "execution_result": None,
+                "stationary_joint_state": stationary,
             }
             if not plan.get("success") or trajectory is None:
                 response["search_steps"].append(step)
