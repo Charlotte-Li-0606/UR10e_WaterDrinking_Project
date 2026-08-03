@@ -9,15 +9,15 @@
 - Preserve the OpenClaw implementation as a legacy fallback. Do not delete or
   modify it unless the user explicitly asks to maintain or remove that version.
 - The physical workflow supports only the high-level, center-target
-  `feed_water` operation ending at an 80 mm pre-mouth hold. Its guarded active
-  search may include a predefined `wrist_3` left/right sweep of at most 60
-  degrees from the recorded initial flange orientation. Stop that sweep on a
-  stable mouth detection; if no mouth is found, return to the recorded initial
-  flange orientation. Plan and collision-check every sweep and return segment
-  through MoveIt, enforce joint and workspace limits, and preserve all runtime
-  gates. Never substitute arbitrary user-supplied joints, poses, trajectories,
-  controller commands, gripper actions, direct mouth contact, cup tilt,
-  pouring, or an automatic retreat outside this bounded search profile.
+  `feed_water` operation ending at an 80 mm pre-mouth hold. Do not impose a
+  flange or wrist orientation constraint on intermediate states used for
+  active-search or obstacle-detour route calculation. Allow MoveIt to choose
+  any intermediate flange orientation needed for a collision-free route.
+  Require the final pre-mouth goal to satisfy its validated target orientation.
+  Plan and collision-check every segment through MoveIt, enforce joint and
+  workspace limits, and preserve all runtime gates. Never substitute arbitrary
+  user-supplied joints, poses, trajectories, controller commands, gripper
+  actions, direct mouth contact, cup tilt, pouring, or an automatic retreat.
 
 ## Real-motion authorization
 
