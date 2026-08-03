@@ -79,7 +79,8 @@ ur10e:
   reset_joints: [-0.151217, -1.610439, 0.775573, -0.735939, -1.570760, 2.821707]
 
   # MoveIt/controller defaults for visible, gentle simulation motion. The
-  # real backend clamps both values to 0.05 or lower in code.
+  # real backend replaces these shared simulation defaults with its reviewed
+  # 0.60 scaling profile and clamps explicit overrides to 0.60 or lower.
   max_velocity: 0.2
   max_acceleration: 0.2
   default_duration: 7.0

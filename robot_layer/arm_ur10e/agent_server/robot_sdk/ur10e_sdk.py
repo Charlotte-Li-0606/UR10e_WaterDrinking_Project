@@ -241,6 +241,13 @@ class UR10eRobotEnv:
             if max_acceleration is not None
             else ur_cfg.get("max_acceleration", 0.2)
         )
+        # The physical backend has an explicit reviewed default/cap. Keep the
+        # lower shared YAML defaults for simulation, but do not silently turn
+        # a requested 60% real profile back into the simulation's 20%.
+        if self.backend.is_real and max_velocity is None:
+            self.max_velocity = float(self.backend.max_velocity_limit or self.max_velocity)
+        if self.backend.is_real and max_acceleration is None:
+            self.max_acceleration = float(self.backend.max_acceleration_limit or self.max_acceleration)
         if self.backend.max_velocity_limit is not None:
             self.max_velocity = min(self.max_velocity, self.backend.max_velocity_limit)
         if self.backend.max_acceleration_limit is not None:

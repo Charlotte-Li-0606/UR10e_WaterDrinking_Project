@@ -31,6 +31,8 @@ REAL_BACKEND = "real"
 SAFE_DISTANCE_M = 0.080
 MAXIMUM_PLAN_TRANSLATION_M = 1.30
 MOUTH_SAMPLE_SECONDS = 1.0
+TRAJECTORY_VELOCITY_SCALING = 0.60
+TRAJECTORY_ACCELERATION_SCALING = 0.60
 MIN_HOLD_SECONDS = 2.0
 MAX_HOLD_SECONDS = 5.0
 DEFAULT_HOLD_SECONDS = 3.0
@@ -71,9 +73,9 @@ def _pipeline_command(
         "--mouth-sample-seconds",
         str(MOUTH_SAMPLE_SECONDS),
         "--trajectory-velocity-scaling",
-        "0.10",
+        str(TRAJECTORY_VELOCITY_SCALING),
         "--trajectory-acceleration-scaling",
-        "0.10",
+        str(TRAJECTORY_ACCELERATION_SCALING),
         "--report-file",
         str(report_path),
     ]

@@ -96,8 +96,8 @@ def resolve_ur10e_backend_settings(
         expected_controller=str(selected_cfg.get("expected_controller", default_controller)),
         robot_ip=robot_ip,
         real_execution_allowed=real_allowed if requested == "real" else False,
-        max_velocity_limit=0.05 if requested == "real" else None,
-        max_acceleration_limit=0.05 if requested == "real" else None,
+        max_velocity_limit=0.60 if requested == "real" else None,
+        max_acceleration_limit=0.60 if requested == "real" else None,
     )
 
 

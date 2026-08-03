@@ -52,6 +52,8 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
     CAMERA_OPTICAL_FRAME,
     DEFAULT_MOUTH_SAMPLE_SECONDS,
     DEFAULT_SAFE_DISTANCE_M,
+    DEFAULT_TRAJECTORY_ACCELERATION_SCALING,
+    DEFAULT_TRAJECTORY_VELOCITY_SCALING,
     EXPECTED_JOINTS,
     FINAL_ORIENTATION_TOLERANCE_RAD,
     GROUP_NAME,
@@ -1354,8 +1356,16 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--no-execute", action="store_true")
     parser.add_argument("--target-selection", choices=("left", "center", "right"), default="center")
     parser.add_argument("--mouth-sample-seconds", type=float, default=DEFAULT_MOUTH_SAMPLE_SECONDS)
-    parser.add_argument("--trajectory-velocity-scaling", type=float, default=0.10)
-    parser.add_argument("--trajectory-acceleration-scaling", type=float, default=0.10)
+    parser.add_argument(
+        "--trajectory-velocity-scaling",
+        type=float,
+        default=DEFAULT_TRAJECTORY_VELOCITY_SCALING,
+    )
+    parser.add_argument(
+        "--trajectory-acceleration-scaling",
+        type=float,
+        default=DEFAULT_TRAJECTORY_ACCELERATION_SCALING,
+    )
     parser.add_argument("--report-file", type=Path)
     return parser.parse_args()
 

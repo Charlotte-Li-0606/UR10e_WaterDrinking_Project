@@ -71,6 +71,10 @@ class RealFeedWaterBackendTest(unittest.TestCase):
             self.assertNotIn("--confirm-real-motion", command)
             mouth_sample_argument = command.index("--mouth-sample-seconds") + 1
             self.assertEqual("1.0", command[mouth_sample_argument])
+            velocity_argument = command.index("--trajectory-velocity-scaling") + 1
+            acceleration_argument = command.index("--trajectory-acceleration-scaling") + 1
+            self.assertEqual("0.6", command[velocity_argument])
+            self.assertEqual("0.6", command[acceleration_argument])
             return subprocess.CompletedProcess(command, 0, "", "")
 
         with tempfile.TemporaryDirectory() as directory, patch.object(
@@ -86,6 +90,7 @@ class RealFeedWaterBackendTest(unittest.TestCase):
         self.assertFalse(result["cup_tilt_commanded"])
         self.assertFalse(result["pour_commanded"])
         self.assertFalse(result["automatic_retreat_sent"])
+        self.assertEqual(1.30, result["maximum_planned_displacement_m"])
 
 
 if __name__ == "__main__":

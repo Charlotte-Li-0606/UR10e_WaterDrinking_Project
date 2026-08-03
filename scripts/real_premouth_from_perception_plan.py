@@ -117,10 +117,10 @@ MAX_EXECUTION_SPEED_PERCENT = 60.0
 DEFAULT_MOUTH_SAMPLE_SECONDS = 2.0
 MIN_MOUTH_SAMPLE_SECONDS = 0.5
 MAX_MOUTH_SAMPLE_SECONDS = 8.0
-DEFAULT_TRAJECTORY_VELOCITY_SCALING = 0.10
-DEFAULT_TRAJECTORY_ACCELERATION_SCALING = 0.10
+DEFAULT_TRAJECTORY_VELOCITY_SCALING = 0.60
+DEFAULT_TRAJECTORY_ACCELERATION_SCALING = 0.60
 MIN_TRAJECTORY_SCALING = 0.01
-MAX_TRAJECTORY_SCALING = 0.20
+MAX_TRAJECTORY_SCALING = 0.60
 MAX_MOUTH_POSE_AGE_SEC = 1.0
 MIN_STABLE_SAMPLES = 3
 MAX_POSE_SPREAD_M = 0.025
@@ -1798,13 +1798,13 @@ def _parse_args() -> argparse.Namespace:
         "--trajectory-velocity-scaling",
         type=float,
         default=DEFAULT_TRAJECTORY_VELOCITY_SCALING,
-        help="MoveIt velocity scaling for the validated plan (default: 0.10; allowed: 0.01–0.20).",
+        help="MoveIt velocity scaling for the validated plan (default: 0.60; allowed: 0.01–0.60).",
     )
     parser.add_argument(
         "--trajectory-acceleration-scaling",
         type=float,
         default=DEFAULT_TRAJECTORY_ACCELERATION_SCALING,
-        help="MoveIt acceleration scaling for the validated plan (default: 0.10; allowed: 0.01–0.20).",
+        help="MoveIt acceleration scaling for the validated plan (default: 0.60; allowed: 0.01–0.60).",
     )
     parser.add_argument(
         "--return-report",

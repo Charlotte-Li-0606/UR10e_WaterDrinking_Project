@@ -17,8 +17,8 @@ every executing MoveIt or trajectory action unless the execution variable is
 enabled, `/joint_states` is complete, `base_link -> tool0` is available, the
 expected scaled controller is active, and its `FollowJointTrajectory` action
 server is available. Real planning-only requests do not require the execution
-variable. The real backend caps MoveIt velocity and acceleration scaling at
-`0.05`.
+variable. The real backend defaults and caps MoveIt velocity and acceleration
+scaling at `0.60`.
 
 Codex is the preferred operator-facing agent and uses the canonical
 `feed_water` interface through `scripts/codex_feed_water.sh`. The older
@@ -76,8 +76,8 @@ UR10E_ALLOW_REAL_EXECUTION=1 scripts/codex_feed_water.sh \
 The guarded pre-mouth planner accepts a pendant speed-slider setting from 5%
 through a 60% ceiling. Its per-invocation tool0 displacement ceiling is the
 UR10e's nominal 1.30 m reach; target radius, inverse-kinematics, joint-limit,
-and collision checks still apply independently. The mature adapter retains
-0.10 MoveIt velocity and acceleration scaling for its generated trajectory.
+and collision checks still apply independently. The mature adapter uses 0.60
+MoveIt velocity and acceleration scaling for its generated trajectory.
 The real camera-ray pre-mouth stand-off is 80 mm, which is 30 mm farther from
 the detected mouth than the saved 50 mm successful-execution snapshot.
 Short-lived execution requests subscribe to the UR driver's latched robot,
