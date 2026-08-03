@@ -37,6 +37,14 @@ retreat action. It plans by default. Execution requires `--execute`,
 `UR10E_ALLOW_REAL_EXECUTION=1`, and terminates at a motionless 2–5 second
 pre-mouth hold.
 
+The active search freezes the initial flange orientation and applies the
+calibrated flange-to-D435i extrinsic to every direction. It first moves 80 mm
+opposite the camera optical viewing axis to obtain a wider frame, then checks
+50 mm image-left, image-right, image-up, and image-down offsets around that
+wider-view center. It never rotates the flange, plans and collision-checks
+each translation independently, and requests cancellation as soon as any
+face candidate appears. The complete search remains bounded to 15 seconds.
+
 For an explicitly requested Codex plan without motion:
 
 ```bash

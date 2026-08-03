@@ -26,7 +26,10 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
                 "position_m": [0.0, 0.0, 0.0],
                 "orientation_quat_xyzw": [0.0, 0.0, 0.0, 1.0],
             },
-            "camera_tf": {"available": True},
+            "camera_tf": {
+                "available": True,
+                "orientation_quat_xyzw": [0.0, 0.0, 0.0, 1.0],
+            },
             "mount_calibration": {"corrected_physical_profile": True},
             "camera_mount_match": {"matches": True},
             "move_group_available": True,
@@ -56,25 +59,53 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
 
     def test_search_waypoints_match_the_bounded_translation_only_policy(self) -> None:
         origin = [-0.25, -0.04, 0.61]
-        waypoints = RealIntegratedFeedWater.search_waypoints(origin)
+        identity = [0.0, 0.0, 0.0, 1.0]
+        waypoints = RealIntegratedFeedWater.search_waypoints(
+            origin,
+            identity,
+            identity,
+        )
 
-        self.assertEqual(12, len(waypoints))
-        self.assertEqual("retreat_1", waypoints[0]["name"])
-        self.assertEqual([0.03, 0.0, 0.0], waypoints[0]["offset_from_origin_m"])
+        self.assertEqual(5, len(waypoints))
+        self.assertEqual(
+            ["backward_wide", "scan_left", "scan_right", "scan_up", "scan_down"],
+            [item["name"] for item in waypoints],
+        )
+        self.assertEqual([0.0, 0.0, -0.08], waypoints[0]["offset_from_origin_m"])
         positions = [origin] + [item["target_tool0_position_m"] for item in waypoints]
         segment_lengths = [
             sum((float(a) - float(b)) ** 2 for a, b in zip(current, previous)) ** 0.5
             for previous, current in zip(positions, positions[1:])
         ]
-        self.assertLessEqual(max(segment_lengths), 0.03 + 1e-9)
-        self.assertLessEqual(max(item["offset_from_origin_m"][0] for item in waypoints), 0.09)
+        self.assertLessEqual(max(segment_lengths), 0.10 + 1e-9)
         self.assertLessEqual(
-            max(abs(item["offset_from_origin_m"][1]) for item in waypoints),
-            0.02,
+            max(abs(item["offset_camera_optical_m"][0]) for item in waypoints),
+            0.05,
         )
         self.assertLessEqual(
-            max(abs(item["offset_from_origin_m"][2]) for item in waypoints),
-            0.02,
+            max(abs(item["offset_camera_optical_m"][1]) for item in waypoints),
+            0.05,
+        )
+        self.assertTrue(all(item["camera_extrinsic_applied"] for item in waypoints))
+
+    def test_search_waypoints_apply_camera_extrinsic_instead_of_base_axes(self) -> None:
+        origin = [0.0, 0.0, 0.0]
+        identity = [0.0, 0.0, 0.0, 1.0]
+        quarter_turn_about_y = [0.0, 2.0**-0.5, 0.0, 2.0**-0.5]
+
+        waypoints = RealIntegratedFeedWater.search_waypoints(
+            origin,
+            identity,
+            quarter_turn_about_y,
+        )
+
+        backward = waypoints[0]
+        self.assertAlmostEqual(-0.08, backward["offset_from_origin_m"][0])
+        self.assertAlmostEqual(0.0, backward["offset_from_origin_m"][1])
+        self.assertAlmostEqual(0.0, backward["offset_from_origin_m"][2])
+        self.assertEqual(
+            backward["offset_from_origin_m"],
+            backward["offset_initial_tool0_m"],
         )
 
     def test_stable_selected_mouth_skips_search_motion(self) -> None:

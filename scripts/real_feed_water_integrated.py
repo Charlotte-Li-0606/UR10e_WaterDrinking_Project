@@ -71,39 +71,32 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
 
 SEARCH_MAX_TIME_SEC = 15.0
 SEARCH_STABILITY_RESERVE_SEC = 1.25
-SEARCH_BACK_STEP_M = 0.030
-SEARCH_LATERAL_STEP_M = 0.020
-SEARCH_VERTICAL_STEP_M = 0.020
-SEARCH_MAX_ACTUAL_SEGMENT_M = 0.035
+SEARCH_BACK_DISTANCE_M = 0.080
+SEARCH_LATERAL_DISTANCE_M = 0.050
+SEARCH_VERTICAL_DISTANCE_M = 0.050
+SEARCH_MAX_ACTUAL_SEGMENT_M = 0.110
 SEARCH_FINAL_POSITION_TOLERANCE_M = 0.010
 SEARCH_MAX_STATIONARY_JOINT_SPEED_RAD_SEC = 0.010
 SEARCH_STATIONARY_SAMPLE_COUNT = 2
 SEARCH_STATIONARY_TIMEOUT_SEC = 0.75
-SEARCH_OFFSETS = (
-    ("retreat_1", (SEARCH_BACK_STEP_M, 0.0, 0.0)),
-    ("retreat_2", (2.0 * SEARCH_BACK_STEP_M, 0.0, 0.0)),
-    ("retreat_3", (3.0 * SEARCH_BACK_STEP_M, 0.0, 0.0)),
-    ("scan_up", (3.0 * SEARCH_BACK_STEP_M, 0.0, SEARCH_VERTICAL_STEP_M)),
+SEARCH_OFFSETS_CAMERA_OPTICAL = (
+    ("backward_wide", (0.0, 0.0, -SEARCH_BACK_DISTANCE_M)),
     (
-        "scan_upper_left",
-        (3.0 * SEARCH_BACK_STEP_M, SEARCH_LATERAL_STEP_M, SEARCH_VERTICAL_STEP_M),
+        "scan_left",
+        (-SEARCH_LATERAL_DISTANCE_M, 0.0, -SEARCH_BACK_DISTANCE_M),
     ),
-    ("scan_left", (3.0 * SEARCH_BACK_STEP_M, SEARCH_LATERAL_STEP_M, 0.0)),
     (
-        "scan_lower_left",
-        (3.0 * SEARCH_BACK_STEP_M, SEARCH_LATERAL_STEP_M, -SEARCH_VERTICAL_STEP_M),
+        "scan_right",
+        (SEARCH_LATERAL_DISTANCE_M, 0.0, -SEARCH_BACK_DISTANCE_M),
     ),
-    ("scan_down", (3.0 * SEARCH_BACK_STEP_M, 0.0, -SEARCH_VERTICAL_STEP_M)),
     (
-        "scan_lower_right",
-        (3.0 * SEARCH_BACK_STEP_M, -SEARCH_LATERAL_STEP_M, -SEARCH_VERTICAL_STEP_M),
+        "scan_up",
+        (0.0, -SEARCH_VERTICAL_DISTANCE_M, -SEARCH_BACK_DISTANCE_M),
     ),
-    ("scan_right", (3.0 * SEARCH_BACK_STEP_M, -SEARCH_LATERAL_STEP_M, 0.0)),
     (
-        "scan_upper_right",
-        (3.0 * SEARCH_BACK_STEP_M, -SEARCH_LATERAL_STEP_M, SEARCH_VERTICAL_STEP_M),
+        "scan_down",
+        (0.0, SEARCH_VERTICAL_DISTANCE_M, -SEARCH_BACK_DISTANCE_M),
     ),
-    ("scan_center", (3.0 * SEARCH_BACK_STEP_M, 0.0, 0.0)),
 )
 
 
@@ -130,18 +123,62 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         self._frozen_execution_mouth_position: list[float] | None = None
 
     @staticmethod
-    def search_waypoints(origin: list[float]) -> list[dict[str, Any]]:
-        """Return the fixed absolute translation-only scan from one origin."""
+    def search_waypoints(
+        origin: list[float],
+        tool_orientation_xyzw: list[float],
+        camera_orientation_xyzw: list[float],
+    ) -> list[dict[str, Any]]:
+        """Return camera-corrected directions frozen at the initial flange pose.
+
+        Search semantics follow the camera view rigidly attached to ``tool0``:
+        optical -Z moves backward for a wider frame, optical -/+X scans image
+        left/right, and optical -/+Y scans image up/down.  Transforming those
+        vectors with the live camera orientation applies the calibrated camera
+        extrinsic instead of incorrectly adding fixed ``base_link`` offsets.
+        """
         if len(origin) != 3 or not all(math.isfinite(float(value)) for value in origin):
             raise ValueError("search origin must contain three finite values")
-        return [
-            {
-                "name": name,
-                "offset_from_origin_m": [float(value) for value in offset],
-                "target_tool0_position_m": _add(origin, list(offset)),
-            }
-            for name, offset in SEARCH_OFFSETS
+        for label, orientation in (
+            ("tool0", tool_orientation_xyzw),
+            (CAMERA_OPTICAL_FRAME, camera_orientation_xyzw),
+        ):
+            if len(orientation) != 4 or not all(
+                math.isfinite(float(value)) for value in orientation
+            ):
+                raise ValueError(f"{label} orientation must contain four finite values")
+
+        inverse_tool_orientation = [
+            -float(tool_orientation_xyzw[0]),
+            -float(tool_orientation_xyzw[1]),
+            -float(tool_orientation_xyzw[2]),
+            float(tool_orientation_xyzw[3]),
         ]
+        waypoints: list[dict[str, Any]] = []
+        for name, camera_offset in SEARCH_OFFSETS_CAMERA_OPTICAL:
+            base_offset = _rotate_tool_vector(
+                camera_orientation_xyzw,
+                camera_offset,
+            )
+            tool_offset = _rotate_tool_vector(
+                inverse_tool_orientation,
+                base_offset,
+            )
+            waypoints.append(
+                {
+                    "name": name,
+                    "direction_reference": (
+                        f"{CAMERA_OPTICAL_FRAME} frozen at initial {TOOL_FRAME} pose"
+                    ),
+                    "camera_extrinsic_applied": True,
+                    "offset_camera_optical_m": [
+                        float(value) for value in camera_offset
+                    ],
+                    "offset_initial_tool0_m": tool_offset,
+                    "offset_from_origin_m": base_offset,
+                    "target_tool0_position_m": _add(origin, base_offset),
+                }
+            )
+        return waypoints
 
     @staticmethod
     def _base_readiness_failures(snapshot: dict[str, Any]) -> list[str]:
@@ -468,6 +505,17 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "maximum_time_sec": SEARCH_MAX_TIME_SEC,
             "translation_only": True,
             "rotation_search_enabled": False,
+            "search_direction_reference": (
+                f"{CAMERA_OPTICAL_FRAME} frozen at initial {TOOL_FRAME} pose"
+            ),
+            "camera_extrinsic_applied": True,
+            "search_order": [
+                "backward_wide",
+                "scan_left",
+                "scan_right",
+                "scan_up",
+                "scan_down",
+            ],
             "trajectory_sent": False,
             "checks": snapshot,
             "search_steps": [],
@@ -524,11 +572,19 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         orientation = [
             float(value) for value in snapshot["tool0_pose"]["orientation_quat_xyzw"]
         ]
+        camera_orientation = [
+            float(value)
+            for value in snapshot["camera_tf"]["orientation_quat_xyzw"]
+        ]
         origin_straw = _add(
             origin_tool0,
             _rotate_tool_vector(orientation, STRAW_TIP_OFFSET_TOOL0_M),
         )
-        waypoints = self.search_waypoints(origin_tool0)
+        waypoints = self.search_waypoints(
+            origin_tool0,
+            orientation,
+            camera_orientation,
+        )
         motion_deadline = deadline - SEARCH_STABILITY_RESERVE_SEC
         for waypoint in waypoints:
             if time.monotonic() >= motion_deadline:
@@ -871,6 +927,17 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "active_search": True,
             "translation_only_search": True,
             "rotation_search_enabled": False,
+            "active_search_direction_reference": (
+                f"{CAMERA_OPTICAL_FRAME} frozen at initial {TOOL_FRAME} pose"
+            ),
+            "active_search_camera_extrinsic_applied": True,
+            "active_search_order": [
+                "backward_wide",
+                "scan_left",
+                "scan_right",
+                "scan_up",
+                "scan_down",
+            ],
             "dynamic_obstacle_avoidance": True,
             "same_target_replanning": True,
             "wait_for_clear": False,

@@ -5,9 +5,11 @@ This is an independent, execution-disabled real-hardware validation entry
 point.  It consumes the physical robot joint/TF state and the real D435i
 mouth-perception stream.  A stable visible mouth ends the search without a
 plan.  When the detector explicitly reports ``no_face``, it asks MoveIt to
-plan exactly one 30 mm +base_link-X translation while preserving the current
-tool0 orientation.  The script has no execution mode and never creates an
-ExecuteTrajectory client.
+plan exactly one 80 mm camera-backward translation while preserving the
+current tool0 orientation.  The camera direction is transformed through the
+live calibrated flange-to-camera extrinsic instead of being treated as a
+fixed ``base_link`` direction.  The script has no execution mode and never
+creates an ExecuteTrajectory client.
 """
 
 from __future__ import annotations
@@ -42,8 +44,8 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
 )
 
 
-SEARCH_BACK_STEP_M = 0.030
-SEARCH_DIRECTION_BASE_LINK = (1.0, 0.0, 0.0)
+SEARCH_BACK_DISTANCE_M = 0.080
+SEARCH_BACK_OFFSET_CAMERA_OPTICAL = (0.0, 0.0, -SEARCH_BACK_DISTANCE_M)
 MOUTH_SAMPLE_SECONDS = 1.0
 MOVE_GROUP_PARAMETER_SERVICE = "/move_group/get_parameters"
 
@@ -53,7 +55,7 @@ class RealActiveSearchPlan(RealPreMouthFromPerceptionPlan):
 
     def __init__(self) -> None:
         super().__init__(
-            maximum_plan_translation_m=SEARCH_BACK_STEP_M,
+            maximum_plan_translation_m=SEARCH_BACK_DISTANCE_M,
             mouth_sample_seconds=MOUTH_SAMPLE_SECONDS,
             trajectory_velocity_scaling=0.05,
             trajectory_acceleration_scaling=0.05,
@@ -140,6 +142,10 @@ class RealActiveSearchPlan(RealPreMouthFromPerceptionPlan):
             "trajectory_sent": False,
             "translation_only": True,
             "rotation_search_enabled": False,
+            "search_direction_reference": (
+                f"{CAMERA_OPTICAL_FRAME} frozen at initial {TOOL_FRAME} pose"
+            ),
+            "camera_extrinsic_applied": True,
             "checks": snapshot,
             "move_group_execution": execution_status,
         }
@@ -182,7 +188,24 @@ class RealActiveSearchPlan(RealPreMouthFromPerceptionPlan):
         tool0 = snapshot["tool0_pose"]
         current_tool0 = [float(value) for value in tool0["position_m"]]
         orientation = [float(value) for value in tool0["orientation_quat_xyzw"]]
-        offset = [SEARCH_BACK_STEP_M * value for value in SEARCH_DIRECTION_BASE_LINK]
+        camera_orientation = [
+            float(value)
+            for value in snapshot["camera_tf"]["orientation_quat_xyzw"]
+        ]
+        offset = _rotate_tool_vector(
+            camera_orientation,
+            SEARCH_BACK_OFFSET_CAMERA_OPTICAL,
+        )
+        inverse_tool_orientation = [
+            -orientation[0],
+            -orientation[1],
+            -orientation[2],
+            orientation[3],
+        ]
+        offset_initial_tool0 = _rotate_tool_vector(
+            inverse_tool_orientation,
+            offset,
+        )
         target_tool0 = _add(current_tool0, offset)
         current_straw = _add(
             current_tool0,
@@ -223,7 +246,15 @@ class RealActiveSearchPlan(RealPreMouthFromPerceptionPlan):
                     "position_m": current_straw,
                 },
                 "next_search_waypoint": {
-                    "name": "retreat_1",
+                    "name": "backward_wide",
+                    "direction_reference": (
+                        f"{CAMERA_OPTICAL_FRAME} frozen at initial {TOOL_FRAME} pose"
+                    ),
+                    "camera_extrinsic_applied": True,
+                    "offset_camera_optical_m": list(
+                        SEARCH_BACK_OFFSET_CAMERA_OPTICAL
+                    ),
+                    "offset_initial_tool0_m": offset_initial_tool0,
                     "offset_from_origin_m": offset,
                     "target_straw_tip_position_m": target_straw,
                     "target_tool0_pose": target,
