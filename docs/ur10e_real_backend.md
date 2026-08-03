@@ -83,6 +83,10 @@ the detected mouth than the saved 50 mm successful-execution snapshot.
 Short-lived execution requests subscribe to the UR driver's latched robot,
 safety, and program state with matching transient-local QoS, and use a
 one-second stable-mouth sampling window to avoid a separate preflight delay.
+During motion, the mouth-drift watchdog ignores isolated wrist-camera depth
+transients and cancels only when a fresh stable window of at least three
+base-frame samples confirms more than 50 mm of drift. The stricter 30 mm
+pre-execution drift guard remains unchanged.
 
 The real camera startup command is
 `scripts/run_real_d435i_mouth_perception.sh`. Its default mount file is

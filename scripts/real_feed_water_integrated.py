@@ -71,6 +71,7 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
     TOOL_FRAME,
     RealPreMouthFromPerceptionPlan,
     _add,
+    _finite_xyz,
     _jsonable,
     _norm,
     _quaternion_distance_rad,
@@ -92,6 +93,9 @@ SEARCH_STATIONARY_SAMPLE_COUNT = 2
 SEARCH_STATIONARY_TIMEOUT_SEC = 0.75
 SEARCH_BACK_CANDIDATE_DISTANCES_M = (0.040, 0.030, 0.020)
 SEARCH_DIRECTIONAL_CANDIDATE_DISTANCES_M = (0.050, 0.040, 0.030, 0.020)
+EXECUTION_MOUTH_DRIFT_CONFIRMATION_WINDOW_SEC = 1.0
+EXECUTION_MOUTH_DRIFT_CONFIRMATION_MIN_SAMPLES = 3
+MAX_EXECUTION_TARGET_DRIFT_M = 0.050
 SEARCH_OFFSETS_CAMERA_OPTICAL = (
     ("backward_wide", (0.0, 0.0, -SEARCH_BACK_DISTANCE_M)),
     (
@@ -1107,6 +1111,59 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             return self._goal_for_target(target)
         raise RuntimeError("no validated dynamic route strategy is available")
 
+    @staticmethod
+    def _execution_mouth_drift_confirmation(
+        observation: dict[str, Any],
+        frozen_position: list[float] | None,
+    ) -> dict[str, Any]:
+        """Confirm genuine mouth motion from a stable multi-frame mean.
+
+        Wrist-camera motion can produce an isolated depth or landmark shift
+        even though every sample is transformed at its image timestamp.  Do
+        not compare that one latest sample directly with the frozen target.
+        Require a fresh stable window and compare its mean in ``base_link``.
+        """
+        report: dict[str, Any] = {
+            "available": bool(observation.get("available")),
+            "stable": bool(observation.get("stable")),
+            "sample_count": int(observation.get("sample_count", 0) or 0),
+            "required_samples": EXECUTION_MOUTH_DRIFT_CONFIRMATION_MIN_SAMPLES,
+            "window_sec": EXECUTION_MOUTH_DRIFT_CONFIRMATION_WINDOW_SEC,
+            "maximum_spread_m": MAX_POSE_SPREAD_M,
+            "threshold_m": MAX_EXECUTION_TARGET_DRIFT_M,
+            "confirmed": False,
+        }
+        frozen = _finite_xyz(frozen_position)
+        mean = _finite_xyz(observation.get("mean_position_m"))
+        if frozen is None:
+            report["reason"] = "frozen mouth target is unavailable"
+            return report
+        if not report["available"]:
+            report["reason"] = str(
+                observation.get("reason") or "no fresh mouth observations"
+            )
+            return report
+        if (
+            not report["stable"]
+            or report["sample_count"] < EXECUTION_MOUTH_DRIFT_CONFIRMATION_MIN_SAMPLES
+        ):
+            report["reason"] = "mouth drift is not confirmed by a stable sample window"
+            return report
+        if mean is None:
+            report["reason"] = "stable mouth mean is invalid"
+            return report
+        drift = _norm(_subtract(mean, frozen))
+        report.update(
+            {
+                "mean_position_m": mean,
+                "frozen_position_m": frozen,
+                "drift_m": drift,
+                "confirmed": drift > MAX_EXECUTION_TARGET_DRIFT_M,
+                "reason": None,
+            }
+        )
+        return report
+
     def _execute_validated_trajectory(self) -> dict[str, Any]:
         """MoveGroup plan-and-execute with same-target scene-change replanning."""
         target = getattr(self, "_frozen_dynamic_target", None)
@@ -1160,8 +1217,17 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "execution_attempted": False,
             }
         result_future = handle.get_result_async()
-        deadline = time.monotonic() + ACTION_TIMEOUT_SEC
+        execution_watch_started = time.monotonic()
+        deadline = execution_watch_started + ACTION_TIMEOUT_SEC
         cancel_reason: str | None = None
+        mouth_drift_confirmation: dict[str, Any] = {
+            "available": False,
+            "confirmed": False,
+            "reason": "waiting for fresh in-motion mouth samples",
+            "required_samples": EXECUTION_MOUTH_DRIFT_CONFIRMATION_MIN_SAMPLES,
+            "window_sec": EXECUTION_MOUTH_DRIFT_CONFIRMATION_WINDOW_SEC,
+            "threshold_m": MAX_EXECUTION_TARGET_DRIFT_M,
+        }
         while rclpy.ok() and not result_future.done() and time.monotonic() < deadline:
             rclpy.spin_once(self, timeout_sec=0.05)
             raw = self._cloud_status(RAW_CLOUD_TOPIC)
@@ -1173,16 +1239,32 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             if perception.get("identity_unsafe"):
                 cancel_reason = "selected mouth identity became ambiguous during execution"
                 break
-            if perception.get("available") and self._frozen_execution_mouth_position is not None:
-                selected = perception.get("selected_position_m")
-                if isinstance(selected, list) and len(selected) == 3:
-                    drift = _norm(_subtract(selected, self._frozen_execution_mouth_position))
-                    if drift > MAX_PRE_EXECUTION_TARGET_DRIFT_M:
-                        cancel_reason = (
-                            f"selected mouth moved {drift:.4f} m during execution, above the "
-                            f"{MAX_PRE_EXECUTION_TARGET_DRIFT_M:.4f} m limit"
-                        )
-                        break
+            now = time.monotonic()
+            observation = self.target_tracker.observation(
+                started_monotonic=max(
+                    execution_watch_started,
+                    now - EXECUTION_MOUTH_DRIFT_CONFIRMATION_WINDOW_SEC,
+                ),
+                now_monotonic=now,
+                max_age_sec=MAX_MOUTH_POSE_AGE_SEC,
+                minimum_samples=EXECUTION_MOUTH_DRIFT_CONFIRMATION_MIN_SAMPLES,
+                max_spread_m=MAX_POSE_SPREAD_M,
+            )
+            if observation.get("identity_unsafe"):
+                cancel_reason = "selected mouth identity became ambiguous during execution"
+                break
+            mouth_drift_confirmation = self._execution_mouth_drift_confirmation(
+                observation,
+                self._frozen_execution_mouth_position,
+            )
+            if mouth_drift_confirmation.get("confirmed"):
+                drift = float(mouth_drift_confirmation["drift_m"])
+                cancel_reason = (
+                    f"confirmed selected mouth motion is {drift:.4f} m during execution, "
+                    f"above the {MAX_EXECUTION_TARGET_DRIFT_M:.4f} m limit across "
+                    f"{mouth_drift_confirmation['sample_count']} stable samples"
+                )
+                break
         if cancel_reason is not None or not result_future.done():
             self._cancel_goal(handle)
             return {
@@ -1194,6 +1276,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "same_target_replanning": True,
                 "route_strategy": route_strategy,
                 "planner": planner,
+                "mouth_drift_confirmation": mouth_drift_confirmation,
             }
         wrapped = result_future.result()
         if wrapped is None:
@@ -1223,6 +1306,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "maximum_replan_attempts": REPLAN_ATTEMPTS,
             "replan_delay_sec": REPLAN_DELAY_SEC,
             "wait_for_clear": False,
+            "mouth_drift_confirmation": mouth_drift_confirmation,
         }
         if not success:
             detail = result.error_code.message or (

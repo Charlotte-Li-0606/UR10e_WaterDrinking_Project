@@ -13,6 +13,7 @@ from scripts.real_dynamic_obstacle_avoidance_plan import (
     RealDynamicObstacleAvoidancePlan,
 )
 from scripts.real_feed_water_integrated import RealIntegratedFeedWater
+from scripts.real_feed_water_integrated import MAX_EXECUTION_TARGET_DRIFT_M
 
 
 class RealIntegratedFeedWaterTest(unittest.TestCase):
@@ -319,6 +320,49 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         node._selected_dynamic_route_strategy = DETOUR_ROUTE_STRATEGY
         self.assertIs(detour_goal, node._goal_for_selected_dynamic_route(target))
         node._goal_for_target.assert_called_once_with(target)
+
+    def test_camera_approach_drift_below_execution_threshold_is_not_confirmed(self) -> None:
+        result = RealIntegratedFeedWater._execution_mouth_drift_confirmation(
+            {
+                "available": True,
+                "stable": True,
+                "sample_count": 3,
+                "mean_position_m": [0.0338, 0.0, 0.0],
+            },
+            [0.0, 0.0, 0.0],
+        )
+
+        self.assertEqual(0.050, MAX_EXECUTION_TARGET_DRIFT_M)
+        self.assertAlmostEqual(0.0338, result["drift_m"])
+        self.assertFalse(result["confirmed"])
+
+    def test_sustained_large_mouth_drift_is_still_confirmed(self) -> None:
+        result = RealIntegratedFeedWater._execution_mouth_drift_confirmation(
+            {
+                "available": True,
+                "stable": True,
+                "sample_count": 3,
+                "mean_position_m": [0.060, 0.0, 0.0],
+            },
+            [0.0, 0.0, 0.0],
+        )
+
+        self.assertAlmostEqual(0.060, result["drift_m"])
+        self.assertTrue(result["confirmed"])
+
+    def test_unstable_single_frame_drift_is_not_confirmed(self) -> None:
+        result = RealIntegratedFeedWater._execution_mouth_drift_confirmation(
+            {
+                "available": True,
+                "stable": False,
+                "sample_count": 1,
+                "mean_position_m": [0.20, 0.0, 0.0],
+            },
+            [0.0, 0.0, 0.0],
+        )
+
+        self.assertFalse(result["confirmed"])
+        self.assertIn("stable sample window", result["reason"])
 
     def test_verified_stationary_search_goal_uses_exact_zero_start_velocity(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
