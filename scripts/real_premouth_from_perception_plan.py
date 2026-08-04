@@ -63,8 +63,10 @@ from std_msgs.msg import Bool, Float64, String  # noqa: E402
 from ur_dashboard_msgs.msg import RobotMode, SafetyMode  # noqa: E402
 
 from robot_layer.arm_ur10e.agent_tools.planning_scene_manager import (  # noqa: E402
+    COMBINED_TOOL_COLLISION_OBJECT_ID,
     PlanningSceneObstacleConfig,
     PlanningSceneObstacleManager,
+    combined_tool_collision_verification,
 )
 from robot_layer.arm_ur10e.perception.real_mouth_target_tracker import (  # noqa: E402
     RealMouthTargetTracker,
@@ -913,11 +915,23 @@ class RealPreMouthFromPerceptionPlan(Node):
                     mouth_wait_timeout_sec=1.0,
                 )
             )
-            result = manager.apply_people(
-                mouth_positions,
-                camera_position=camera_position,
-                verify=True,
-            )
+            combined_tool = manager.apply_combined_tool_collision(verify=True)
+            if not combined_tool.get("success"):
+                result = {
+                    "success": False,
+                    "reason": (
+                        combined_tool.get("reason")
+                        or "combined camera/cup-holder/straw collision geometry could not be verified"
+                    ),
+                    "combined_tool_collision_geometry": combined_tool,
+                }
+            else:
+                result = manager.apply_people(
+                    mouth_positions,
+                    camera_position=camera_position,
+                    verify=True,
+                )
+                result["combined_tool_collision_geometry"] = combined_tool
         except Exception as exc:
             result = {"success": False, "reason": f"PlanningScene obstacle manager raised {exc.__class__.__name__}: {exc}"}
         finally:
@@ -930,6 +944,34 @@ class RealPreMouthFromPerceptionPlan(Node):
         result["geometry_layer"] = "fixed_human_safety_objects"
         result["dynamic_octomap_modified"] = False
         return result
+
+    def _apply_combined_tool_collision_geometry(self) -> dict[str, Any]:
+        """Attach the rigid physical tool body before any search or route plan."""
+        manager: PlanningSceneObstacleManager | None = None
+        try:
+            manager = PlanningSceneObstacleManager(
+                PlanningSceneObstacleConfig(
+                    base_frame=BASE_FRAME,
+                    mouth_topic=MOUTH_TOPIC,
+                    include_table=False,
+                    service_timeout_sec=5.0,
+                    mouth_wait_timeout_sec=1.0,
+                )
+            )
+            return manager.apply_combined_tool_collision(verify=True)
+        except Exception as exc:
+            return {
+                "success": False,
+                "operation": "attach_combined_tool_collision",
+                "reason": (
+                    "PlanningScene combined-tool collision manager raised "
+                    f"{exc.__class__.__name__}: {exc}"
+                ),
+                "execution_sent": False,
+            }
+        finally:
+            if manager is not None:
+                manager.destroy_node()
 
     @staticmethod
     def readiness_failures(
@@ -995,7 +1037,9 @@ class RealPreMouthFromPerceptionPlan(Node):
             return None
         state = RobotState()
         state.joint_state = self.latest_joint_state
-        state.is_diff = False
+        # Preserve verified attached collision bodies from the monitored scene
+        # while replacing the joint values with this fresh live state.
+        state.is_diff = True
         return state
 
     @staticmethod
@@ -1062,6 +1106,10 @@ class RealPreMouthFromPerceptionPlan(Node):
             }
         request = GetStateValidity.Request()
         request.robot_state = robot_state
+        # Candidate IK responses carry joint values but not the persistent
+        # combined tool body.  A diff state keeps that body attached while
+        # MoveIt checks the requested joints.
+        request.robot_state.is_diff = True
         request.group_name = GROUP_NAME
         future = self.check_state_validity.call_async(request)
         rclpy.spin_until_future_complete(
@@ -1245,6 +1293,7 @@ class RealPreMouthFromPerceptionPlan(Node):
         request = GetPlanningScene.Request()
         request.components.components = (
             PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
+            | PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS
             | PlanningSceneComponents.OCTOMAP
             | PlanningSceneComponents.ALLOWED_COLLISION_MATRIX
             | PlanningSceneComponents.LINK_PADDING_AND_SCALING
@@ -1314,6 +1363,23 @@ class RealPreMouthFromPerceptionPlan(Node):
             for item in serialized
             if item["id"].startswith(HUMAN_OBJECT_PREFIXES)
         )
+        attached_objects = list(
+            response.scene.robot_state.attached_collision_objects
+        )
+        attached_serialized = [
+            {
+                "id": str(item.object.id),
+                "link_name": str(item.link_name),
+                "frame_id": str(item.object.header.frame_id),
+                "touch_links": [str(value) for value in item.touch_links],
+                "primitive_count": len(item.object.primitives),
+                "mesh_count": len(item.object.meshes),
+            }
+            for item in attached_objects
+        ]
+        combined_tool_geometry = combined_tool_collision_verification(
+            attached_objects
+        )
         acm = response.scene.allowed_collision_matrix
         human_allowed_pairs: list[str] = []
         for row_index, name in enumerate(acm.entry_names):
@@ -1332,6 +1398,8 @@ class RealPreMouthFromPerceptionPlan(Node):
             **base,
             "available": True,
             "world_collision_objects": serialized,
+            "attached_collision_objects": attached_serialized,
+            "combined_tool_collision_geometry": combined_tool_geometry,
             "human_object_ids": human_ids,
             "human_collision_objects_preserved": bool(human_ids),
             "human_allowed_collision_pairs": sorted(set(human_allowed_pairs)),
@@ -1425,13 +1493,14 @@ class RealPreMouthFromPerceptionPlan(Node):
         robot_state: RobotState,
         scene_objects: list[Any],
         snapshot: dict[str, Any],
+        combined_tool_geometry: dict[str, Any],
     ) -> dict[str, Any]:
         fk = self._fk_positions(robot_state)
         features: dict[str, list[float]] = {
             "straw_tip": list(candidate["straw_tip_pose"]["position_m"]),
             "tool0": list(candidate["tool0_pose"]["position_m"]),
-            # Until measured cup-holder collision geometry is added to the
-            # MoveIt robot model, tool0 is the only calibrated rigid reference.
+            # Keep the calibrated reference point in the clearance report in
+            # addition to the exact attached-box collision check in MoveIt.
             "cup_holder_reference": list(candidate["tool0_pose"]["position_m"]),
         }
         if fk.get("available"):
@@ -1483,6 +1552,10 @@ class RealPreMouthFromPerceptionPlan(Node):
             ),
             default=None,
         )
+        combined_geometry_complete = bool(
+            combined_tool_geometry.get("success")
+            and combined_tool_geometry.get("real_execution_geometry_complete")
+        )
         return {
             "available": bool(clearances),
             "minimum_origin_or_point_clearance_m": minimum,
@@ -1499,16 +1572,22 @@ class RealPreMouthFromPerceptionPlan(Node):
             "tool_geometry_modeling": {
                 "wrist_2_link_moveit_collision_geometry": True,
                 "wrist_3_link_moveit_collision_geometry": True,
-                "camera_moveit_collision_geometry": False,
-                "cup_holder_moveit_collision_geometry": False,
-                "straw_moveit_collision_geometry": False,
+                "camera_moveit_collision_geometry": combined_geometry_complete,
+                "cup_holder_moveit_collision_geometry": combined_geometry_complete,
+                "straw_moveit_collision_geometry": combined_geometry_complete,
+                "combined_attached_collision_object_id": COMBINED_TOOL_COLLISION_OBJECT_ID,
+                "combined_attached_box_verified": combined_geometry_complete,
+                "combined_attached_box_collision_checked_by_moveit": combined_geometry_complete,
+                "combined_attached_box_specification": combined_tool_geometry,
                 "camera_point_clearance_checked": "camera_optical_center" in features,
                 "cup_holder_reference_clearance_checked": True,
                 "straw_tip_point_clearance_checked": True,
-                "real_execution_geometry_complete": False,
+                "real_execution_geometry_complete": combined_geometry_complete,
                 "reason": (
-                    "the current MoveIt robot_description contains only the UR chain; "
-                    "camera, cup-holder, and straw collision meshes/primitives are not modeled"
+                    None
+                    if combined_geometry_complete
+                    else combined_tool_geometry.get("reason")
+                    or "combined camera/cup-holder/straw attached collision box is unavailable"
                 ),
             },
         }
@@ -1804,6 +1883,9 @@ class RealPreMouthFromPerceptionPlan(Node):
                 robot_state=robot_state,
                 scene_objects=scene_objects,
                 snapshot=snapshot,
+                combined_tool_geometry=scene_report.get(
+                    "combined_tool_collision_geometry", {}
+                ),
             )
             joint_motion = self._candidate_joint_motion(robot_state)
             report.update(
@@ -1950,7 +2032,8 @@ class RealPreMouthFromPerceptionPlan(Node):
         goal.request.max_acceleration_scaling_factor = self.trajectory_acceleration_scaling
         if self.latest_joint_state is not None:
             goal.request.start_state.joint_state = self.latest_joint_state
-            goal.request.start_state.is_diff = False
+            # Retain the attached combined tool body in the scene start state.
+            goal.request.start_state.is_diff = True
         goal.request.goal_constraints.append(constraints)
         goal.request.path_constraints.name = "tool_vertical_axis_with_free_spin"
         goal.request.path_constraints.orientation_constraints.append(

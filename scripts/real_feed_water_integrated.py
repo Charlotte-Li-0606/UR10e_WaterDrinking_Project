@@ -766,7 +766,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             }
         request = GetStateValidity.Request()
         request.robot_state.joint_state = latest_joint_state
-        request.robot_state.is_diff = False
+        # Preserve the verified camera/cup-holder/straw attached body while
+        # checking the fresh live joints at every search step.
+        request.robot_state.is_diff = True
         request.group_name = GROUP_NAME
         future = client.call_async(request)
         rclpy.spin_until_future_complete(
@@ -2365,6 +2367,30 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "execution_sent": False,
                 "integrated_real_feed_water": contract,
             }
+        combined_tool_geometry = self._apply_combined_tool_collision_geometry()
+        contract["combined_camera_cup_holder_straw_collision_geometry"] = {
+            "required": True,
+            "verified": bool(combined_tool_geometry.get("success")),
+            "object_id": combined_tool_geometry.get("object_id"),
+            "link_name": combined_tool_geometry.get("link_name"),
+            "dimensions_m": combined_tool_geometry.get("dimensions_m"),
+            "center_tool0_m": combined_tool_geometry.get("center_tool0_m"),
+            "follows_tool0": combined_tool_geometry.get("follows_tool0"),
+        }
+        if not combined_tool_geometry.get("success"):
+            return 2, {
+                "success": False,
+                "mode": "execute" if execute else "plan",
+                "stage": "combined_tool_collision_geometry",
+                "reason": (
+                    combined_tool_geometry.get("reason")
+                    or "combined camera/cup-holder/straw collision geometry could not be verified"
+                ),
+                "combined_tool_collision_geometry": combined_tool_geometry,
+                "execution_attempted": False,
+                "execution_sent": False,
+                "integrated_real_feed_water": contract,
+            }
         dynamic = self.dynamic_readiness(execution_mode=True if execute else None)
         if not dynamic.get("success"):
             return 2, {
@@ -2373,6 +2399,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "stage": "dynamic_octomap_readiness",
                 "reason": "; ".join(dynamic.get("failures", [])),
                 "dynamic_octomap_readiness": dynamic,
+                "combined_tool_collision_geometry": combined_tool_geometry,
                 "execution_attempted": False,
                 "execution_sent": False,
                 "integrated_real_feed_water": contract,
@@ -2389,6 +2416,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "reason": search.get("reason") or "active search did not recover the selected mouth",
                 "active_search": search,
                 "dynamic_octomap_readiness": dynamic,
+                "combined_tool_collision_geometry": combined_tool_geometry,
                 "execution_attempted": bool(
                     any(
                         isinstance(step, dict)
@@ -2412,6 +2440,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             code, result = self.plan()
         result["active_search"] = search
         result["dynamic_octomap_readiness"] = dynamic
+        result["combined_tool_collision_geometry"] = combined_tool_geometry
         result["integrated_real_feed_water"] = contract
         return code, result
 

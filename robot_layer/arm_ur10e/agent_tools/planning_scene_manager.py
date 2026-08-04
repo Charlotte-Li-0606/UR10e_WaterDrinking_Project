@@ -2,9 +2,9 @@
 """Deterministic mouth-driven collision objects for the UR10e PlanningScene.
 
 This is intentionally not an occupancy-grid or point-cloud integration.  It
-uses only a small, explicit set of MoveIt primitive objects in ``base_link``:
-the human head, torso, and a face safety zone.  Re-applying an object with the
-same ID updates its pose as a new mouth pose is received.
+uses a small, explicit set of MoveIt primitives: human safety objects in
+``base_link`` and one conservative camera/cup-holder/straw box rigidly attached
+to ``tool0``.  Re-applying an object with the same ID updates its pose.
 """
 
 from __future__ import annotations
@@ -18,7 +18,12 @@ from typing import Any, Sequence
 
 import rclpy
 from geometry_msgs.msg import Pose, PoseStamped
-from moveit_msgs.msg import CollisionObject, PlanningScene, PlanningSceneComponents
+from moveit_msgs.msg import (
+    AttachedCollisionObject,
+    CollisionObject,
+    PlanningScene,
+    PlanningSceneComponents,
+)
 from moveit_msgs.srv import ApplyPlanningScene, GetPlanningScene
 from rclpy.node import Node
 from rclpy.qos import HistoryPolicy, QoSProfile, ReliabilityPolicy
@@ -33,6 +38,156 @@ MANAGED_OBJECT_IDS = (
 )
 
 MULTI_PERSON_OBJECT_PREFIX = "real_human_obstacle_"
+
+# The physical camera, cup holder, and straw are conservatively represented as
+# one rigid body attached to tool0.  The reviewed dimensions are 10 x 10 x
+# 30 cm.  On this installation tool0 +Z is the flange's downward axis
+# (base_link -Z while the cup is upright), so a center at +0.15 m makes the box
+# start at the flange plane and extend 0.30 m downward.  The adjacent flange
+# links are the only intentional touch links; collisions with every other
+# robot link, world object, human safety object, and OctoMap remain enabled.
+COMBINED_TOOL_COLLISION_OBJECT_ID = "combined_camera_cup_holder_straw_collision"
+COMBINED_TOOL_COLLISION_LINK_NAME = "tool0"
+COMBINED_TOOL_COLLISION_SIZE_M = (0.10, 0.10, 0.30)
+COMBINED_TOOL_COLLISION_CENTER_TOOL0_M = (0.0, 0.0, 0.15)
+COMBINED_TOOL_COLLISION_TOUCH_LINKS = ("tool0", "flange", "wrist_3_link")
+
+
+def combined_tool_collision_verification(
+    attached_objects: Sequence[AttachedCollisionObject],
+) -> dict[str, Any]:
+    """Verify the exact attached primitive required for guarded execution."""
+    matches = [
+        item
+        for item in attached_objects
+        if str(item.object.id) == COMBINED_TOOL_COLLISION_OBJECT_ID
+    ]
+    base: dict[str, Any] = {
+        "success": False,
+        "real_execution_geometry_complete": False,
+        "object_id": COMBINED_TOOL_COLLISION_OBJECT_ID,
+        "modeling_strategy": "one conservative attached box for camera, cup holder, and straw",
+        "expected_link_name": COMBINED_TOOL_COLLISION_LINK_NAME,
+        "expected_frame_id": COMBINED_TOOL_COLLISION_LINK_NAME,
+        "expected_dimensions_m": list(COMBINED_TOOL_COLLISION_SIZE_M),
+        "expected_center_tool0_m": list(COMBINED_TOOL_COLLISION_CENTER_TOOL0_M),
+        "expected_span_tool0_z_m": [0.0, COMBINED_TOOL_COLLISION_SIZE_M[2]],
+        "expected_touch_links": list(COMBINED_TOOL_COLLISION_TOUCH_LINKS),
+        "tool0_positive_z_is_base_link_negative_z_when_flange_down": True,
+        "matched_object_count": len(matches),
+    }
+    if len(matches) != 1:
+        return {
+            **base,
+            "reason": (
+                f"expected exactly one attached {COMBINED_TOOL_COLLISION_OBJECT_ID!r} "
+                f"object, found {len(matches)}"
+            ),
+        }
+
+    attached = matches[0]
+    collision = attached.object
+    primitive_count = len(collision.primitives)
+    primitive_pose_count = len(collision.primitive_poses)
+    primitive = collision.primitives[0] if primitive_count == 1 else None
+    primitive_pose = (
+        collision.primitive_poses[0] if primitive_pose_count == 1 else None
+    )
+    actual_dimensions = (
+        [float(value) for value in primitive.dimensions]
+        if primitive is not None
+        else []
+    )
+    actual_center = (
+        [
+            float(primitive_pose.position.x),
+            float(primitive_pose.position.y),
+            float(primitive_pose.position.z),
+        ]
+        if primitive_pose is not None
+        else []
+    )
+    actual_orientation = (
+        [
+            float(primitive_pose.orientation.x),
+            float(primitive_pose.orientation.y),
+            float(primitive_pose.orientation.z),
+            float(primitive_pose.orientation.w),
+        ]
+        if primitive_pose is not None
+        else []
+    )
+    link_ok = str(attached.link_name) == COMBINED_TOOL_COLLISION_LINK_NAME
+    frame_ok = str(collision.header.frame_id).lstrip("/") == (
+        COMBINED_TOOL_COLLISION_LINK_NAME
+    )
+    shape_ok = bool(
+        primitive is not None and int(primitive.type) == SolidPrimitive.BOX
+    )
+    dimensions_ok = bool(
+        len(actual_dimensions) == 3
+        and all(
+            abs(measured - expected) <= 1e-9
+            for measured, expected in zip(
+                actual_dimensions, COMBINED_TOOL_COLLISION_SIZE_M
+            )
+        )
+    )
+    center_ok = bool(
+        len(actual_center) == 3
+        and all(
+            abs(measured - expected) <= 1e-9
+            for measured, expected in zip(
+                actual_center, COMBINED_TOOL_COLLISION_CENTER_TOOL0_M
+            )
+        )
+    )
+    orientation_ok = bool(
+        len(actual_orientation) == 4
+        and all(abs(value) <= 1e-9 for value in actual_orientation[:3])
+        and abs(abs(actual_orientation[3]) - 1.0) <= 1e-9
+    )
+    actual_touch_links = sorted(str(value) for value in attached.touch_links)
+    touch_links_ok = actual_touch_links == sorted(
+        COMBINED_TOOL_COLLISION_TOUCH_LINKS
+    )
+    success = bool(
+        link_ok
+        and frame_ok
+        and shape_ok
+        and dimensions_ok
+        and center_ok
+        and orientation_ok
+        and touch_links_ok
+    )
+    return {
+        **base,
+        "success": success,
+        "real_execution_geometry_complete": success,
+        "actual_link_name": str(attached.link_name),
+        "actual_frame_id": str(collision.header.frame_id),
+        "actual_shape": "box" if shape_ok else (
+            None if primitive is None else str(int(primitive.type))
+        ),
+        "actual_dimensions_m": actual_dimensions,
+        "actual_center_tool0_m": actual_center,
+        "actual_orientation_quat_xyzw": actual_orientation,
+        "actual_touch_links": actual_touch_links,
+        "checks": {
+            "link": link_ok,
+            "frame": frame_ok,
+            "shape": shape_ok,
+            "dimensions": dimensions_ok,
+            "center": center_ok,
+            "orientation": orientation_ok,
+            "touch_links": touch_links_ok,
+        },
+        "reason": (
+            None
+            if success
+            else "attached combined-tool collision geometry does not match the reviewed specification"
+        ),
+    }
 
 
 @dataclass(frozen=True)
@@ -186,6 +341,120 @@ class PlanningSceneObstacleManager(Node):
         collision.primitives.append(primitive)
         collision.primitive_poses.append(self._pose(center))
         return collision
+
+    @staticmethod
+    def build_combined_tool_attached_collision() -> AttachedCollisionObject:
+        """Build the reviewed rigid 10 x 10 x 30 cm tool assembly box."""
+        primitive = SolidPrimitive()
+        primitive.type = SolidPrimitive.BOX
+        primitive.dimensions = list(COMBINED_TOOL_COLLISION_SIZE_M)
+
+        primitive_pose = Pose()
+        (
+            primitive_pose.position.x,
+            primitive_pose.position.y,
+            primitive_pose.position.z,
+        ) = COMBINED_TOOL_COLLISION_CENTER_TOOL0_M
+        primitive_pose.orientation.w = 1.0
+
+        collision = CollisionObject()
+        collision.header.frame_id = COMBINED_TOOL_COLLISION_LINK_NAME
+        collision.id = COMBINED_TOOL_COLLISION_OBJECT_ID
+        collision.pose.orientation.w = 1.0
+        collision.operation = CollisionObject.ADD
+        collision.primitives.append(primitive)
+        collision.primitive_poses.append(primitive_pose)
+
+        attached = AttachedCollisionObject()
+        attached.link_name = COMBINED_TOOL_COLLISION_LINK_NAME
+        attached.object = collision
+        attached.touch_links = list(COMBINED_TOOL_COLLISION_TOUCH_LINKS)
+        return attached
+
+    def _attached_collision_objects(self) -> dict[str, Any]:
+        """Read attached bodies from MoveIt's monitored PlanningScene."""
+        if not self._get_client.wait_for_service(
+            timeout_sec=self.config.service_timeout_sec
+        ):
+            return {
+                "success": False,
+                "reason": "/get_planning_scene is unavailable",
+                "attached_objects": [],
+            }
+        request = GetPlanningScene.Request()
+        request.components.components = (
+            PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS
+        )
+        future = self._get_client.call_async(request)
+        rclpy.spin_until_future_complete(
+            self,
+            future,
+            timeout_sec=self.config.service_timeout_sec,
+        )
+        response = future.result()
+        if response is None:
+            return {
+                "success": False,
+                "reason": "MoveIt did not return attached collision objects",
+                "attached_objects": [],
+            }
+        return {
+            "success": True,
+            "attached_objects": list(
+                response.scene.robot_state.attached_collision_objects
+            ),
+        }
+
+    def apply_combined_tool_collision(
+        self, *, verify: bool = True
+    ) -> dict[str, Any]:
+        """Attach and optionally verify the combined physical tool geometry."""
+        attached = self.build_combined_tool_attached_collision()
+        scene = PlanningScene()
+        scene.is_diff = True
+        scene.robot_state.is_diff = True
+        scene.robot_state.attached_collision_objects.append(attached)
+        applied = self._apply_scene(scene)
+        if not applied.get("success"):
+            return {
+                **applied,
+                "operation": "attach_combined_tool_collision",
+                "execution_sent": False,
+            }
+
+        result: dict[str, Any] = {
+            "success": True,
+            "operation": "attach_combined_tool_collision",
+            "object_id": COMBINED_TOOL_COLLISION_OBJECT_ID,
+            "link_name": COMBINED_TOOL_COLLISION_LINK_NAME,
+            "frame_id": COMBINED_TOOL_COLLISION_LINK_NAME,
+            "dimensions_m": list(COMBINED_TOOL_COLLISION_SIZE_M),
+            "center_tool0_m": list(COMBINED_TOOL_COLLISION_CENTER_TOOL0_M),
+            "span_tool0_z_m": [0.0, COMBINED_TOOL_COLLISION_SIZE_M[2]],
+            "touch_links": list(COMBINED_TOOL_COLLISION_TOUCH_LINKS),
+            "follows_tool0": True,
+            "collision_checking_enabled_against_non_touch_links": True,
+            "execution_sent": False,
+        }
+        if verify:
+            current = self._attached_collision_objects()
+            if not current.get("success"):
+                result.update(
+                    {
+                        "success": False,
+                        "reason": current.get("reason"),
+                        "verification": current,
+                    }
+                )
+                return result
+            verification = combined_tool_collision_verification(
+                current["attached_objects"]
+            )
+            result["verification"] = verification
+            if not verification.get("success"):
+                result["success"] = False
+                result["reason"] = verification.get("reason")
+        return result
 
     def build_collision_objects(self, mouth_position: Sequence[float]) -> list[CollisionObject]:
         """Build the complete deterministic obstacle set for a mouth position."""

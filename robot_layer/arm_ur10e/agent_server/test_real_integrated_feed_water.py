@@ -558,6 +558,16 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
     def test_integrated_plan_sequences_search_before_dynamic_target_plan(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
         node.target_selection = "center"
+        node._apply_combined_tool_collision_geometry = Mock(
+            return_value={
+                "success": True,
+                "object_id": "combined_camera_cup_holder_straw_collision",
+                "link_name": "tool0",
+                "dimensions_m": [0.1, 0.1, 0.3],
+                "center_tool0_m": [0.0, 0.0, 0.15],
+                "follows_tool0": True,
+            }
+        )
         node.dynamic_readiness = Mock(return_value={"success": True, "failures": []})
         node.active_search = Mock(
             return_value={
@@ -579,6 +589,11 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertTrue(result["integrated_real_feed_water"]["multi_target_identity_lock"])
         self.assertTrue(result["integrated_real_feed_water"]["active_search"])
+        self.assertTrue(
+            result["integrated_real_feed_water"][
+                "combined_camera_cup_holder_straw_collision_geometry"
+            ]["verified"]
+        )
         self.assertEqual(
             "pilz_industrial_motion_planner/LIN",
             result["integrated_real_feed_water"]["active_search_planner"],
@@ -609,6 +624,31 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         node.dynamic_readiness.assert_called_once_with(execution_mode=None)
         node.active_search.assert_called_once_with(execute=False, confirm_real_motion=False)
         node.plan.assert_called_once_with()
+
+    def test_integrated_pipeline_refuses_before_search_without_attached_tool_box(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.target_selection = "center"
+        node._apply_combined_tool_collision_geometry = Mock(
+            return_value={
+                "success": False,
+                "reason": "attached combined-tool collision geometry is unavailable",
+            }
+        )
+        node.dynamic_readiness = Mock()
+        node.active_search = Mock()
+
+        code, result = node.run_integrated(
+            execute=False,
+            confirm_real_motion=False,
+            allow_validated_camera_ray_execute=False,
+            no_execute=True,
+        )
+
+        self.assertEqual(2, code)
+        self.assertEqual("combined_tool_collision_geometry", result["stage"])
+        self.assertFalse(result["execution_sent"])
+        node.dynamic_readiness.assert_not_called()
+        node.active_search.assert_not_called()
 
     def test_dynamic_plan_failure_reports_collision_free_route_stage(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
