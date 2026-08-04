@@ -1,0 +1,74 @@
+{
+  "diagnosis": {
+    "conclusion": "The failed 2026-08-04 pre-mouth plan was blocked by stale or self-occupied dynamic OctoMap data, not by IK, self-collision, or an inherently invalid 80 mm final state.",
+    "evidence": {
+      "failed_plan_report": "reports/feed_water_real_premouth_20260804_112506.json",
+      "failed_move_group_log": "/home/dase-hw101/.ros/log/move_group_1064270_1785813357237.log",
+      "failed_move_group_log_contact": "<octomap> <-> wrist_2_link",
+      "failed_move_group_log_contact_lines": [281, 283],
+      "static_scene_report": "reports/premouth_collision_diagnostic_static_20260804.json",
+      "rebuilt_octomap_report": "reports/premouth_collision_diagnostic_octomap_rebuilt_20260804.json"
+    },
+    "static_scene": {
+      "dynamic_octomap_disabled": true,
+      "current_start_state_valid": true,
+      "original_80mm_yaw_0_final_state_valid": true,
+      "original_goal_self_collision": false,
+      "original_goal_human_geometry_collision": false,
+      "original_goal_camera_cup_or_straw_collision_reported_by_moveit": false,
+      "original_goal_octomap_collision": false,
+      "cartesian_path_complete": true
+    },
+    "rebuilt_octomap": {
+      "clear_scope": "dynamic_octomap_only",
+      "clear_attempted": true,
+      "rebuilt_from_three_consistent_stationary_raw_and_filtered_frames": true,
+      "fixed_human_objects_preserved": true,
+      "original_goal_valid_before_rebuild": true,
+      "original_goal_valid_after_rebuild": true,
+      "validity_changed_during_this_rebuild": false,
+      "note": "The MoveGroup restart had already removed the prior stale occupancy before the before/after sample was taken."
+    }
+  },
+  "adaptive_selection": {
+    "candidate_count": 45,
+    "standoffs_m": [0.08, 0.1, 0.12, 0.15, 0.18],
+    "yaws_deg": [0, 15, -15, 30, -30, 45, -45, 60, -60],
+    "selected_standoff_m": 0.18,
+    "selected_yaw_deg": -15.0,
+    "final_tool0_pose": {
+      "frame_id": "base_link",
+      "position_m": [-0.701413, -0.01859998, 0.69635313],
+      "orientation_quat_xyzw": [0.53268345, 0.84592172, 0.00541671, 0.02520804]
+    },
+    "straw_tip_pose": {
+      "frame_id": "base_link",
+      "position_m": [-0.74884784, 0.08056393, 0.69229663]
+    },
+    "flange_vertical_axis_error_rad": 0.0515726,
+    "flange_vertical_axis_error_deg": 2.954896,
+    "minimum_origin_or_point_clearance_m": 0.12231406,
+    "cartesian_path_fraction": 1.0,
+    "cartesian_trajectory_points": 11,
+    "cartesian_velocity_scaling": 0.6,
+    "cartesian_acceleration_scaling": 0.6,
+    "ompl_needed": false,
+    "execution_sent": false
+  },
+  "exact_collision_pairs": {
+    "historical_failed_dynamic_scene": [
+      "<octomap> <-> wrist_2_link"
+    ],
+    "rejected_adaptive_candidates_in_fixed_human_scene": [
+      "wrist_2_link <-> real_human_obstacle_0_face_safety",
+      "wrist_2_link <-> real_human_obstacle_0_head",
+      "wrist_3_link <-> real_human_obstacle_0_face_safety",
+      "wrist_3_link <-> real_human_obstacle_0_head"
+    ]
+  },
+  "remaining_fail_closed_gap": {
+    "real_execution_geometry_complete": false,
+    "reason": "The current real MoveIt robot model contains the UR chain but no calibrated collision geometry for the camera, cup holder, or straw.",
+    "behavior": "Real execution is refused; no collision exception or unsafe fallback is added."
+  }
+}

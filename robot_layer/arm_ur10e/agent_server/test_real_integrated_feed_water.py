@@ -6,6 +6,9 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from moveit_msgs.msg import RobotState, RobotTrajectory
+from trajectory_msgs.msg import JointTrajectoryPoint
+
 from robot_layer.arm_ur10e.agent_server import real_feed_water_backend as backend
 from scripts.real_dynamic_obstacle_avoidance_plan import (
     DETOUR_ROUTE_STRATEGY,
@@ -22,9 +25,123 @@ from scripts.real_feed_water_integrated import (
     RealIntegratedFeedWater,
     _orientation_after_local_tool_z_rotation,
 )
+from scripts.real_premouth_from_perception_plan import (
+    ADAPTIVE_PREMOUTH_STANDOFFS_M,
+    ADAPTIVE_PREMOUTH_YAWS_DEG,
+    RealPreMouthFromPerceptionPlan,
+    _adaptive_premouth_pose_candidates,
+)
 
 
 class RealIntegratedFeedWaterTest(unittest.TestCase):
+    def test_adaptive_goal_generator_builds_all_standoff_yaw_candidates(self) -> None:
+        candidates = _adaptive_premouth_pose_candidates(
+            mouth_position_m=[-0.9, 0.03, 0.65],
+            approach_offset_unit=[1.0, 0.0, 0.0],
+            verified_flange_down_orientation_xyzw=[1.0, 0.0, 0.0, 0.0],
+        )
+
+        self.assertEqual(
+            len(ADAPTIVE_PREMOUTH_STANDOFFS_M)
+            * len(ADAPTIVE_PREMOUTH_YAWS_DEG),
+            len(candidates),
+        )
+        self.assertEqual(0.080, candidates[0]["standoff_m"])
+        self.assertEqual(0.0, candidates[0]["yaw_deg"])
+        self.assertEqual(0.180, candidates[-1]["standoff_m"])
+        self.assertEqual(-60.0, candidates[-1]["yaw_deg"])
+
+    def test_candidate_yaw_moves_tool0_but_keeps_straw_tip_on_approach_line(self) -> None:
+        candidates = _adaptive_premouth_pose_candidates(
+            mouth_position_m=[0.0, 0.0, 0.7],
+            approach_offset_unit=[-1.0, 0.0, 0.0],
+            verified_flange_down_orientation_xyzw=[1.0, 0.0, 0.0, 0.0],
+            standoffs_m=(0.12,),
+            yaws_deg=(0.0, 60.0),
+        )
+
+        self.assertEqual(
+            candidates[0]["straw_tip_pose"]["position_m"],
+            candidates[1]["straw_tip_pose"]["position_m"],
+        )
+        self.assertNotEqual(
+            candidates[0]["tool0_pose"]["position_m"],
+            candidates[1]["tool0_pose"]["position_m"],
+        )
+        for candidate in candidates:
+            self.assertLess(candidate["straw_tip_reconstruction_error_m"], 1e-9)
+            self.assertAlmostEqual(0.0, candidate["flange_vertical_axis_error_rad"])
+            self.assertFalse(candidate["wrist_3_joint_direct_command"])
+
+    def test_collision_contact_diagnostic_reports_exact_pair_and_layer(self) -> None:
+        contact = SimpleNamespace(
+            contact_body_1="wrist_3_link",
+            contact_body_2="real_human_obstacle_0_face_safety",
+            body_type_1=0,
+            body_type_2=1,
+            depth=0.012,
+            position=SimpleNamespace(x=-0.8, y=0.1, z=0.7),
+            normal=SimpleNamespace(x=1.0, y=0.0, z=0.0),
+        )
+
+        report = RealPreMouthFromPerceptionPlan._collision_contact_report(contact)
+
+        self.assertEqual(
+            "wrist_3_link <-> real_human_obstacle_0_face_safety",
+            report["pair"],
+        )
+        self.assertTrue(report["human_geometry_collision"])
+        self.assertFalse(report["octomap_collision"])
+        self.assertFalse(report["self_collision"])
+
+    def test_cartesian_request_enforces_scaling_collision_and_jump_bounds(self) -> None:
+        node = RealPreMouthFromPerceptionPlan.__new__(
+            RealPreMouthFromPerceptionPlan
+        )
+        node.trajectory_velocity_scaling = 0.6
+        node.trajectory_acceleration_scaling = 0.6
+        node._validated_trajectory = None
+        node._current_robot_state = Mock(return_value=RobotState())
+        node._validate_trajectory_vertical_axis = Mock(
+            return_value={"success": True}
+        )
+        trajectory = RobotTrajectory()
+        trajectory.joint_trajectory.joint_names = ["shoulder_pan_joint"]
+        trajectory.joint_trajectory.points = [
+            JointTrajectoryPoint(positions=[0.0]),
+            JointTrajectoryPoint(positions=[0.01]),
+        ]
+        response = SimpleNamespace(
+            error_code=SimpleNamespace(val=1, message=""),
+            fraction=1.0,
+            solution=trajectory,
+        )
+        future = Mock()
+        future.result.return_value = response
+        node.compute_cartesian_path = Mock()
+        node.compute_cartesian_path.wait_for_service.return_value = True
+        node.compute_cartesian_path.call_async.return_value = future
+
+        with patch(
+            "scripts.real_premouth_from_perception_plan.rclpy.spin_until_future_complete"
+        ):
+            result = node._run_cartesian_plan(
+                {
+                    "position_m": [0.1, 0.2, 0.3],
+                    "orientation_quat_xyzw": [1.0, 0.0, 0.0, 0.0],
+                }
+            )
+
+        request = node.compute_cartesian_path.call_async.call_args.args[0]
+        self.assertTrue(result["success"])
+        self.assertTrue(request.avoid_collisions)
+        self.assertAlmostEqual(0.6, request.max_velocity_scaling_factor)
+        self.assertAlmostEqual(0.6, request.max_acceleration_scaling_factor)
+        self.assertAlmostEqual(
+            result["maximum_revolute_joint_jump_rad"],
+            request.revolute_jump_threshold,
+        )
+
     @staticmethod
     def _snapshot(mouth: dict[str, object]) -> dict[str, object]:
         return {

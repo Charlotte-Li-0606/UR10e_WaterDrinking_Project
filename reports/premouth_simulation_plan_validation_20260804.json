@@ -1,0 +1,16 @@
+{
+  "mode": "isolated_gazebo_plan_only",
+  "ros_domain_id": 77,
+  "success": true,
+  "execution_sent": false,
+  "planner": "moveit_compute_cartesian_path",
+  "avoid_collisions": true,
+  "fraction": 1.0,
+  "trajectory_points": 3,
+  "start_tool0_position_m": [0.50000156, 0.09997365, 1.09999655],
+  "target_tool0_position_m": [0.52000156, 0.09997365, 1.09999655],
+  "maximum_observed_vertical_axis_error_rad": 0.00004156,
+  "maximum_observed_vertical_axis_error_deg": 0.00238106,
+  "all_waypoints_validated_by_fk": true,
+  "wrist_3_joint_directly_commanded": false
+}

@@ -151,6 +151,21 @@ def _tool_report(
         if isinstance(pipeline.get("integrated_real_feed_water"), Mapping)
         else {}
     )
+    adaptive = (
+        pipeline.get("adaptive_goal_selection")
+        if isinstance(pipeline.get("adaptive_goal_selection"), Mapping)
+        else {}
+    )
+    selected_goal = (
+        adaptive.get("selected_candidate")
+        if isinstance(adaptive.get("selected_candidate"), Mapping)
+        else {}
+    )
+    plan_result = (
+        pipeline.get("plan_result")
+        if isinstance(pipeline.get("plan_result"), Mapping)
+        else {}
+    )
     success = bool(pipeline.get("success"))
     reason = pipeline.get("reason")
     if not reason and isinstance(pipeline.get("failures"), list):
@@ -173,8 +188,23 @@ def _tool_report(
         "pre_mouth_target": pipeline.get("pre_mouth_pose"),
         "active_search": active_search,
         "dynamic_octomap_readiness": pipeline.get("dynamic_octomap_readiness"),
+        "dynamic_scene_preparation": pipeline.get("dynamic_scene_preparation"),
         "integrated_real_feed_water": integrated,
+        "adaptive_goal_selection": adaptive,
+        "selected_candidate_standoff_m": adaptive.get("selected_standoff_m"),
+        "selected_candidate_yaw_deg": adaptive.get("selected_yaw_deg"),
         "target_tool0_pose": pipeline.get("target_tool0_pose"),
+        "selected_straw_tip_pose": adaptive.get("selected_straw_tip_pose"),
+        "flange_vertical_axis_error_deg": selected_goal.get(
+            "flange_vertical_axis_error_deg"
+        ),
+        "clearance_values": selected_goal.get("clearance"),
+        "cartesian_planning_succeeded": bool(
+            plan_result.get("route_strategy")
+            == "complete_collision_checked_cartesian_path"
+            and plan_result.get("success")
+        ),
+        "ompl_needed": bool(plan_result.get("detour_attempted")),
         "planned_displacement_m": pipeline.get("planned_tool0_translation_m"),
         "planned_displacement_norm_m": pipeline.get("planned_tool0_translation_norm_m"),
         "maximum_planned_displacement_m": MAXIMUM_PLAN_TRANSLATION_M,

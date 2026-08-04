@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 import unittest
 
@@ -48,6 +49,31 @@ class OpenClawReusableEntrypointTest(unittest.TestCase):
 
         self.assertNotIn('moveit_parameters["sensors"] = []', content)
         self.assertIn('moveit_parameters.pop("sensors", None)', content)
+
+    def test_moveit_launch_maps_rrtconnect_to_ur_manipulator(self) -> None:
+        spec = importlib.util.spec_from_file_location("project_moveit_launch", MOVEIT_LAUNCH)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        parameters = {
+            "ompl": {
+                "planner_configs": {
+                    "RRTConnect": {"type": "geometric::RRTConnect", "range": 0.0}
+                }
+            }
+        }
+
+        module.configure_ur_manipulator_ompl(parameters)
+
+        group = parameters["ompl"]["ur_manipulator"]
+        self.assertEqual("RRTConnect", group["default_planner_config"])
+        self.assertEqual(["RRTConnect"], group["planner_configs"])
+        self.assertEqual(
+            "joints(shoulder_pan_joint,shoulder_lift_joint)",
+            group["projection_evaluator"],
+        )
+        self.assertEqual(0.005, group["longest_valid_segment_fraction"])
 
     def test_openclaw_routes_drinking_intent_to_one_guarded_feed_water_call(self) -> None:
         mission = (OPENCLAW_SKILLS / "MISSION.md").read_text(encoding="utf-8")

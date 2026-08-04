@@ -27,6 +27,40 @@ from moveit_configs_utils import MoveItConfigsBuilder
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SENSORS_3D_CONFIG = PROJECT_ROOT / "config" / "sensors_3d.yaml"
+UR_MANIPULATOR_OMPL_GROUP = "ur_manipulator"
+UR_MANIPULATOR_DEFAULT_OMPL_PLANNER = "RRTConnect"
+UR_MANIPULATOR_PROJECTION_EVALUATOR = (
+    "joints(shoulder_pan_joint,shoulder_lift_joint)"
+)
+
+
+def configure_ur_manipulator_ompl(moveit_parameters: dict) -> None:
+    """Install the missing UR group-level OMPL mapping fail-closed.
+
+    The upstream UR planner configuration contains the named planner profiles,
+    but this installation does not map any of them to ``ur_manipulator``.  A
+    request for RRTConnect therefore reaches OMPL without a configured group
+    profile or projection evaluator.  Keep the upstream planner definition and
+    add only the project-local group mapping needed by the detour fallback.
+    """
+    ompl = moveit_parameters.get("ompl")
+    if not isinstance(ompl, dict):
+        raise RuntimeError("MoveIt configuration does not contain an OMPL mapping")
+    planner_configs = ompl.get("planner_configs")
+    if not isinstance(planner_configs, dict) or (
+        UR_MANIPULATOR_DEFAULT_OMPL_PLANNER not in planner_configs
+    ):
+        raise RuntimeError(
+            "MoveIt OMPL configuration is missing the required RRTConnect profile"
+        )
+    ompl[UR_MANIPULATOR_OMPL_GROUP] = {
+        "default_planner_config": UR_MANIPULATOR_DEFAULT_OMPL_PLANNER,
+        "planner_configs": [UR_MANIPULATOR_DEFAULT_OMPL_PLANNER],
+        "projection_evaluator": UR_MANIPULATOR_PROJECTION_EVALUATOR,
+        # Check interpolated states at no more than 0.5% of the state-space
+        # extent; this is deliberately conservative near fixed human geometry.
+        "longest_valid_segment_fraction": 0.005,
+    }
 
 
 def load_yaml(package_name: str, file_path: str):
@@ -137,6 +171,7 @@ def _launch_setup(context):
         "warehouse_host": warehouse_sqlite_path,
     }
     moveit_parameters = moveit_config.to_dict()
+    configure_ur_manipulator_ompl(moveit_parameters)
     # Preserve the UR configuration's standard time-optimal parameterization,
     # then apply MoveIt's native Ruckig response adapter for jerk-limited
     # smoothing before the plan reaches the trajectory controller.

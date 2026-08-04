@@ -451,16 +451,15 @@ class RealPlanOnlyDynamicProfileTest(unittest.TestCase):
         planner = module.RealDynamicObstacleAvoidancePlan.__new__(
             module.RealDynamicObstacleAvoidancePlan
         )
-        direct_goal = object()
-        planner._direct_goal_for_target = Mock(return_value=direct_goal)
         planner._goal_for_target = Mock()
-        planner._run_goal = Mock(
+        planner._run_cartesian_plan = Mock(
             return_value={
                 "success": True,
-                "stage": "move_group_plan_only",
+                "stage": "cartesian_plan_only",
                 "planned_trajectory": {"points": 10},
             }
         )
+        planner._run_goal = Mock()
         target = {
             "frame_id": "base_link",
             "link_name": "tool0",
@@ -473,10 +472,11 @@ class RealPlanOnlyDynamicProfileTest(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(module.DIRECT_ROUTE_STRATEGY, result["route_strategy"])
         self.assertEqual(
-            f"{module.PILZ_PIPELINE}/{module.PILZ_PLANNER}", result["planner"]
+            "moveit_compute_cartesian_path", result["planner"]
         )
         self.assertFalse(result["detour_attempted"])
-        planner._run_goal.assert_called_once_with(direct_goal)
+        planner._run_cartesian_plan.assert_called_once_with(target)
+        planner._run_goal.assert_not_called()
         planner._goal_for_target.assert_not_called()
 
     def test_ompl_detour_is_tried_only_after_direct_rejection(self) -> None:
@@ -486,24 +486,20 @@ class RealPlanOnlyDynamicProfileTest(unittest.TestCase):
         planner = module.RealDynamicObstacleAvoidancePlan.__new__(
             module.RealDynamicObstacleAvoidancePlan
         )
-        direct_goal = object()
         detour_goal = object()
-        planner._direct_goal_for_target = Mock(return_value=direct_goal)
         planner._goal_for_target = Mock(return_value=detour_goal)
         direct_failure = {
             "success": False,
             "stage": "move_group_plan_only",
             "error_code": -1,
         }
+        planner._run_cartesian_plan = Mock(return_value=direct_failure)
         planner._run_goal = Mock(
-            side_effect=[
-                direct_failure,
-                {
-                    "success": True,
-                    "stage": "move_group_plan_only",
-                    "planned_trajectory": {"points": 20},
-                },
-            ]
+            return_value={
+                "success": True,
+                "stage": "move_group_plan_only",
+                "planned_trajectory": {"points": 20},
+            }
         )
         target = {
             "frame_id": "base_link",
@@ -522,10 +518,8 @@ class RealPlanOnlyDynamicProfileTest(unittest.TestCase):
         self.assertFalse(result["intermediate_flange_orientation_unconstrained"])
         self.assertTrue(result["tool_axis_spin_free"])
         self.assertEqual(direct_failure, result["direct_path_plan_result"])
-        self.assertEqual(
-            [direct_goal, detour_goal],
-            [call.args[0] for call in planner._run_goal.call_args_list],
-        )
+        planner._run_cartesian_plan.assert_called_once_with(target)
+        planner._run_goal.assert_called_once_with(detour_goal)
 
 
 if __name__ == "__main__":

@@ -38,6 +38,7 @@ if str(PROJECT_ROOT) not in sys.path:
 import rclpy  # noqa: E402
 from geometry_msgs.msg import Pose  # noqa: E402
 from moveit_msgs.action import ExecuteTrajectory  # noqa: E402
+from moveit_msgs.msg import RobotState  # noqa: E402
 from moveit_msgs.srv import GetStateValidity  # noqa: E402
 from std_srvs.srv import Empty  # noqa: E402
 from ur_dashboard_msgs.msg import RobotMode, SafetyMode  # noqa: E402
@@ -78,6 +79,7 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
     TOOL_FRAME,
     RealPreMouthFromPerceptionPlan,
     _add,
+    _adaptive_premouth_pose_candidates,
     _finite_xyz,
     _jsonable,
     _norm,
@@ -887,6 +889,182 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "rebuilt OctoMap still collides with the current robot state"
             )
         return result
+
+    def _prepare_dynamic_scene_for_goal_selection(
+        self,
+        *,
+        mouth: list[float],
+        original_pre_mouth: list[float],
+        snapshot: dict[str, Any],
+        planning_scene_application: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Rebuild only the dynamic OctoMap from stationary camera frames."""
+        deadline = time.monotonic() + 4.0
+        report: dict[str, Any] = {
+            "success": False,
+            "stage": "stationary_octomap_rebuild",
+            "dynamic_octomap_enabled": True,
+            "octomap_clear_attempted": False,
+            "octomap_clear_scope": "dynamic_octomap_only",
+            "fixed_human_collision_objects_removed": False,
+            "allowed_collision_exceptions_added": False,
+            "required_consistent_frames_per_topic": 3,
+            "dynamic_point_cloud_filtering": {
+                "moveit_filtered_cloud_topic": FILTERED_CLOUD_TOPIC,
+                "ur_chain_self_filtering_available": True,
+                "camera_filtered_as_robot_geometry": False,
+                "cup_holder_filtered_as_robot_geometry": False,
+                "straw_filtered_as_robot_geometry": False,
+                "reason": (
+                    "the MoveIt self-filter can mask only collision geometry in the "
+                    "current robot model; camera, cup holder, and straw are not modeled"
+                ),
+            },
+        }
+        stationary = self._wait_for_search_stationary(deadline)
+        report["camera_stationary_guard"] = stationary
+        if not stationary.get("success"):
+            report["reason"] = "camera/robot was not stationary before OctoMap rebuild"
+            return report
+
+        before_scene, _ = self._planning_scene_geometry()
+        report["planning_scene_before_clear"] = before_scene
+        expected_human_ids = sorted(
+            planning_scene_application.get("object_ids", [])
+        )
+        before_human_ids = sorted(before_scene.get("human_object_ids", []))
+        if not expected_human_ids or not set(expected_human_ids).issubset(
+            before_human_ids
+        ):
+            report["reason"] = "fixed human collision objects are missing before OctoMap clear"
+            return report
+
+        approach = _subtract(original_pre_mouth, mouth)
+        approach_norm = _norm(approach)
+        if approach_norm < 1e-9:
+            report["reason"] = "validated approach line is degenerate"
+            return report
+        original_candidate = _adaptive_premouth_pose_candidates(
+            mouth_position_m=mouth,
+            approach_offset_unit=[value / approach_norm for value in approach],
+            verified_flange_down_orientation_xyzw=list(
+                snapshot["tool0_pose"]["orientation_quat_xyzw"]
+            ),
+            standoffs_m=(0.080,),
+            yaws_deg=(0.0,),
+        )[0]
+
+        before_ik = self._solve_candidate_ik(original_candidate["tool0_pose"])
+        before_robot_state = before_ik.get("robot_state")
+        before_validity = self._state_validity(
+            before_robot_state if isinstance(before_robot_state, RobotState) else None,
+            label="original_80mm_yaw_0_before_octomap_rebuild",
+        )
+        report["original_goal_before_rebuild"] = {
+            "candidate": original_candidate,
+            "ik": {
+                key: value for key, value in before_ik.items() if key != "robot_state"
+            },
+            "state_validity": before_validity,
+        }
+
+        clear_client = getattr(self, "_clear_octomap_client", None)
+        if clear_client is None or not clear_client.wait_for_service(
+            timeout_sec=min(0.5, max(0.0, deadline - time.monotonic()))
+        ):
+            report["reason"] = "/clear_octomap is unavailable"
+            return report
+        clear_future = clear_client.call_async(Empty.Request())
+        rclpy.spin_until_future_complete(
+            self,
+            clear_future,
+            timeout_sec=min(1.0, max(0.0, deadline - time.monotonic())),
+        )
+        report["octomap_clear_attempted"] = True
+        if clear_future.result() is None:
+            report["reason"] = "/clear_octomap timed out"
+            return report
+
+        cleared_at = time.monotonic()
+        frames: dict[str, list[dict[str, Any]]] = {
+            RAW_CLOUD_TOPIC: [],
+            FILTERED_CLOUD_TOPIC: [],
+        }
+        while rclpy.ok() and time.monotonic() < deadline:
+            rclpy.spin_once(
+                self,
+                timeout_sec=min(0.05, max(0.0, deadline - time.monotonic())),
+            )
+            for topic in frames:
+                history = getattr(self, "_cloud_history", {}).get(topic, [])
+                frames[topic] = [
+                    dict(item)
+                    for item in history
+                    if float(item["received_monotonic"]) > cleared_at
+                ][-3:]
+            if all(len(items) >= 3 for items in frames.values()):
+                break
+        consistency: dict[str, Any] = {}
+        consistent = True
+        for topic, items in frames.items():
+            counts = [int(item["point_count"]) for item in items]
+            frames_consistent = bool(
+                len(items) >= 3
+                and min(counts, default=0) > 0
+                and (max(counts) - min(counts)) / max(counts) <= 0.15
+                and len({str(item["frame_id"]) for item in items}) == 1
+            )
+            consistency[topic] = {
+                "consistent": frames_consistent,
+                "frames": items,
+                "point_counts": counts,
+                "maximum_relative_point_count_spread": 0.15,
+            }
+            consistent = consistent and frames_consistent
+        report["stationary_rebuild_frames"] = consistency
+        report["octomap_rebuilt_from_consistent_stationary_frames"] = consistent
+        if not consistent:
+            report["reason"] = "three consistent raw and filtered RGB-D frames were not received"
+            return report
+
+        after_scene, _ = self._planning_scene_geometry()
+        report["planning_scene_after_rebuild"] = after_scene
+        after_human_ids = sorted(after_scene.get("human_object_ids", []))
+        human_preserved = set(expected_human_ids).issubset(after_human_ids)
+        report["human_collision_objects_preserved"] = human_preserved
+        if not human_preserved:
+            report["reason"] = "fixed human collision objects changed during OctoMap rebuild"
+            return report
+
+        after_ik = self._solve_candidate_ik(original_candidate["tool0_pose"])
+        after_robot_state = after_ik.get("robot_state")
+        after_validity = self._state_validity(
+            after_robot_state if isinstance(after_robot_state, RobotState) else None,
+            label="original_80mm_yaw_0_after_octomap_rebuild",
+        )
+        report["original_goal_after_rebuild"] = {
+            "candidate": original_candidate,
+            "ik": {
+                key: value for key, value in after_ik.items() if key != "robot_state"
+            },
+            "state_validity": after_validity,
+        }
+        before_value = before_validity.get("valid")
+        after_value = after_validity.get("valid")
+        report["final_state_validity_changed_after_rebuild"] = (
+            isinstance(before_value, bool)
+            and isinstance(after_value, bool)
+            and before_value != after_value
+        )
+        report["success"] = bool(
+            after_scene.get("available")
+            and human_preserved
+            and after_validity.get("available")
+        )
+        report["reason"] = None if report["success"] else (
+            "rebuilt scene or final-state diagnostic is unavailable"
+        )
+        return report
 
     def _wait_for_search_stationary(self, deadline: float) -> dict[str, Any]:
         """Require fresh stationary joint samples before each OMPL search plan.
@@ -1890,10 +2068,34 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "route_strategy": route_strategy,
                 "execution_attempted": False,
             }
+        if route_strategy == DIRECT_ROUTE_STRATEGY:
+            readiness = self.dynamic_readiness(execution_mode=True)
+            if not readiness.get("success"):
+                return {
+                    "success": False,
+                    "stage": "cartesian_execution_readiness",
+                    "reason": "; ".join(readiness.get("failures", [])),
+                    "dynamic_octomap_readiness": readiness,
+                    "route_strategy": route_strategy,
+                    "planner": "moveit_compute_cartesian_path",
+                    "execution_attempted": False,
+                }
+            result = RealPreMouthFromPerceptionPlan._execute_validated_trajectory(
+                self
+            )
+            result.update(
+                {
+                    "route_strategy": route_strategy,
+                    "planner": "moveit_compute_cartesian_path",
+                    "same_target_replanning": False,
+                    "cartesian_path_complete": True,
+                    "cartesian_collision_checking": True,
+                    "dynamic_octomap_readiness": readiness,
+                }
+            )
+            return result
         planner = (
-            f"{PILZ_PIPELINE}/{PILZ_PLANNER}"
-            if route_strategy == DIRECT_ROUTE_STRATEGY
-            else f"{OMPL_PIPELINE}/{OMPL_PLANNER}"
+            f"{OMPL_PIPELINE}/{OMPL_PLANNER}"
         )
         readiness = self.dynamic_readiness(execution_mode=True)
         if not readiness.get("success"):
@@ -2219,6 +2421,16 @@ def _parse_args() -> argparse.Namespace:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--plan-only", action="store_true")
     mode.add_argument("--execute", action="store_true")
+    mode.add_argument(
+        "--diagnose-frozen-mouth",
+        nargs=3,
+        type=float,
+        metavar=("X", "Y", "Z"),
+        help=(
+            "No-motion diagnostic using a recorded base_link mouth point; "
+            "rebuilds only the dynamic OctoMap from stationary frames."
+        ),
+    )
     parser.add_argument("--confirm-real-motion", action="store_true")
     parser.add_argument("--allow-validated-camera-ray-execute", action="store_true")
     parser.add_argument("--no-execute", action="store_true")
@@ -2248,14 +2460,33 @@ def main() -> int:
         trajectory_acceleration_scaling=args.trajectory_acceleration_scaling,
     )
     try:
-        code, result = node.run_integrated(
-            execute=bool(args.execute),
-            confirm_real_motion=bool(args.confirm_real_motion),
-            allow_validated_camera_ray_execute=bool(
-                args.allow_validated_camera_ray_execute
-            ),
-            no_execute=bool(args.no_execute),
-        )
+        if args.diagnose_frozen_mouth is not None:
+            dynamic = node.dynamic_readiness(execution_mode=None)
+            if dynamic.get("success"):
+                code, result = node.diagnose_frozen_mouth_static_scene(
+                    list(args.diagnose_frozen_mouth),
+                    rebuild_dynamic_octomap=True,
+                )
+            else:
+                code = 2
+                result = {
+                    "success": False,
+                    "mode": "diagnose-frozen",
+                    "stage": "dynamic_octomap_readiness",
+                    "reason": "; ".join(dynamic.get("failures", [])),
+                    "execution_sent": False,
+                    "execution_disabled": True,
+                }
+            result["dynamic_octomap_readiness"] = dynamic
+        else:
+            code, result = node.run_integrated(
+                execute=bool(args.execute),
+                confirm_real_motion=bool(args.confirm_real_motion),
+                allow_validated_camera_ray_execute=bool(
+                    args.allow_validated_camera_ray_execute
+                ),
+                no_execute=bool(args.no_execute),
+            )
     finally:
         node.destroy_node()
         rclpy.shutdown()

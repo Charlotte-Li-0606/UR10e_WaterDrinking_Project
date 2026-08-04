@@ -3,11 +3,11 @@
 
 This wrapper deliberately reuses the proven real pre-mouth perception,
 coordinate, reach, final-orientation, and combined PlanningScene guards.  It
-first checks the exact-goal-orientation Pilz LIN route.  Only when that route is
-rejected does it ask OMPL RRTConnect for a non-linear route to the same frozen
-80 mm pre-mouth target.  Every route keeps tool0 +Z aligned with base_link -Z
-while allowing spin about that axis, and retains the validated final goal
-orientation.  It has no execution mode and never creates an ExecuteTrajectory client.
+first checks a complete collision-checked Cartesian route.  Only when that
+route is incomplete or rejected does it ask OMPL RRTConnect for a non-linear
+route to the same frozen collision-free pre-mouth target.  Every route keeps
+tool0 +Z aligned with base_link -Z while allowing spin about that axis.  It has
+no execution mode and never creates an ExecuteTrajectory client.
 """
 
 from __future__ import annotations
@@ -62,7 +62,8 @@ CLOUD_MAX_AGE_SEC = 0.75
 CLOUD_SETTLE_SEC = 4.0
 REPLAN_ATTEMPTS = 3
 REPLAN_DELAY_SEC = 0.0
-DIRECT_ROUTE_STRATEGY = "direct_vertical_axis_clear_path"
+CARTESIAN_ROUTE_STRATEGY = "complete_collision_checked_cartesian_path"
+DIRECT_ROUTE_STRATEGY = CARTESIAN_ROUTE_STRATEGY
 DETOUR_ROUTE_STRATEGY = "ompl_vertical_axis_detour_after_direct_path_rejected"
 COMBINED_SCENE_DESCRIPTION = "static_collision_objects_plus_live_octomap"
 
@@ -75,6 +76,14 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
         self._clouds: dict[str, dict[str, Any] | None] = {
             RAW_CLOUD_TOPIC: None,
             FILTERED_CLOUD_TOPIC: None,
+        }
+        self._cloud_sequences: dict[str, int] = {
+            RAW_CLOUD_TOPIC: 0,
+            FILTERED_CLOUD_TOPIC: 0,
+        }
+        self._cloud_history: dict[str, list[dict[str, Any]]] = {
+            RAW_CLOUD_TOPIC: [],
+            FILTERED_CLOUD_TOPIC: [],
         }
         self.create_subscription(
             PointCloud2,
@@ -94,13 +103,21 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
         )
 
     def _record_cloud(self, topic: str, message: PointCloud2) -> None:
-        self._clouds[topic] = {
+        self._cloud_sequences[topic] += 1
+        record = {
             "frame_id": str(message.header.frame_id),
             "height": int(message.height),
             "point_count": int(message.width) * int(message.height),
             "received_monotonic": time.monotonic(),
+            "sequence": self._cloud_sequences[topic],
+            "stamp_sec": int(message.header.stamp.sec),
+            "stamp_nanosec": int(message.header.stamp.nanosec),
             "width": int(message.width),
         }
+        self._clouds[topic] = record
+        history = self._cloud_history[topic]
+        history.append(dict(record))
+        del history[:-20]
 
     def _cloud_status(self, topic: str) -> dict[str, Any]:
         record = self._clouds[topic]
@@ -274,17 +291,19 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
                 float(value) for value in target["orientation_quat_xyzw"]
             ],
         }
-        direct_result = self._run_goal(self._direct_goal_for_target(target))
+        direct_result = self._run_cartesian_plan(target)
         if direct_result.get("success"):
             self._selected_dynamic_route_strategy = DIRECT_ROUTE_STRATEGY
             direct_result.update(
                 {
                     "route_strategy": DIRECT_ROUTE_STRATEGY,
-                    "planner": f"{PILZ_PIPELINE}/{PILZ_PLANNER}",
+                    "planner": "moveit_compute_cartesian_path",
                     "combined_planning_scene_checked": True,
                     "planning_scene": COMBINED_SCENE_DESCRIPTION,
                     "direct_path_accepted": True,
                     "detour_attempted": False,
+                    "cartesian_path_complete": True,
+                    "cartesian_collision_checking": True,
                     "same_target_replanning": True,
                     "maximum_replan_attempts": REPLAN_ATTEMPTS,
                     "replan_delay_sec": REPLAN_DELAY_SEC,
@@ -313,6 +332,8 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
                 "direct_path_accepted": False,
                 "direct_path_plan_result": direct_result,
                 "detour_attempted": True,
+                "cartesian_path_complete": False,
+                "cartesian_collision_checking": True,
                 "same_target_replanning": True,
                 "maximum_replan_attempts": REPLAN_ATTEMPTS,
                 "replan_delay_sec": REPLAN_DELAY_SEC,

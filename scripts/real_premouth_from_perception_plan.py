@@ -36,10 +36,23 @@ import rclpy  # noqa: E402
 import rclpy.time  # noqa: E402
 import tf2_ros  # noqa: E402
 from controller_manager_msgs.srv import ListControllers  # noqa: E402
-from geometry_msgs.msg import Pose  # noqa: E402
+from geometry_msgs.msg import Pose, PoseStamped  # noqa: E402
 from moveit_msgs.action import ExecuteTrajectory, MoveGroup  # noqa: E402
-from moveit_msgs.msg import BoundingVolume, Constraints, OrientationConstraint, PositionConstraint  # noqa: E402
-from moveit_msgs.srv import GetPositionFK  # noqa: E402
+from moveit_msgs.msg import (  # noqa: E402
+    BoundingVolume,
+    Constraints,
+    OrientationConstraint,
+    PlanningSceneComponents,
+    PositionConstraint,
+    RobotState,
+)
+from moveit_msgs.srv import (  # noqa: E402
+    GetCartesianPath,
+    GetPlanningScene,
+    GetPositionFK,
+    GetPositionIK,
+    GetStateValidity,
+)
 from rclpy.action import ActionClient  # noqa: E402
 from rclpy.duration import Duration  # noqa: E402
 from rclpy.node import Node  # noqa: E402
@@ -61,6 +74,7 @@ from robot_layer.arm_ur10e.perception.real_mouth_target_tracker import (  # noqa
 
 BASE_FRAME = "base_link"
 UR_BASE_FRAME = "base"
+MOVEIT_PLANNING_FRAME = "world"
 TOOL_FRAME = "tool0"
 CAMERA_OPTICAL_FRAME = "d435i_color_optical_frame"
 CAMERA_LINK_FRAME = "d435i_link"
@@ -148,6 +162,23 @@ RETURN_START_MATCH_TOLERANCE_M = 0.02
 RETURN_START_MATCH_ORIENTATION_TOLERANCE_RAD = 0.02
 PILZ_PIPELINE = "pilz_industrial_motion_planner"
 PILZ_PLANNER = "LIN"
+ADAPTIVE_PREMOUTH_STANDOFFS_M = (0.080, 0.100, 0.120, 0.150, 0.180)
+ADAPTIVE_PREMOUTH_YAWS_DEG = (0.0, 15.0, -15.0, 30.0, -30.0, 45.0, -45.0, 60.0, -60.0)
+IK_SERVICE = "/compute_ik"
+STATE_VALIDITY_SERVICE = "/check_state_validity"
+CARTESIAN_PATH_SERVICE = "/compute_cartesian_path"
+PLANNING_SCENE_SERVICE = "/get_planning_scene"
+IK_TIMEOUT_SEC = 0.25
+CANDIDATE_SERVICE_TIMEOUT_SEC = 1.0
+CARTESIAN_MAX_STEP_M = 0.01
+CARTESIAN_COMPLETE_FRACTION = 0.999
+CARTESIAN_MAX_REVOLUTE_JUMP_RAD = math.radians(20.0)
+MONITORED_ROBOT_LINKS = ("wrist_2_link", "wrist_3_link", TOOL_FRAME)
+HUMAN_OBJECT_PREFIXES = (
+    "human_",
+    "face_",
+    "real_human_obstacle_",
+)
 # At low pendant settings, the scaled controller can take much
 # longer than the nominal MoveIt trajectory duration.  Keep the client alive
 # long enough to receive the controller's real terminal result.
@@ -221,6 +252,104 @@ def _rotate_tool_vector(
         2.0 * (x * y + z * w) * vx + (1.0 - 2.0 * (x * x + z * z)) * vy + 2.0 * (y * z - x * w) * vz,
         2.0 * (x * z - y * w) * vx + 2.0 * (y * z + x * w) * vy + (1.0 - 2.0 * (x * x + y * y)) * vz,
     ]
+
+
+def _quaternion_multiply_xyzw(first: list[float], second: list[float]) -> list[float]:
+    """Return normalized ``first * second`` without using Euler angles."""
+    x1, y1, z1, w1 = (float(value) for value in first)
+    x2, y2, z2, w2 = (float(value) for value in second)
+    result = [
+        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+        w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+        w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+    ]
+    magnitude = math.sqrt(sum(value * value for value in result))
+    if not math.isfinite(magnitude) or magnitude < 1e-9:
+        raise ValueError("quaternion product is not finite and nonzero")
+    return [value / magnitude for value in result]
+
+
+def _orientation_after_local_tool_z_rotation(
+    orientation_xyzw: list[float], yaw_rad: float
+) -> list[float]:
+    """Spin a verified flange-down pose about tool0 local Z only."""
+    if not math.isfinite(float(yaw_rad)):
+        raise ValueError("tool-local yaw must be finite")
+    half = float(yaw_rad) / 2.0
+    return _quaternion_multiply_xyzw(
+        orientation_xyzw,
+        [0.0, 0.0, math.sin(half), math.cos(half)],
+    )
+
+
+def _adaptive_premouth_pose_candidates(
+    *,
+    mouth_position_m: list[float],
+    approach_offset_unit: list[float],
+    verified_flange_down_orientation_xyzw: list[float],
+    straw_tip_offset_tool0_m: tuple[float, float, float] = STRAW_TIP_OFFSET_TOOL0_M,
+    standoffs_m: tuple[float, ...] = ADAPTIVE_PREMOUTH_STANDOFFS_M,
+    yaws_deg: tuple[float, ...] = ADAPTIVE_PREMOUTH_YAWS_DEG,
+) -> list[dict[str, Any]]:
+    """Generate calibrated straw-tip/tool0 candidates on one approach line."""
+    mouth = _finite_xyz(mouth_position_m)
+    approach = _finite_xyz(approach_offset_unit)
+    if mouth is None or approach is None:
+        raise ValueError("mouth position and approach direction must be finite XYZ values")
+    approach_norm = _norm(approach)
+    if approach_norm < 1e-9:
+        raise ValueError("approach direction must be nonzero")
+    approach = [value / approach_norm for value in approach]
+    candidates: list[dict[str, Any]] = []
+    for standoff_m in standoffs_m:
+        if not math.isfinite(float(standoff_m)) or float(standoff_m) <= 0.0:
+            raise ValueError("candidate standoffs must be positive and finite")
+        straw_tip = _add(mouth, [float(standoff_m) * value for value in approach])
+        for yaw_deg in yaws_deg:
+            orientation = _orientation_after_local_tool_z_rotation(
+                verified_flange_down_orientation_xyzw,
+                math.radians(float(yaw_deg)),
+            )
+            rotated_straw_offset = _rotate_tool_vector(
+                orientation,
+                straw_tip_offset_tool0_m,
+            )
+            tool0_position = _subtract(straw_tip, rotated_straw_offset)
+            reconstructed_straw_tip = _add(tool0_position, rotated_straw_offset)
+            candidates.append(
+                {
+                    "candidate_index": len(candidates),
+                    "standoff_m": float(standoff_m),
+                    "yaw_deg": float(yaw_deg),
+                    "approach_offset_unit": list(approach),
+                    "straw_tip_pose": {
+                        "frame_id": BASE_FRAME,
+                        "position_m": straw_tip,
+                    },
+                    "tool0_pose": {
+                        "frame_id": BASE_FRAME,
+                        "link_name": TOOL_FRAME,
+                        "position_m": tool0_position,
+                        "orientation_quat_xyzw": orientation,
+                    },
+                    "reconstructed_straw_tip_position_m": reconstructed_straw_tip,
+                    "straw_tip_reconstruction_error_m": _norm(
+                        _subtract(reconstructed_straw_tip, straw_tip)
+                    ),
+                    "flange_vertical_axis_error_rad": _tool_vertical_tilt_rad(
+                        orientation
+                    ),
+                    "flange_vertical_axis_error_deg": math.degrees(
+                        _tool_vertical_tilt_rad(orientation)
+                    ),
+                    "wrist_3_joint_direct_command": False,
+                    "orientation_source": (
+                        "verified live flange-down quaternion plus tool-local-Z spin"
+                    ),
+                }
+            )
+    return candidates
 
 
 def _tool_x_axis_base(orientation_xyzw: list[float]) -> list[float]:
@@ -408,6 +537,19 @@ class RealPreMouthFromPerceptionPlan(Node):
         self.execute_trajectory: ActionClient | None = None
         self.controllers = self.create_client(ListControllers, "/controller_manager/list_controllers")
         self.compute_fk = self.create_client(GetPositionFK, FK_SERVICE)
+        self.compute_ik = self.create_client(GetPositionIK, IK_SERVICE)
+        self.check_state_validity = self.create_client(
+            GetStateValidity,
+            STATE_VALIDITY_SERVICE,
+        )
+        self.compute_cartesian_path = self.create_client(
+            GetCartesianPath,
+            CARTESIAN_PATH_SERVICE,
+        )
+        self.get_planning_scene = self.create_client(
+            GetPlanningScene,
+            PLANNING_SCENE_SERVICE,
+        )
 
     def _execution_action_client(self) -> ActionClient:
         """Create the execution client only on the guarded execute path."""
@@ -681,6 +823,10 @@ class RealPreMouthFromPerceptionPlan(Node):
         )
         calibration = self._mount_calibration()
         tool_to_camera_link = self._frame_transform(TOOL_FRAME, CAMERA_LINK_FRAME)
+        tool_to_camera_optical = self._frame_transform(
+            TOOL_FRAME,
+            CAMERA_OPTICAL_FRAME,
+        )
         return {
             "joint_state": self._joint_state_status(),
             "tool0_pose": tool0,
@@ -695,6 +841,7 @@ class RealPreMouthFromPerceptionPlan(Node):
             },
             "camera_tf": self._frame_transform(BASE_FRAME, CAMERA_OPTICAL_FRAME),
             "tool0_to_camera_link_tf": tool_to_camera_link,
+            "tool0_to_camera_optical_tf": tool_to_camera_optical,
             "camera_mount_match": self._camera_mount_match(calibration, tool_to_camera_link),
             "required_nodes": {
                 "move_group_exists": "/move_group" in nodes,
@@ -780,7 +927,8 @@ class RealPreMouthFromPerceptionPlan(Node):
         result["selected_candidate_index"] = selected_index
         result["frozen_candidate_positions_m"] = mouth_positions
         result["selected_mouth_position_m"] = frozen_selected
-        result["dynamic_octomap_enabled"] = False
+        result["geometry_layer"] = "fixed_human_safety_objects"
+        result["dynamic_octomap_modified"] = False
         return result
 
     @staticmethod
@@ -841,6 +989,897 @@ class RealPreMouthFromPerceptionPlan(Node):
             list(base_tf["position_m"]),
             _rotate_tool_vector(list(base_tf["orientation_quat_xyzw"]), position_in_base_link),
         )
+
+    def _current_robot_state(self) -> RobotState | None:
+        if self.latest_joint_state is None:
+            return None
+        state = RobotState()
+        state.joint_state = self.latest_joint_state
+        state.is_diff = False
+        return state
+
+    @staticmethod
+    def _collision_contact_report(contact: Any) -> dict[str, Any]:
+        body_1 = str(contact.contact_body_1)
+        body_2 = str(contact.contact_body_2)
+        type_1 = int(contact.body_type_1)
+        type_2 = int(contact.body_type_2)
+        human = any(
+            body.startswith(HUMAN_OBJECT_PREFIXES)
+            for body in (body_1, body_2)
+        )
+        octomap = "<octomap>" in (body_1, body_2)
+        self_collision = type_1 == 0 and type_2 == 0
+        tool_component = any(
+            token in body.lower()
+            for body in (body_1, body_2)
+            for token in ("camera", "d435", "cup", "holder", "straw")
+        )
+        return {
+            "body_1": body_1,
+            "body_type_1": type_1,
+            "body_2": body_2,
+            "body_type_2": type_2,
+            "depth_m": float(contact.depth),
+            "position_m": [
+                float(contact.position.x),
+                float(contact.position.y),
+                float(contact.position.z),
+            ],
+            "normal": [
+                float(contact.normal.x),
+                float(contact.normal.y),
+                float(contact.normal.z),
+            ],
+            "pair": f"{body_1} <-> {body_2}",
+            "self_collision": self_collision,
+            "human_geometry_collision": human,
+            "octomap_collision": octomap,
+            "camera_cup_or_straw_collision": tool_component,
+        }
+
+    def _state_validity(
+        self,
+        robot_state: RobotState | None,
+        *,
+        label: str,
+    ) -> dict[str, Any]:
+        base = {
+            "available": False,
+            "label": label,
+            "valid": False,
+            "contacts": [],
+            "collision_pairs": [],
+        }
+        if robot_state is None:
+            return {**base, "reason": "robot state is unavailable"}
+        if not self.check_state_validity.wait_for_service(
+            timeout_sec=CANDIDATE_SERVICE_TIMEOUT_SEC
+        ):
+            return {
+                **base,
+                "reason": f"{STATE_VALIDITY_SERVICE} is unavailable",
+            }
+        request = GetStateValidity.Request()
+        request.robot_state = robot_state
+        request.group_name = GROUP_NAME
+        future = self.check_state_validity.call_async(request)
+        rclpy.spin_until_future_complete(
+            self,
+            future,
+            timeout_sec=CANDIDATE_SERVICE_TIMEOUT_SEC,
+        )
+        response = future.result()
+        if response is None:
+            return {**base, "reason": "state-validity request timed out"}
+        contacts = [
+            self._collision_contact_report(contact)
+            for contact in response.contacts
+        ]
+        pairs = sorted({contact["pair"] for contact in contacts})
+        classifications: list[str] = []
+        if any(contact["self_collision"] for contact in contacts):
+            classifications.append("SELF_COLLISION")
+        if any(contact["human_geometry_collision"] for contact in contacts):
+            classifications.append("HUMAN_SAFETY_GEOMETRY_COLLISION")
+        if any(contact["octomap_collision"] for contact in contacts):
+            classifications.append("OCTOMAP_COLLISION")
+        if any(contact["camera_cup_or_straw_collision"] for contact in contacts):
+            classifications.append("CAMERA_CUP_OR_STRAW_COLLISION")
+        if not response.valid and not classifications:
+            classifications.append("INVALID_WITHOUT_REPORTED_CONTACT")
+        if response.valid:
+            classifications.append("VALID")
+        return {
+            **base,
+            "available": True,
+            "valid": bool(response.valid),
+            "contacts": contacts,
+            "collision_pairs": pairs,
+            "classifications": classifications,
+            "constraint_results": [
+                {
+                    "satisfied": bool(item.result),
+                    "distance": float(item.distance),
+                }
+                for item in response.constraint_result
+            ],
+            "reason": None
+            if response.valid
+            else (
+                "; ".join(pairs)
+                if pairs
+                else "MoveIt reported the state invalid without contact details"
+            ),
+        }
+
+    def _solve_candidate_ik(self, target: dict[str, Any]) -> dict[str, Any]:
+        base: dict[str, Any] = {
+            "available": False,
+            "success": False,
+            "avoid_collisions_during_ik": False,
+            "ik_solver_modified": False,
+        }
+        seed = self._current_robot_state()
+        if seed is None:
+            return {**base, "reason": "complete IK seed state is unavailable"}
+        if not self.compute_ik.wait_for_service(
+            timeout_sec=CANDIDATE_SERVICE_TIMEOUT_SEC
+        ):
+            return {**base, "reason": f"{IK_SERVICE} is unavailable"}
+        request = GetPositionIK.Request()
+        request.ik_request.group_name = GROUP_NAME
+        request.ik_request.robot_state = seed
+        request.ik_request.avoid_collisions = False
+        request.ik_request.ik_link_name = TOOL_FRAME
+        request.ik_request.pose_stamped = PoseStamped()
+        request.ik_request.pose_stamped.header.frame_id = BASE_FRAME
+        request.ik_request.pose_stamped.pose.position.x = float(
+            target["position_m"][0]
+        )
+        request.ik_request.pose_stamped.pose.position.y = float(
+            target["position_m"][1]
+        )
+        request.ik_request.pose_stamped.pose.position.z = float(
+            target["position_m"][2]
+        )
+        (
+            request.ik_request.pose_stamped.pose.orientation.x,
+            request.ik_request.pose_stamped.pose.orientation.y,
+            request.ik_request.pose_stamped.pose.orientation.z,
+            request.ik_request.pose_stamped.pose.orientation.w,
+        ) = (float(value) for value in target["orientation_quat_xyzw"])
+        request.ik_request.timeout = Duration(seconds=IK_TIMEOUT_SEC).to_msg()
+        future = self.compute_ik.call_async(request)
+        rclpy.spin_until_future_complete(
+            self,
+            future,
+            timeout_sec=CANDIDATE_SERVICE_TIMEOUT_SEC,
+        )
+        response = future.result()
+        if response is None:
+            return {**base, "reason": "IK request timed out"}
+        success = int(response.error_code.val) == 1
+        result: dict[str, Any] = {
+            **base,
+            "available": True,
+            "success": success,
+            "error_code": int(response.error_code.val),
+            "error_message": str(response.error_code.message),
+        }
+        if not success:
+            result["reason"] = response.error_code.message or (
+                f"IK failed with error code {int(response.error_code.val)}"
+            )
+            return result
+        result["robot_state"] = response.solution
+        result["joint_state"] = {
+            "names": list(response.solution.joint_state.name),
+            "positions": [
+                float(value) for value in response.solution.joint_state.position
+            ],
+        }
+        return result
+
+    def _fk_positions(
+        self,
+        robot_state: RobotState,
+        link_names: tuple[str, ...] = MONITORED_ROBOT_LINKS,
+    ) -> dict[str, Any]:
+        base = {"available": False, "requested_links": list(link_names)}
+        if not self.compute_fk.wait_for_service(
+            timeout_sec=CANDIDATE_SERVICE_TIMEOUT_SEC
+        ):
+            return {**base, "reason": f"{FK_SERVICE} is unavailable"}
+        request = GetPositionFK.Request()
+        request.header.frame_id = BASE_FRAME
+        request.fk_link_names = list(link_names)
+        request.robot_state = robot_state
+        future = self.compute_fk.call_async(request)
+        rclpy.spin_until_future_complete(
+            self,
+            future,
+            timeout_sec=CANDIDATE_SERVICE_TIMEOUT_SEC,
+        )
+        response = future.result()
+        if response is None:
+            return {**base, "reason": "FK request timed out"}
+        if int(response.error_code.val) != 1:
+            return {
+                **base,
+                "reason": f"FK failed with error code {int(response.error_code.val)}",
+                "error_code": int(response.error_code.val),
+            }
+        poses: dict[str, Any] = {}
+        for name, stamped in zip(response.fk_link_names, response.pose_stamped):
+            poses[str(name)] = {
+                "position_m": [
+                    float(stamped.pose.position.x),
+                    float(stamped.pose.position.y),
+                    float(stamped.pose.position.z),
+                ],
+                "orientation_quat_xyzw": [
+                    float(stamped.pose.orientation.x),
+                    float(stamped.pose.orientation.y),
+                    float(stamped.pose.orientation.z),
+                    float(stamped.pose.orientation.w),
+                ],
+            }
+        return {
+            **base,
+            "available": True,
+            "poses": poses,
+            "missing_links": sorted(set(link_names) - set(poses)),
+        }
+
+    def _planning_scene_geometry(self) -> tuple[dict[str, Any], list[Any]]:
+        base: dict[str, Any] = {
+            "available": False,
+            "human_collision_objects_preserved": False,
+            "allowed_collision_exceptions_added": False,
+        }
+        if not self.get_planning_scene.wait_for_service(
+            timeout_sec=CANDIDATE_SERVICE_TIMEOUT_SEC
+        ):
+            return ({**base, "reason": f"{PLANNING_SCENE_SERVICE} is unavailable"}, [])
+        request = GetPlanningScene.Request()
+        request.components.components = (
+            PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
+            | PlanningSceneComponents.OCTOMAP
+            | PlanningSceneComponents.ALLOWED_COLLISION_MATRIX
+            | PlanningSceneComponents.LINK_PADDING_AND_SCALING
+        )
+        future = self.get_planning_scene.call_async(request)
+        rclpy.spin_until_future_complete(
+            self,
+            future,
+            timeout_sec=CANDIDATE_SERVICE_TIMEOUT_SEC,
+        )
+        response = future.result()
+        if response is None:
+            return ({**base, "reason": "PlanningScene request timed out"}, [])
+        objects = list(response.scene.world.collision_objects)
+        serialized: list[dict[str, Any]] = []
+        primitive_names = {
+            SolidPrimitive.BOX: "box",
+            SolidPrimitive.SPHERE: "sphere",
+            SolidPrimitive.CYLINDER: "cylinder",
+            SolidPrimitive.CONE: "cone",
+        }
+        for collision in objects:
+            primitives: list[dict[str, Any]] = []
+            for primitive, pose in zip(collision.primitives, collision.primitive_poses):
+                primitives.append(
+                    {
+                        "type": primitive_names.get(int(primitive.type), str(int(primitive.type))),
+                        "dimensions_m": [float(value) for value in primitive.dimensions],
+                        "pose": {
+                            "position_m": [
+                                float(pose.position.x),
+                                float(pose.position.y),
+                                float(pose.position.z),
+                            ],
+                            "orientation_quat_xyzw": [
+                                float(pose.orientation.x),
+                                float(pose.orientation.y),
+                                float(pose.orientation.z),
+                                float(pose.orientation.w),
+                            ],
+                        },
+                    }
+                )
+            serialized.append(
+                {
+                    "id": str(collision.id),
+                    "frame_id": str(collision.header.frame_id),
+                    "object_pose": {
+                        "position_m": [
+                            float(collision.pose.position.x),
+                            float(collision.pose.position.y),
+                            float(collision.pose.position.z),
+                        ],
+                        "orientation_quat_xyzw": [
+                            float(collision.pose.orientation.x),
+                            float(collision.pose.orientation.y),
+                            float(collision.pose.orientation.z),
+                            float(collision.pose.orientation.w),
+                        ],
+                    },
+                    "primitives": primitives,
+                    "mesh_count": len(collision.meshes),
+                }
+            )
+        human_ids = sorted(
+            item["id"]
+            for item in serialized
+            if item["id"].startswith(HUMAN_OBJECT_PREFIXES)
+        )
+        acm = response.scene.allowed_collision_matrix
+        human_allowed_pairs: list[str] = []
+        for row_index, name in enumerate(acm.entry_names):
+            if row_index >= len(acm.entry_values):
+                continue
+            for column_index, enabled in enumerate(acm.entry_values[row_index].enabled):
+                if not enabled or column_index >= len(acm.entry_names):
+                    continue
+                other = acm.entry_names[column_index]
+                if str(name).startswith(HUMAN_OBJECT_PREFIXES) or str(other).startswith(
+                    HUMAN_OBJECT_PREFIXES
+                ):
+                    human_allowed_pairs.append(f"{name} <-> {other}")
+        octomap = response.scene.world.octomap.octomap
+        report = {
+            **base,
+            "available": True,
+            "world_collision_objects": serialized,
+            "human_object_ids": human_ids,
+            "human_collision_objects_preserved": bool(human_ids),
+            "human_allowed_collision_pairs": sorted(set(human_allowed_pairs)),
+            "allowed_collision_exceptions_added": False,
+            "octomap": {
+                "frame_id": str(response.scene.world.octomap.header.frame_id),
+                "binary": bool(octomap.binary),
+                "id": str(octomap.id),
+                "resolution_m": float(octomap.resolution),
+                "serialized_byte_count": len(octomap.data),
+                "present": bool(octomap.data),
+            },
+            "link_padding": [
+                {"link_name": str(item.link_name), "padding_m": float(item.padding)}
+                for item in response.scene.link_padding
+            ],
+            "link_scale": [
+                {"link_name": str(item.link_name), "scale": float(item.scale)}
+                for item in response.scene.link_scale
+            ],
+        }
+        if human_allowed_pairs:
+            report["reason"] = "human allowed-collision entries are present in the PlanningScene"
+        return report, objects
+
+    @staticmethod
+    def _world_primitive_pose(collision: Any, primitive_pose: Pose) -> tuple[list[float], list[float]]:
+        object_orientation = [
+            float(collision.pose.orientation.x),
+            float(collision.pose.orientation.y),
+            float(collision.pose.orientation.z),
+            float(collision.pose.orientation.w),
+        ]
+        if _norm(object_orientation) < 1e-9:
+            object_orientation = [0.0, 0.0, 0.0, 1.0]
+        local_position = [
+            float(primitive_pose.position.x),
+            float(primitive_pose.position.y),
+            float(primitive_pose.position.z),
+        ]
+        world_position = _add(
+            [
+                float(collision.pose.position.x),
+                float(collision.pose.position.y),
+                float(collision.pose.position.z),
+            ],
+            _rotate_tool_vector(object_orientation, local_position),
+        )
+        primitive_orientation = [
+            float(primitive_pose.orientation.x),
+            float(primitive_pose.orientation.y),
+            float(primitive_pose.orientation.z),
+            float(primitive_pose.orientation.w),
+        ]
+        if _norm(primitive_orientation) < 1e-9:
+            primitive_orientation = [0.0, 0.0, 0.0, 1.0]
+        return world_position, _quaternion_multiply_xyzw(
+            object_orientation,
+            primitive_orientation,
+        )
+
+    @staticmethod
+    def _point_primitive_signed_clearance(
+        point: list[float],
+        primitive: Any,
+        center: list[float],
+        orientation_xyzw: list[float],
+    ) -> float | None:
+        relative = _subtract(point, center)
+        if int(primitive.type) == SolidPrimitive.SPHERE:
+            return _norm(relative) - float(primitive.dimensions[0])
+        if int(primitive.type) == SolidPrimitive.BOX:
+            inverse = [
+                -float(orientation_xyzw[0]),
+                -float(orientation_xyzw[1]),
+                -float(orientation_xyzw[2]),
+                float(orientation_xyzw[3]),
+            ]
+            local = _rotate_tool_vector(inverse, relative)
+            half = [float(value) / 2.0 for value in primitive.dimensions]
+            delta = [abs(local[index]) - half[index] for index in range(3)]
+            outside = _norm([max(value, 0.0) for value in delta])
+            inside = min(max(delta), 0.0)
+            return outside + inside
+        return None
+
+    def _candidate_feature_clearances(
+        self,
+        *,
+        candidate: dict[str, Any],
+        robot_state: RobotState,
+        scene_objects: list[Any],
+        snapshot: dict[str, Any],
+    ) -> dict[str, Any]:
+        fk = self._fk_positions(robot_state)
+        features: dict[str, list[float]] = {
+            "straw_tip": list(candidate["straw_tip_pose"]["position_m"]),
+            "tool0": list(candidate["tool0_pose"]["position_m"]),
+            # Until measured cup-holder collision geometry is added to the
+            # MoveIt robot model, tool0 is the only calibrated rigid reference.
+            "cup_holder_reference": list(candidate["tool0_pose"]["position_m"]),
+        }
+        if fk.get("available"):
+            for link_name, pose in fk.get("poses", {}).items():
+                features[link_name] = list(pose["position_m"])
+        camera_local = snapshot.get("tool0_to_camera_optical_tf", {})
+        if camera_local.get("available"):
+            features["camera_optical_center"] = _add(
+                list(candidate["tool0_pose"]["position_m"]),
+                _rotate_tool_vector(
+                    list(candidate["tool0_pose"]["orientation_quat_xyzw"]),
+                    list(camera_local["position_m"]),
+                ),
+            )
+
+        clearances: list[dict[str, Any]] = []
+        for collision in scene_objects:
+            object_id = str(collision.id)
+            if not object_id.startswith(HUMAN_OBJECT_PREFIXES):
+                continue
+            for primitive_index, (primitive, primitive_pose) in enumerate(
+                zip(collision.primitives, collision.primitive_poses)
+            ):
+                center, orientation = self._world_primitive_pose(
+                    collision,
+                    primitive_pose,
+                )
+                for feature_name, point in features.items():
+                    clearance = self._point_primitive_signed_clearance(
+                        point,
+                        primitive,
+                        center,
+                        orientation,
+                    )
+                    if clearance is None:
+                        continue
+                    clearances.append(
+                        {
+                            "feature": feature_name,
+                            "human_object": object_id,
+                            "primitive_index": primitive_index,
+                            "origin_or_point_to_object_surface_clearance_m": clearance,
+                        }
+                    )
+        minimum = min(
+            (
+                item["origin_or_point_to_object_surface_clearance_m"]
+                for item in clearances
+            ),
+            default=None,
+        )
+        return {
+            "available": bool(clearances),
+            "minimum_origin_or_point_clearance_m": minimum,
+            "all_origin_or_point_clearances_nonnegative": bool(
+                clearances and minimum is not None and minimum >= 0.0
+            ),
+            "clearances": clearances,
+            "feature_points_m": features,
+            "fk": fk,
+            "safety_margin_source": (
+                "the conservative human head/torso/face keepout geometry itself; "
+                "no allowed-collision exception is used"
+            ),
+            "tool_geometry_modeling": {
+                "wrist_2_link_moveit_collision_geometry": True,
+                "wrist_3_link_moveit_collision_geometry": True,
+                "camera_moveit_collision_geometry": False,
+                "cup_holder_moveit_collision_geometry": False,
+                "straw_moveit_collision_geometry": False,
+                "camera_point_clearance_checked": "camera_optical_center" in features,
+                "cup_holder_reference_clearance_checked": True,
+                "straw_tip_point_clearance_checked": True,
+                "real_execution_geometry_complete": False,
+                "reason": (
+                    "the current MoveIt robot_description contains only the UR chain; "
+                    "camera, cup-holder, and straw collision meshes/primitives are not modeled"
+                ),
+            },
+        }
+
+    def _candidate_joint_motion(self, robot_state: RobotState) -> float | None:
+        if self.latest_joint_state is None:
+            return None
+        current = dict(
+            zip(self.latest_joint_state.name, self.latest_joint_state.position)
+        )
+        target = dict(zip(robot_state.joint_state.name, robot_state.joint_state.position))
+        if not all(name in current and name in target for name in EXPECTED_JOINTS):
+            return None
+        travel = 0.0
+        for name in EXPECTED_JOINTS:
+            difference = float(target[name]) - float(current[name])
+            difference = math.atan2(math.sin(difference), math.cos(difference))
+            travel += abs(difference)
+        return travel
+
+    @staticmethod
+    def _verify_human_geometry(
+        scene_report: dict[str, Any],
+        planning_scene_application: dict[str, Any],
+    ) -> dict[str, Any]:
+        actual_by_id = {
+            item["id"]: item
+            for item in scene_report.get("world_collision_objects", [])
+            if isinstance(item, dict)
+        }
+        config = planning_scene_application.get("config", {})
+        findings: list[dict[str, Any]] = []
+        expected_specs: list[tuple[str, str, list[float], list[float]]] = []
+        for person in planning_scene_application.get("people", []):
+            ids = person.get("object_ids", [])
+            if len(ids) != 3:
+                continue
+            expected_specs.extend(
+                [
+                    (
+                        str(ids[0]),
+                        "sphere",
+                        [float(config.get("head_radius_m", 0.0))],
+                        [float(value) for value in person.get("head_center", [])],
+                    ),
+                    (
+                        str(ids[1]),
+                        "box",
+                        [float(value) for value in config.get("torso_size_m", [])],
+                        [float(value) for value in person.get("torso_center", [])],
+                    ),
+                    (
+                        str(ids[2]),
+                        "sphere",
+                        [float(config.get("face_safety_radius_m", 0.0))],
+                        [
+                            float(value)
+                            for value in person.get("face_safety_center", [])
+                        ],
+                    ),
+                ]
+            )
+        success = bool(expected_specs)
+        for object_id, shape, dimensions, center in expected_specs:
+            actual = actual_by_id.get(object_id)
+            primitive = (
+                actual.get("primitives", [None])[0]
+                if isinstance(actual, dict) and actual.get("primitives")
+                else None
+            )
+            actual_frame = actual.get("frame_id") if actual else None
+            # MoveIt canonicalizes collision objects submitted in base_link to
+            # its fixed planning frame, world.  The UR description connects
+            # world -> base_link by the verified identity fixed joint.
+            frame_ok = bool(
+                actual
+                and actual_frame in (BASE_FRAME, MOVEIT_PLANNING_FRAME)
+            )
+            shape_ok = bool(primitive and primitive.get("type") == shape)
+            dimensions_ok = bool(
+                primitive
+                and len(primitive.get("dimensions_m", [])) == len(dimensions)
+                and all(
+                    abs(float(measured) - float(expected)) <= 1e-6
+                    for measured, expected in zip(
+                        primitive.get("dimensions_m", []), dimensions
+                    )
+                )
+            )
+            actual_center: list[float] = []
+            if primitive and actual:
+                object_pose = actual.get("object_pose", {})
+                object_position = object_pose.get("position_m", [])
+                object_orientation = object_pose.get(
+                    "orientation_quat_xyzw", []
+                )
+                primitive_position = primitive.get("pose", {}).get(
+                    "position_m", []
+                )
+                if (
+                    len(object_position) == 3
+                    and len(object_orientation) == 4
+                    and len(primitive_position) == 3
+                ):
+                    actual_center = _add(
+                        [float(value) for value in object_position],
+                        _rotate_tool_vector(
+                            [float(value) for value in object_orientation],
+                            [float(value) for value in primitive_position],
+                        ),
+                    )
+            pose_ok = bool(
+                len(actual_center) == len(center) == 3
+                and all(
+                    abs(float(measured) - float(expected)) <= 1e-6
+                    for measured, expected in zip(actual_center, center)
+                )
+            )
+            valid = frame_ok and shape_ok and dimensions_ok and pose_ok
+            success = success and valid
+            findings.append(
+                {
+                    "object_id": object_id,
+                    "valid": valid,
+                    "input_frame_id": BASE_FRAME,
+                    "accepted_scene_frame_ids": [
+                        BASE_FRAME,
+                        MOVEIT_PLANNING_FRAME,
+                    ],
+                    "actual_frame_id": actual_frame,
+                    "moveit_canonicalized_to_planning_frame": bool(
+                        actual_frame == MOVEIT_PLANNING_FRAME
+                    ),
+                    "expected_shape": shape,
+                    "actual_shape": primitive.get("type") if primitive else None,
+                    "expected_dimensions_m": dimensions,
+                    "actual_dimensions_m": primitive.get("dimensions_m") if primitive else None,
+                    "expected_center_m": center,
+                    "actual_center_m": actual_center,
+                    "frame_valid": frame_ok,
+                    "shape_valid": shape_ok,
+                    "dimensions_valid": dimensions_ok,
+                    "pose_valid": pose_ok,
+                }
+            )
+        return {
+            "success": success,
+            "findings": findings,
+            "configured_safety_geometry": config,
+            "geometry_was_shrunk_or_deleted": False,
+            "safety_margin_policy": (
+                "head and face radii plus torso dimensions are retained exactly; "
+                "candidate straw-tip and robot states must remain outside them"
+            ),
+        }
+
+    def _select_adaptive_premouth_goal(
+        self,
+        *,
+        mouth: list[float],
+        original_pre_mouth: list[float],
+        snapshot: dict[str, Any],
+        planning_scene_application: dict[str, Any],
+    ) -> dict[str, Any]:
+        approach = _subtract(original_pre_mouth, mouth)
+        approach_norm = _norm(approach)
+        if approach_norm < 1e-9:
+            return {
+                "success": False,
+                "stage": "adaptive_goal_generation",
+                "reason": "validated pre-mouth approach line is degenerate",
+                "candidates": [],
+            }
+        approach_unit = [value / approach_norm for value in approach]
+        current_tool0 = snapshot["tool0_pose"]
+        candidates = _adaptive_premouth_pose_candidates(
+            mouth_position_m=mouth,
+            approach_offset_unit=approach_unit,
+            verified_flange_down_orientation_xyzw=list(
+                current_tool0["orientation_quat_xyzw"]
+            ),
+        )
+        scene_report, scene_objects = self._planning_scene_geometry()
+        human_geometry_verification = self._verify_human_geometry(
+            scene_report,
+            planning_scene_application,
+        )
+        start_state_validity = self._state_validity(
+            self._current_robot_state(),
+            label="current_start_state",
+        )
+        result: dict[str, Any] = {
+            "success": False,
+            "stage": "adaptive_goal_selection",
+            "approach_policy": self.premouth_policy,
+            "approach_offset_unit": approach_unit,
+            "standoff_candidates_m": list(ADAPTIVE_PREMOUTH_STANDOFFS_M),
+            "yaw_candidates_deg": list(ADAPTIVE_PREMOUTH_YAWS_DEG),
+            "candidate_count": len(candidates),
+            "start_state_validity": start_state_validity,
+            "planning_scene": scene_report,
+            "human_geometry_verification": human_geometry_verification,
+            "planning_scene_application": planning_scene_application,
+            "candidates": [],
+            "execution_sent": False,
+        }
+        if not scene_report.get("available"):
+            result["reason"] = scene_report.get("reason")
+            return result
+        if not scene_report.get("human_collision_objects_preserved"):
+            result["reason"] = "fixed human collision geometry is absent"
+            return result
+        if scene_report.get("human_allowed_collision_pairs"):
+            result["reason"] = "human allowed-collision exceptions are present"
+            return result
+        if not human_geometry_verification.get("success"):
+            result["reason"] = "fixed human collision geometry failed frame/pose/dimension verification"
+            return result
+        if not start_state_validity.get("available") or not start_state_validity.get(
+            "valid"
+        ):
+            result["reason"] = (
+                "current start state is invalid: "
+                + str(start_state_validity.get("reason") or "unknown reason")
+            )
+            return result
+
+        valid_candidates: list[tuple[tuple[float, float, float], dict[str, Any], RobotState]] = []
+        current_position = list(current_tool0["position_m"])
+        for candidate in candidates:
+            report = dict(candidate)
+            target = candidate["tool0_pose"]
+            target_in_ur_base = self._point_in_ur_base(
+                list(target["position_m"]),
+                snapshot["ur_base_tf"],
+            )
+            radius = _norm(target_in_ur_base)
+            path_length = _norm(_subtract(list(target["position_m"]), current_position))
+            workspace_valid = bool(
+                radius <= MAX_TOOL0_RADIUS_FROM_UR_BASE_M
+                and path_length <= self.maximum_plan_translation_m
+                and candidate["flange_vertical_axis_error_rad"]
+                <= MAX_TOOL_VERTICAL_TILT_RAD
+                and candidate["straw_tip_reconstruction_error_m"] <= 1e-8
+            )
+            report.update(
+                {
+                    "workspace_valid": workspace_valid,
+                    "target_tool0_position_in_ur_base_m": target_in_ur_base,
+                    "target_tool0_radius_from_ur_base_m": radius,
+                    "path_length_m": path_length,
+                }
+            )
+            if not workspace_valid:
+                report.update(
+                    {
+                        "valid": False,
+                        "rejection_stage": "workspace",
+                        "rejection_reason": (
+                            "candidate violates reach, translation, flange-down, or "
+                            "straw-tip reconstruction bounds"
+                        ),
+                    }
+                )
+                result["candidates"].append(report)
+                continue
+
+            ik = self._solve_candidate_ik(target)
+            robot_state = ik.get("robot_state")
+            report["ik"] = {
+                key: value for key, value in ik.items() if key != "robot_state"
+            }
+            if not ik.get("success") or not isinstance(robot_state, RobotState):
+                report.update(
+                    {
+                        "valid": False,
+                        "rejection_stage": "ik",
+                        "rejection_reason": ik.get("reason") or "no IK solution",
+                    }
+                )
+                result["candidates"].append(report)
+                continue
+
+            validity = self._state_validity(
+                robot_state,
+                label=(
+                    f"candidate_{candidate['candidate_index']}_"
+                    f"{candidate['standoff_m']:.3f}m_{candidate['yaw_deg']:+.0f}deg"
+                ),
+            )
+            clearance = self._candidate_feature_clearances(
+                candidate=candidate,
+                robot_state=robot_state,
+                scene_objects=scene_objects,
+                snapshot=snapshot,
+            )
+            joint_motion = self._candidate_joint_motion(robot_state)
+            report.update(
+                {
+                    "final_state_validity": validity,
+                    "clearance": clearance,
+                    "joint_motion_l1_rad": joint_motion,
+                }
+            )
+            safety_clearance = clearance.get(
+                "minimum_origin_or_point_clearance_m"
+            )
+            valid = bool(
+                validity.get("available")
+                and validity.get("valid")
+                and clearance.get("all_origin_or_point_clearances_nonnegative")
+                and isinstance(safety_clearance, (int, float))
+            )
+            report["valid"] = valid
+            if valid:
+                report["rejection_stage"] = None
+                report["rejection_reason"] = None
+                score = (
+                    float(safety_clearance),
+                    -float(joint_motion if joint_motion is not None else float("inf")),
+                    -path_length,
+                )
+                report["score"] = {
+                    "safety_clearance_m": float(safety_clearance),
+                    "joint_motion_l1_rad": joint_motion,
+                    "path_length_m": path_length,
+                    "priority_order": [
+                        "maximum safety clearance",
+                        "minimum joint motion",
+                        "minimum path length",
+                    ],
+                }
+                valid_candidates.append((score, report, robot_state))
+            else:
+                report["rejection_stage"] = "final_state_collision_or_clearance"
+                report["rejection_reason"] = validity.get("reason") or (
+                    "candidate violates a fixed human safety volume"
+                )
+            result["candidates"].append(report)
+
+        if not valid_candidates:
+            result["reason"] = "every adaptive pre-mouth candidate is invalid"
+            result["all_collision_pairs"] = sorted(
+                {
+                    pair
+                    for candidate in result["candidates"]
+                    for pair in candidate.get("final_state_validity", {}).get(
+                        "collision_pairs", []
+                    )
+                }
+            )
+            return result
+        _, selected, selected_state = max(valid_candidates, key=lambda item: item[0])
+        self._selected_goal_robot_state = selected_state
+        self._selected_goal_diagnostic = selected
+        result.update(
+            {
+                "success": True,
+                "selected_candidate_index": selected["candidate_index"],
+                "selected_candidate": selected,
+                "selected_standoff_m": selected["standoff_m"],
+                "selected_yaw_deg": selected["yaw_deg"],
+                "selected_tool0_pose": selected["tool0_pose"],
+                "selected_straw_tip_pose": selected["straw_tip_pose"],
+                "real_execution_geometry_complete": selected["clearance"][
+                    "tool_geometry_modeling"
+                ]["real_execution_geometry_complete"],
+                "reason": None,
+            }
+        )
+        return result
 
     @staticmethod
     def _orientation_constraint(target_pose: Pose) -> OrientationConstraint:
@@ -1043,48 +2082,103 @@ class RealPreMouthFromPerceptionPlan(Node):
             "tool_axis_spin_free": True,
         }
 
-    def _run_plan(self, target: dict[str, Any]) -> dict[str, Any]:
+    def _run_cartesian_plan(self, target: dict[str, Any]) -> dict[str, Any]:
+        """Plan a complete, collision-checked Cartesian path without execution."""
         self._validated_trajectory = None
-        future = self.move_group.send_goal_async(self._goal_for_target(target))
-        rclpy.spin_until_future_complete(self, future, timeout_sec=8.0)
-        handle = future.result()
-        if handle is None or not handle.accepted:
-            return {"success": False, "stage": "move_group_goal", "reason": "MoveGroup rejected plan-only goal"}
-        result_future = handle.get_result_async()
-        rclpy.spin_until_future_complete(self, result_future, timeout_sec=ACTION_TIMEOUT_SEC)
-        wrapped_result = result_future.result()
-        if wrapped_result is None:
-            cancel_future = handle.cancel_goal_async()
-            rclpy.spin_until_future_complete(self, cancel_future, timeout_sec=5.0)
-            return {
-                "success": False,
-                "stage": "move_group_timeout",
-                "reason": f"MoveGroup did not return a plan within {ACTION_TIMEOUT_SEC:.0f} seconds; cancel requested",
-            }
-        result = wrapped_result.result
-        success = int(result.error_code.val) == 1
+        base: dict[str, Any] = {
+            "success": False,
+            "stage": "cartesian_plan_only",
+            "planner": "moveit_compute_cartesian_path",
+            "execution_sent": False,
+            "avoid_collisions": True,
+            "max_step_m": CARTESIAN_MAX_STEP_M,
+            "maximum_revolute_joint_jump_rad": CARTESIAN_MAX_REVOLUTE_JUMP_RAD,
+            "required_fraction": CARTESIAN_COMPLETE_FRACTION,
+            "velocity_scaling": self.trajectory_velocity_scaling,
+            "acceleration_scaling": self.trajectory_acceleration_scaling,
+        }
+        start_state = self._current_robot_state()
+        if start_state is None:
+            return {**base, "reason": "Cartesian start state is unavailable"}
+        if not self.compute_cartesian_path.wait_for_service(
+            timeout_sec=CANDIDATE_SERVICE_TIMEOUT_SEC
+        ):
+            return {**base, "reason": f"{CARTESIAN_PATH_SERVICE} is unavailable"}
+        request = GetCartesianPath.Request()
+        request.header.frame_id = BASE_FRAME
+        request.start_state = start_state
+        request.group_name = GROUP_NAME
+        request.link_name = TOOL_FRAME
+        waypoint = Pose()
+        (
+            waypoint.position.x,
+            waypoint.position.y,
+            waypoint.position.z,
+        ) = (float(value) for value in target["position_m"])
+        (
+            waypoint.orientation.x,
+            waypoint.orientation.y,
+            waypoint.orientation.z,
+            waypoint.orientation.w,
+        ) = (float(value) for value in target["orientation_quat_xyzw"])
+        request.waypoints = [waypoint]
+        request.max_step = CARTESIAN_MAX_STEP_M
+        request.jump_threshold = 0.0
+        request.revolute_jump_threshold = CARTESIAN_MAX_REVOLUTE_JUMP_RAD
+        request.avoid_collisions = True
+        request.max_velocity_scaling_factor = self.trajectory_velocity_scaling
+        request.max_acceleration_scaling_factor = self.trajectory_acceleration_scaling
+        request.path_constraints.name = "cartesian_tool_vertical_axis_with_free_spin"
+        request.path_constraints.orientation_constraints.append(
+            self._vertical_axis_constraint(waypoint)
+        )
+        future = self.compute_cartesian_path.call_async(request)
+        rclpy.spin_until_future_complete(
+            self,
+            future,
+            timeout_sec=ACTION_TIMEOUT_SEC,
+        )
+        response = future.result()
+        if response is None:
+            return {**base, "reason": "Cartesian planning request timed out"}
+        summary = _trajectory_summary(response.solution)
+        complete = bool(
+            int(response.error_code.val) == 1
+            and float(response.fraction) >= CARTESIAN_COMPLETE_FRACTION
+            and int(summary.get("points", 0)) >= 2
+        )
         vertical_axis_validation = None
-        if success:
+        if complete:
             vertical_axis_validation = self._validate_trajectory_vertical_axis(
-                result.planned_trajectory
+                response.solution
             )
-            success = bool(vertical_axis_validation.get("success"))
-            if success:
-                self._validated_trajectory = result.planned_trajectory
+            complete = bool(vertical_axis_validation.get("success"))
+            if complete:
+                self._validated_trajectory = response.solution
         return {
-            "success": success,
-            "stage": "move_group_plan_only",
-            "result_status": int(wrapped_result.status),
-            "error_code": int(result.error_code.val),
-            "error_message": result.error_code.message,
-            "planning_time_sec": float(result.planning_time),
-            "planned_trajectory": _trajectory_summary(result.planned_trajectory),
+            **base,
+            "success": complete,
+            "error_code": int(response.error_code.val),
+            "error_message": str(response.error_code.message),
+            "fraction": float(response.fraction),
+            "complete": float(response.fraction) >= CARTESIAN_COMPLETE_FRACTION,
+            "planned_trajectory": summary,
             "vertical_axis_validation": vertical_axis_validation,
             "reason": None
-            if success or vertical_axis_validation is None
-            else vertical_axis_validation.get("reason"),
-            "execution_sent": False,
+            if complete
+            else (
+                vertical_axis_validation.get("reason")
+                if isinstance(vertical_axis_validation, dict)
+                else (
+                    "Cartesian path is incomplete or collision-blocked: "
+                    f"fraction={float(response.fraction):.6f}, "
+                    f"error_code={int(response.error_code.val)}"
+                )
+            ),
         }
+
+    def _run_plan(self, target: dict[str, Any]) -> dict[str, Any]:
+        return self._run_cartesian_plan(target)
 
     def _return_snapshot(self) -> dict[str, Any]:
         """Read only the robot state required for a recorded-pose return."""
@@ -1394,6 +2488,263 @@ class RealPreMouthFromPerceptionPlan(Node):
             },
         )
 
+    def _prepare_dynamic_scene_for_goal_selection(
+        self,
+        *,
+        mouth: list[float],
+        original_pre_mouth: list[float],
+        snapshot: dict[str, Any],
+        planning_scene_application: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Static-scene default; the integrated OctoMap workflow overrides it."""
+        return {
+            "success": True,
+            "dynamic_octomap_enabled": False,
+            "octomap_clear_attempted": False,
+            "human_collision_objects_preserved": bool(
+                planning_scene_application.get("success")
+            ),
+            "final_state_validity_changed_after_rebuild": None,
+            "note": "No dynamic OctoMap layer is managed by this static-scene pipeline.",
+        }
+
+    def diagnose_frozen_mouth_static_scene(
+        self,
+        mouth_position_m: list[float],
+        *,
+        rebuild_dynamic_octomap: bool = False,
+    ) -> tuple[int, dict[str, Any]]:
+        """Replay one recorded mouth point against the live state without motion.
+
+        This diagnostic exists for reproducing a failed real plan when the
+        person is no longer visible.  It consumes the current joint state,
+        current corrected camera TF, current calibrated tool transforms, and a
+        caller-supplied recorded mouth point.  The default refuses to proceed
+        if a dynamic OctoMap is present.  The integrated subclass may instead
+        request its stationary dynamic-layer rebuild.  Neither route creates
+        an execution client.
+        """
+        try:
+            mouth = [float(value) for value in mouth_position_m]
+        except (TypeError, ValueError):
+            mouth = []
+        if len(mouth) != 3 or not all(math.isfinite(value) for value in mouth):
+            return 2, {
+                "success": False,
+                "mode": "diagnose-frozen",
+                "stage": "diagnostic_input",
+                "reason": "recorded mouth position must contain three finite base_link values",
+                "execution_sent": False,
+                "execution_disabled": True,
+            }
+
+        snapshot = self.snapshot(
+            mouth_sample_sec=MIN_MOUTH_SAMPLE_SECONDS,
+            inspect_controllers=False,
+        )
+        snapshot["live_mouth_pose_before_diagnostic_override"] = snapshot.get(
+            "mouth_pose"
+        )
+        snapshot["mouth_pose"] = {
+            "available": True,
+            "stable": True,
+            "diagnostic_recorded_input": True,
+            "frame_id": BASE_FRAME,
+            "mean_position_m": mouth,
+            "selected_candidate_index": 0,
+            "visible_candidates": [{"position_m": mouth}],
+        }
+        failures = self.readiness_failures(
+            snapshot,
+            require_stable_mouth=False,
+        )
+        if failures:
+            return 2, {
+                "success": False,
+                "mode": "diagnose-frozen",
+                "stage": "readiness",
+                "failures": failures,
+                "checks": snapshot,
+                "recorded_mouth_position_m": mouth,
+                "execution_sent": False,
+                "execution_disabled": True,
+            }
+
+        planning_scene_application = self._apply_multi_person_planning_scene(snapshot)
+        snapshot["planning_scene_obstacles"] = planning_scene_application
+        if not planning_scene_application.get("success"):
+            return 2, {
+                "success": False,
+                "mode": "diagnose-frozen",
+                "stage": "planning_scene_obstacles",
+                "reason": planning_scene_application.get("reason"),
+                "checks": snapshot,
+                "recorded_mouth_position_m": mouth,
+                "execution_sent": False,
+                "execution_disabled": True,
+            }
+
+        candidates, approach_details = self._pre_mouth_candidates(
+            mouth,
+            snapshot["camera_tf"],
+            snapshot["tool0_pose"],
+        )
+        original_pre_mouth = candidates.get(self.premouth_policy)
+        if not isinstance(original_pre_mouth, list):
+            return 2, {
+                "success": False,
+                "mode": "diagnose-frozen",
+                "stage": "validated_approach_policy",
+                "reason": f"{self.premouth_policy} did not produce a target",
+                "approach_details": approach_details,
+                "execution_sent": False,
+                "execution_disabled": True,
+            }
+
+        dynamic_scene_preparation = (
+            self._prepare_dynamic_scene_for_goal_selection(
+                mouth=mouth,
+                original_pre_mouth=original_pre_mouth,
+                snapshot=snapshot,
+                planning_scene_application=planning_scene_application,
+            )
+            if rebuild_dynamic_octomap
+            else {
+                "success": True,
+                "dynamic_octomap_enabled": False,
+                "octomap_clear_attempted": False,
+                "note": "Static diagnostic requested; dynamic scene was not modified.",
+            }
+        )
+        if not dynamic_scene_preparation.get("success"):
+            return 2, {
+                "success": False,
+                "mode": "diagnose-frozen",
+                "stage": "dynamic_scene_preparation",
+                "reason": dynamic_scene_preparation.get("reason"),
+                "recorded_mouth_position_m": mouth,
+                "dynamic_scene_preparation": dynamic_scene_preparation,
+                "planning_scene_application": planning_scene_application,
+                "checks": snapshot,
+                "execution_sent": False,
+                "execution_disabled": True,
+            }
+
+        adaptive = self._select_adaptive_premouth_goal(
+            mouth=mouth,
+            original_pre_mouth=original_pre_mouth,
+            snapshot=snapshot,
+            planning_scene_application=planning_scene_application,
+        )
+        octomap = adaptive.get("planning_scene", {}).get("octomap", {})
+        octomap_disabled = bool(
+            adaptive.get("planning_scene", {}).get("available")
+            and not octomap.get("present")
+        )
+        collision_contacts = [
+            contact
+            for validity in [adaptive.get("start_state_validity", {})]
+            + [
+                item.get("final_state_validity", {})
+                for item in adaptive.get("candidates", [])
+            ]
+            for contact in validity.get("contacts", [])
+        ]
+        attribution = {
+            "self_collision_pairs": sorted(
+                {item["pair"] for item in collision_contacts if item.get("self_collision")}
+            ),
+            "human_geometry_collision_pairs": sorted(
+                {
+                    item["pair"]
+                    for item in collision_contacts
+                    if item.get("human_geometry_collision")
+                }
+            ),
+            "camera_cup_or_straw_collision_pairs": sorted(
+                {
+                    item["pair"]
+                    for item in collision_contacts
+                    if item.get("camera_cup_or_straw_collision")
+                }
+            ),
+            "octomap_collision_pairs": sorted(
+                {item["pair"] for item in collision_contacts if item.get("octomap_collision")}
+            ),
+        }
+        exact_pairs = sorted(
+            {item["pair"] for item in collision_contacts if item.get("pair")}
+        )
+        response: dict[str, Any] = {
+            "success": False,
+            "mode": "diagnose-frozen",
+            "stage": "static_scene_diagnostic",
+            "recorded_mouth_position_m": mouth,
+            "recorded_mouth_frame_id": BASE_FRAME,
+            "recorded_input_used_instead_of_live_perception": True,
+            "current_start_state_validity": adaptive.get("start_state_validity"),
+            "adaptive_goal_selection": adaptive,
+            "planning_scene_application": planning_scene_application,
+            "human_geometry_verification": adaptive.get(
+                "human_geometry_verification"
+            ),
+            "dynamic_octomap_disabled": octomap_disabled,
+            "dynamic_octomap_rebuild_requested": rebuild_dynamic_octomap,
+            "dynamic_scene_preparation": dynamic_scene_preparation,
+            "exact_collision_pairs_found": exact_pairs,
+            "invalidity_attribution": attribution,
+            "checks": snapshot,
+            "execution_sent": False,
+            "execution_disabled": True,
+        }
+        if not rebuild_dynamic_octomap and not octomap_disabled:
+            response["reason"] = (
+                "dynamic OctoMap is present; restart MoveGroup with use_octomap:=false "
+                "before the static-scene diagnostic"
+            )
+            return 2, response
+        if not adaptive.get("success"):
+            response["reason"] = adaptive.get("reason")
+            return 2, response
+
+        target = adaptive["selected_tool0_pose"]
+        plan_result = self._run_plan(
+            {
+                "frame_id": BASE_FRAME,
+                "link_name": TOOL_FRAME,
+                "position_m": list(target["position_m"]),
+                "orientation_quat_xyzw": list(target["orientation_quat_xyzw"]),
+            }
+        )
+        response.update(
+            {
+                "success": bool(plan_result.get("success")),
+                "stage": (
+                    "rebuilt_octomap_route_plan_only"
+                    if rebuild_dynamic_octomap
+                    else "static_scene_cartesian_plan_only"
+                ),
+                "reason": plan_result.get("reason"),
+                "selected_candidate": adaptive.get("selected_candidate"),
+                "selected_standoff_m": adaptive.get("selected_standoff_m"),
+                "selected_yaw_deg": adaptive.get("selected_yaw_deg"),
+                "final_tool0_pose": adaptive.get("selected_tool0_pose"),
+                "straw_tip_pose": adaptive.get("selected_straw_tip_pose"),
+                "flange_vertical_axis_error_rad": adaptive.get(
+                    "selected_candidate", {}
+                ).get("flange_vertical_axis_error_rad"),
+                "clearance": adaptive.get("selected_candidate", {}).get(
+                    "clearance"
+                ),
+                "cartesian_plan_result": plan_result,
+                "cartesian_planning_succeeded": bool(
+                    plan_result.get("direct_path_accepted", plan_result.get("success"))
+                ),
+                "ompl_needed": bool(plan_result.get("detour_attempted")),
+            }
+        )
+        return (0 if response["success"] else 2), response
+
     def plan(self) -> tuple[int, dict[str, Any]]:
         # Keep planning independent of controller-manager service calls.  The
         # plan path only needs live state, TF, perception, and /move_action;
@@ -1472,9 +2823,55 @@ class RealPreMouthFromPerceptionPlan(Node):
                 flush=True,
             )
 
-        orientation = list(current_tool0["orientation_quat_xyzw"])
-        straw_world_offset = _rotate_tool_vector(orientation, STRAW_TIP_OFFSET_TOOL0_M)
-        target_tool0_position = _subtract(pre_mouth, straw_world_offset)
+        dynamic_scene_preparation = self._prepare_dynamic_scene_for_goal_selection(
+            mouth=mouth,
+            original_pre_mouth=pre_mouth,
+            snapshot=snapshot,
+            planning_scene_application=planning_scene,
+        )
+        if not dynamic_scene_preparation.get("success"):
+            return 2, {
+                "success": False,
+                "mode": "plan",
+                "stage": "stationary_octomap_rebuild",
+                "reason": dynamic_scene_preparation.get("reason"),
+                "dynamic_scene_preparation": dynamic_scene_preparation,
+                "checks": snapshot,
+                "execution_sent": False,
+                "execution_disabled": True,
+            }
+
+        adaptive_goal_selection = self._select_adaptive_premouth_goal(
+            mouth=mouth,
+            original_pre_mouth=pre_mouth,
+            snapshot=snapshot,
+            planning_scene_application=planning_scene,
+        )
+        if not adaptive_goal_selection.get("success"):
+            return 2, {
+                "success": False,
+                "mode": "plan",
+                "stage": "adaptive_goal_selection",
+                "reason": adaptive_goal_selection.get("reason"),
+                "premouth_policy": self.premouth_policy,
+                "selected_policy_candidate": selected_candidate,
+                "detected_mouth_pose": {
+                    "frame_id": BASE_FRAME,
+                    "position_m": mouth,
+                },
+                "original_80mm_pre_mouth_pose": {
+                    "frame_id": BASE_FRAME,
+                    "position_m": pre_mouth,
+                },
+                "adaptive_goal_selection": adaptive_goal_selection,
+                "checks": snapshot,
+                "execution_sent": False,
+                "execution_disabled": True,
+            }
+        selected_goal = adaptive_goal_selection["selected_candidate"]
+        pre_mouth = list(selected_goal["straw_tip_pose"]["position_m"])
+        orientation = list(selected_goal["tool0_pose"]["orientation_quat_xyzw"])
+        target_tool0_position = list(selected_goal["tool0_pose"]["position_m"])
         displacement = _subtract(target_tool0_position, list(current_tool0["position_m"]))
         translation_norm = _norm(displacement)
         target_tool0_in_ur_base = self._point_in_ur_base(target_tool0_position, snapshot["ur_base_tf"])
@@ -1552,7 +2949,9 @@ class RealPreMouthFromPerceptionPlan(Node):
             "premouth_policy": self.premouth_policy,
             "target_selection": self.target_selection,
             "selected_candidate_index": snapshot["mouth_pose"].get("selected_candidate_index"),
-            "safe_distance_m": self.safe_distance_m,
+            "safe_distance_m": adaptive_goal_selection["selected_standoff_m"],
+            "requested_preferred_safe_distance_m": self.safe_distance_m,
+            "selected_tool_yaw_deg": adaptive_goal_selection["selected_yaw_deg"],
             "timing_profile": {
                 "mouth_sample_seconds": self.mouth_sample_seconds,
                 "trajectory_velocity_scaling": self.trajectory_velocity_scaling,
@@ -1579,9 +2978,25 @@ class RealPreMouthFromPerceptionPlan(Node):
             "target_tool0_radius_from_ur_base_m": target_tool0_radius,
             "maximum_radius_m": MAX_TOOL0_RADIUS_FROM_UR_BASE_M,
             "estimated_final_straw_tip_to_pre_mouth_m": 0.0,
-            "final_straw_tip_to_detected_mouth_standoff_m": self.safe_distance_m,
-            "orientation_difference_rad": 0.0,
-            "orientation_preserved": True,
+            "final_straw_tip_to_detected_mouth_standoff_m": adaptive_goal_selection[
+                "selected_standoff_m"
+            ],
+            "orientation_difference_rad": _quaternion_distance_rad(
+                list(current_tool0["orientation_quat_xyzw"]),
+                orientation,
+            ),
+            "orientation_preserved": abs(
+                float(adaptive_goal_selection["selected_yaw_deg"])
+            ) < 1e-9,
+            "adaptive_goal_selection": adaptive_goal_selection,
+            "dynamic_scene_preparation": dynamic_scene_preparation,
+            "flange_vertical_axis_error_rad": selected_goal[
+                "flange_vertical_axis_error_rad"
+            ],
+            "flange_vertical_axis_error_deg": selected_goal[
+                "flange_vertical_axis_error_deg"
+            ],
+            "selected_candidate_clearance": selected_goal["clearance"],
             "checks": snapshot,
             "plan_result": plan_result,
             "planned_trajectory_duration_sec": plan_result.get("planned_trajectory", {}).get("duration_sec"),
@@ -1613,9 +3028,21 @@ class RealPreMouthFromPerceptionPlan(Node):
                 "target tool0 pose is outside the UR10e nominal reach envelope "
                 f"({float(target_radius or 0.0):.4f} m > {MAX_TOOL0_RADIUS_FROM_UR_BASE_M:.2f} m)"
             )
-        orientation_difference = prepared.get("orientation_difference_rad")
-        if not isinstance(orientation_difference, (int, float)) or float(orientation_difference) > FINAL_ORIENTATION_TOLERANCE_RAD:
-            guards.append("target tool orientation differs unexpectedly from the current tool orientation")
+        vertical_error = prepared.get("flange_vertical_axis_error_rad")
+        if not isinstance(vertical_error, (int, float)) or float(
+            vertical_error
+        ) > MAX_TOOL_VERTICAL_TILT_RAD:
+            guards.append(
+                "selected target does not preserve the verified flange-down axis"
+            )
+        modeling = prepared.get("selected_candidate_clearance", {}).get(
+            "tool_geometry_modeling", {}
+        )
+        if not modeling.get("real_execution_geometry_complete"):
+            guards.append(
+                modeling.get("reason")
+                or "camera, cup-holder, and straw collision geometry is incomplete"
+            )
         standoff = prepared.get("final_straw_tip_to_detected_mouth_standoff_m")
         if not isinstance(standoff, (int, float)) or float(standoff) < MIN_FACE_CLEARANCE_M:
             guards.append("pre-mouth straw target is too close to the detected face")
@@ -1961,7 +3388,11 @@ class RealPreMouthFromPerceptionPlan(Node):
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("check", "plan", "execute", "return"), default="check")
+    parser.add_argument(
+        "--mode",
+        choices=("check", "plan", "execute", "return", "diagnose-frozen"),
+        default="check",
+    )
     parser.add_argument(
         "--premouth-policy",
         choices=PREMOUTH_POLICIES,
@@ -2080,6 +3511,16 @@ def _parse_args() -> argparse.Namespace:
             "Optional JSON report path for the diagnostic check or plan-only result."
         ),
     )
+    parser.add_argument(
+        "--diagnostic-mouth-position",
+        nargs=3,
+        type=float,
+        metavar=("X", "Y", "Z"),
+        help=(
+            "Recorded base_link mouth point used only by --mode diagnose-frozen. "
+            "This mode is plan-only and refuses a nonempty OctoMap."
+        ),
+    )
     args = parser.parse_args()
     if args.sample_seconds <= 0.0 or not math.isfinite(args.sample_seconds):
         parser.error("--sample-seconds must be a positive finite number")
@@ -2107,6 +3548,10 @@ def _parse_args() -> argparse.Namespace:
         parser.error(str(exc))
     if args.premouth_policy == "feeding-vector" and abs(normalized_feeding_vector[2]) > MAX_ABS_FEEDING_VECTOR_Z:
         parser.error(f"feeding-vector policy requires abs(normalized z) <= {MAX_ABS_FEEDING_VECTOR_Z:.2f}")
+    if args.mode == "diagnose-frozen" and args.diagnostic_mouth_position is None:
+        parser.error("--mode diagnose-frozen requires --diagnostic-mouth-position X Y Z")
+    if args.mode != "diagnose-frozen" and args.diagnostic_mouth_position is not None:
+        parser.error("--diagnostic-mouth-position is valid only with --mode diagnose-frozen")
     return args
 
 
@@ -2173,11 +3618,15 @@ def main() -> int:
                 allow_validated_tcp_forward_execute=args.allow_validated_tcp_forward_execute,
                 no_execute=args.no_execute,
             )
-        else:
+        elif args.mode == "return":
             exit_code, response = node.return_to_recorded_start(
                 args.return_report,
                 confirm_real_motion=args.confirm_real_motion,
                 no_execute=args.no_execute,
+            )
+        else:
+            exit_code, response = node.diagnose_frozen_mouth_static_scene(
+                args.diagnostic_mouth_position
             )
         report_text = json.dumps(_jsonable(response), indent=2, sort_keys=True)
         if args.report_file is not None:
