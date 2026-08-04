@@ -4,10 +4,11 @@
 This module deliberately contains no perception projection, target geometry,
 MoveIt planning, trajectory, joint, controller, cup-tilt, or pour logic.  It
 invokes ``scripts/real_feed_water_integrated.py``.  That real-only state
-machine retains selected-person identity, performs bounded translation-only
-active search when needed, freezes the camera-ray 80 mm pre-mouth target, and
-uses the wrist OctoMap for same-target alternate-path replanning.  This adapter
-then optionally performs a motionless dwell at the final pre-mouth pose.
+machine retains selected-person identity, performs bounded active search with
+vertical tool-axis alignment and free tool-axis spin when needed,
+freezes the camera-ray 80 mm pre-mouth target, and uses the wrist OctoMap for
+same-target alternate-path replanning.  This adapter then optionally performs
+a motionless dwell at the final pre-mouth pose.
 """
 
 from __future__ import annotations
@@ -188,7 +189,15 @@ def _tool_report(
             **dict(gates),
             "stable_mouth_pose": bool(checks.get("mouth_pose", {}).get("stable")),
             "multi_target_identity_lock": bool(integrated.get("multi_target_identity_lock")),
-            "translation_only_active_search": bool(integrated.get("translation_only_search")),
+            "active_search_vertical_axis_constraint": bool(
+                integrated.get("active_search_vertical_axis_constraint")
+            ),
+            "tool_axis_spin_free": bool(
+                integrated.get("tool_axis_spin_free")
+            ),
+            "vertical_axis_obstacle_detour": bool(
+                integrated.get("vertical_axis_detour_after_direct_rejection")
+            ),
             "dynamic_same_target_replanning": bool(integrated.get("same_target_replanning")),
             "corrected_camera_tf_loaded": bool(checks.get("camera_mount_match", {}).get("matches")),
             "execution_runtime_gates_required": execute,

@@ -5,8 +5,8 @@ This is an independent, execution-disabled real-hardware validation entry
 point.  It consumes the physical robot joint/TF state and the real D435i
 mouth-perception stream.  A stable visible mouth ends the search without a
 plan.  When the detector explicitly reports ``no_face``, it asks MoveIt to
-plan exactly one 40 mm camera-backward translation while preserving the
-current tool0 orientation.  The camera direction is transformed through the
+plan exactly one 40 mm camera-backward goal while constraining tool0 +Z to
+base_link -Z and allowing spin about that axis.  The camera direction is transformed through the
 live calibrated flange-to-camera extrinsic instead of being treated as a
 fixed ``base_link`` direction.  The script has no execution mode and never
 creates an ExecuteTrajectory client.
@@ -27,13 +27,17 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import rclpy  # noqa: E402
+from geometry_msgs.msg import Pose  # noqa: E402
 from rcl_interfaces.srv import GetParameters  # noqa: E402
 
 from scripts.real_premouth_from_perception_plan import (  # noqa: E402
     BASE_FRAME,
     CAMERA_OPTICAL_FRAME,
     MAX_TOOL0_RADIUS_FROM_UR_BASE_M,
+    MAX_TOOL_VERTICAL_TILT_RAD,
     MOUTH_STATUS_TOPIC,
+    PILZ_PIPELINE,
+    PILZ_PLANNER,
     STRAW_TIP_OFFSET_TOOL0_M,
     TOOL_FRAME,
     RealPreMouthFromPerceptionPlan,
@@ -57,8 +61,8 @@ class RealActiveSearchPlan(RealPreMouthFromPerceptionPlan):
         super().__init__(
             maximum_plan_translation_m=SEARCH_BACK_DISTANCE_M,
             mouth_sample_seconds=MOUTH_SAMPLE_SECONDS,
-            trajectory_velocity_scaling=0.05,
-            trajectory_acceleration_scaling=0.05,
+            trajectory_velocity_scaling=0.60,
+            trajectory_acceleration_scaling=0.60,
         )
         self._move_group_parameters = self.create_client(
             GetParameters,
@@ -90,6 +94,24 @@ class RealActiveSearchPlan(RealPreMouthFromPerceptionPlan):
         )
         return status
 
+    def _goal_for_target(self, target: dict[str, Any]):
+        """Use a Pilz LIN goal with vertical tilt constrained and spin free."""
+        goal = super()._goal_for_target(target)
+        goal.request.pipeline_id = PILZ_PIPELINE
+        goal.request.planner_id = PILZ_PLANNER
+        goal.request.num_planning_attempts = 1
+        for constraints in goal.request.goal_constraints:
+            source = constraints.orientation_constraints[0]
+            pose = Pose()
+            pose.orientation = source.orientation
+            constraints.orientation_constraints.clear()
+            constraints.orientation_constraints.append(
+                self._vertical_axis_constraint(pose)
+            )
+            constraints.name = "active_search_position_and_vertical_axis"
+        goal.request.path_constraints.name = "vertical_axis_intermediate_active_search"
+        return goal
+
     @staticmethod
     def _readiness_failures(
         snapshot: dict[str, Any],
@@ -100,6 +122,15 @@ class RealActiveSearchPlan(RealPreMouthFromPerceptionPlan):
             failures.append("real /joint_states is missing or incomplete")
         if not snapshot["tool0_pose"].get("available"):
             failures.append("real TF base_link -> tool0 is unavailable")
+        vertical_axis = snapshot.get("tool_vertical_axis_guard", {})
+        if not vertical_axis.get("available"):
+            failures.append("tool vertical-axis alignment could not be verified")
+        elif not vertical_axis.get("within_limit"):
+            failures.append(
+                "tool0 +Z is not aligned with base_link -Z: "
+                f"tilt {float(vertical_axis.get('tilt_deg', float('nan'))):.2f} deg exceeds "
+                f"the {math.degrees(MAX_TOOL_VERTICAL_TILT_RAD):.1f} deg limit"
+            )
         if not snapshot["ur_base_tf"].get("available"):
             failures.append("real TF base -> base_link is unavailable")
         if not snapshot["camera_tf"].get("available"):
@@ -140,7 +171,12 @@ class RealActiveSearchPlan(RealPreMouthFromPerceptionPlan):
             "execution_disabled": True,
             "execution_sent": False,
             "trajectory_sent": False,
-            "translation_only": True,
+            "translation_only": False,
+            "position_only_search_goals": False,
+            "vertical_axis_constraint_active": True,
+            "maximum_tool_vertical_tilt_deg": math.degrees(MAX_TOOL_VERTICAL_TILT_RAD),
+            "tool_axis_spin_free": True,
+            "intermediate_flange_orientation_unconstrained": False,
             "rotation_search_enabled": False,
             "search_direction_reference": (
                 f"{CAMERA_OPTICAL_FRAME} frozen at initial {TOOL_FRAME} pose"
@@ -259,7 +295,13 @@ class RealActiveSearchPlan(RealPreMouthFromPerceptionPlan):
                     "target_straw_tip_position_m": target_straw,
                     "target_tool0_pose": target,
                     "segment_distance_m": _norm(offset),
-                    "orientation_preserved": True,
+                    "orientation_preserved": False,
+                    "goal_vertical_axis_constraint": True,
+                    "orientation_path_constraint": True,
+                    "vertical_axis_constraint_active": True,
+                    "maximum_tool_vertical_tilt_deg": math.degrees(MAX_TOOL_VERTICAL_TILT_RAD),
+                    "tool_axis_spin_free": True,
+                    "intermediate_flange_orientation_unconstrained": False,
                 },
                 "target_tool0_radius_from_ur_base_m": radius,
                 "plan_result": plan,

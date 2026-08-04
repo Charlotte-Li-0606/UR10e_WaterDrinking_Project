@@ -2,11 +2,12 @@
 """Independent no-motion direct-first/OctoMap plan for the calibrated UR10e.
 
 This wrapper deliberately reuses the proven real pre-mouth perception,
-coordinate, reach, orientation, and combined PlanningScene guards.  It first
-checks the exact-orientation Pilz LIN route.  Only when that route is rejected
-does it ask OMPL RRTConnect for a bounded non-linear route to the same frozen
-80 mm pre-mouth target.  It has no execution mode and never creates an
-ExecuteTrajectory client.
+coordinate, reach, final-orientation, and combined PlanningScene guards.  It
+first checks the exact-goal-orientation Pilz LIN route.  Only when that route is
+rejected does it ask OMPL RRTConnect for a non-linear route to the same frozen
+80 mm pre-mouth target.  Every route keeps tool0 +Z aligned with base_link -Z
+while allowing spin about that axis, and retains the validated final goal
+orientation.  It has no execution mode and never creates an ExecuteTrajectory client.
 """
 
 from __future__ import annotations
@@ -37,7 +38,9 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
     DEFAULT_TRAJECTORY_ACCELERATION_SCALING,
     DEFAULT_TRAJECTORY_VELOCITY_SCALING,
     FEEDING_VECTOR_SIGNS,
+    FREE_TOOL_AXIS_SPIN_TOLERANCE_RAD,
     MAX_MOUTH_SAMPLE_SECONDS,
+    MAX_TOOL_VERTICAL_TILT_RAD,
     MAX_TOOL0_RADIUS_FROM_UR_BASE_M,
     MIN_MOUTH_SAMPLE_SECONDS,
     ORIENTATION_TOLERANCE_RAD,
@@ -45,6 +48,7 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
     PILZ_PLANNER,
     PREMOUTH_POLICIES,
     RealPreMouthFromPerceptionPlan,
+    VERTICAL_AXIS_COMPONENT_TOLERANCE_RAD,
     _jsonable,
     _trajectory_summary,
 )
@@ -58,14 +62,8 @@ CLOUD_MAX_AGE_SEC = 0.75
 CLOUD_SETTLE_SEC = 4.0
 REPLAN_ATTEMPTS = 3
 REPLAN_DELAY_SEC = 0.0
-# OMPL could not sample the real six-joint constraint manifold when all three
-# path-orientation axes were fixed to the Pilz-only 0.001 rad tolerance.  Keep
-# the *final* goal at that original tolerance, but permit at most 0.05 rad
-# (2.86 degrees) on any tool-orientation axis along a detour.  This is a small
-# bounded deviation, not a search rotation or an arbitrary wrist pose.
-MAX_PATH_ORIENTATION_DEVIATION_RAD = 0.05
-DIRECT_ROUTE_STRATEGY = "direct_fixed_orientation_clear_path"
-DETOUR_ROUTE_STRATEGY = "ompl_detour_after_direct_path_rejected"
+DIRECT_ROUTE_STRATEGY = "direct_vertical_axis_clear_path"
+DETOUR_ROUTE_STRATEGY = "ompl_vertical_axis_detour_after_direct_path_rejected"
 COMBINED_SCENE_DESCRIPTION = "static_collision_objects_plus_live_octomap"
 
 
@@ -193,17 +191,12 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
         }
 
     def _goal_for_target(self, target: dict[str, Any]):
-        """Reuse the real constraints but choose the bounded OMPL profile."""
+        """Build an OMPL detour with a vertical-axis path and exact final pose."""
         goal = super()._goal_for_target(target)
         goal.request.pipeline_id = OMPL_PIPELINE
         goal.request.planner_id = OMPL_PLANNER
         goal.request.num_planning_attempts = REPLAN_ATTEMPTS
-        path_orientation = goal.request.path_constraints.orientation_constraints[0]
-        path_orientation.absolute_x_axis_tolerance = MAX_PATH_ORIENTATION_DEVIATION_RAD
-        path_orientation.absolute_y_axis_tolerance = MAX_PATH_ORIENTATION_DEVIATION_RAD
-        path_orientation.absolute_z_axis_tolerance = MAX_PATH_ORIENTATION_DEVIATION_RAD
-        path_orientation.parameterization = path_orientation.ROTATION_VECTOR
-        goal.request.path_constraints.name = "bounded_real_dynamic_detour_orientation"
+        goal.request.path_constraints.name = "vertical_axis_intermediate_dynamic_detour"
         goal.planning_options.plan_only = True
         goal.planning_options.look_around = False
         goal.planning_options.replan = True
@@ -212,7 +205,7 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
         return goal
 
     def _direct_goal_for_target(self, target: dict[str, Any]):
-        """Build the proven fixed-orientation Pilz request without dispatch."""
+        """Build the direct vertical-axis Pilz request without dispatch."""
         return RealPreMouthFromPerceptionPlan._goal_for_target(self, target)
 
     def _run_goal(self, goal: Any) -> dict[str, Any]:
@@ -249,8 +242,14 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
             }
         result = wrapped_result.result
         success = int(result.error_code.val) == 1
+        vertical_axis_validation = None
         if success:
-            self._validated_trajectory = result.planned_trajectory
+            vertical_axis_validation = self._validate_trajectory_vertical_axis(
+                result.planned_trajectory
+            )
+            success = bool(vertical_axis_validation.get("success"))
+            if success:
+                self._validated_trajectory = result.planned_trajectory
         return {
             "success": success,
             "stage": "move_group_plan_only",
@@ -259,6 +258,10 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
             "error_message": result.error_code.message,
             "planning_time_sec": float(result.planning_time),
             "planned_trajectory": _trajectory_summary(result.planned_trajectory),
+            "vertical_axis_validation": vertical_axis_validation,
+            "reason": None
+            if success or vertical_axis_validation is None
+            else vertical_axis_validation.get("reason"),
             "execution_sent": False,
         }
 
@@ -287,7 +290,11 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
                     "replan_delay_sec": REPLAN_DELAY_SEC,
                     "wait_for_clear": False,
                     "orientation_path_constraint": True,
-                    "maximum_path_orientation_deviation_rad": ORIENTATION_TOLERANCE_RAD,
+                    "maximum_tool_vertical_tilt_rad": MAX_TOOL_VERTICAL_TILT_RAD,
+                    "tool_axis_spin_free": True,
+                    "final_goal_orientation_constraint": True,
+                    "final_goal_orientation_tolerance_rad": ORIENTATION_TOLERANCE_RAD,
+                    "intermediate_flange_orientation_unconstrained": False,
                     "execution_sent": False,
                 }
             )
@@ -311,7 +318,11 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
                 "replan_delay_sec": REPLAN_DELAY_SEC,
                 "wait_for_clear": False,
                 "orientation_path_constraint": True,
-                "maximum_path_orientation_deviation_rad": MAX_PATH_ORIENTATION_DEVIATION_RAD,
+                "maximum_tool_vertical_tilt_rad": MAX_TOOL_VERTICAL_TILT_RAD,
+                "tool_axis_spin_free": True,
+                "final_goal_orientation_constraint": True,
+                "final_goal_orientation_tolerance_rad": ORIENTATION_TOLERANCE_RAD,
+                "intermediate_flange_orientation_unconstrained": False,
                 "execution_sent": False,
             }
         )
@@ -320,8 +331,8 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
                 "classification": "DIRECT_AND_DETOUR_PLANNING_FAILED",
                 "reason": (
                     "the combined static-and-dynamic PlanningScene rejected or "
-                    "could not plan both the fixed-orientation direct route and "
-                    "the bounded constrained OMPL detour"
+                    "could not plan either the direct route or the OMPL detour "
+                    "while enforcing the vertical-tool axis constraint"
                 ),
                 "direct_error_code": direct_result.get("error_code"),
                 "direct_error_message": direct_result.get("error_message"),
@@ -381,8 +392,8 @@ def main() -> int:
                 plan_result = response.get("plan_result", {})
                 response["stage"] = "dynamic_route_plan_only"
                 response["reason"] = (
-                    "neither the direct fixed-orientation route nor the bounded "
-                    "constrained OMPL detour reached the frozen real pre-mouth target"
+                    "neither the direct route nor the vertical-axis OMPL detour "
+                    "reached the frozen real pre-mouth target"
                 )
                 response["planning_error_code"] = plan_result.get("error_code")
         else:

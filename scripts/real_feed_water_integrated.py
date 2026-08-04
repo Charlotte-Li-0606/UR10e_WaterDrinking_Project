@@ -3,14 +3,20 @@
 
 The workflow remains one high-level operation.  It uses the physical D435i
 multi-mouth stream to retain the selected person's 3D identity, performs a
-bounded translation-only search only when that target is absent, freezes the
+bounded search only when that target is absent, freezes the
 recovered 80 mm pre-mouth target, and asks MoveGroup/OctoMap to find and
-monitor an alternate route to that same coordinate.
+monitor an alternate route to that same coordinate. Backward/up/down search
+steps are bounded Cartesian translations and left/right steps are bounded pose
+rotations about tool0 local Z. Throughout search and obstacle routes, tool0 +Z
+must remain aligned with base_link -Z within five degrees; MoveIt may choose
+spin about that axis, including wrist_3_joint motion. The final pre-mouth goal
+retains its validated full orientation.
 
 Plan mode never creates an execution request.  Execute mode retains the
 existing environment, confirmation, controller, External Control, safety,
 robot-mode, speed, calibration, identity, reach, collision, and final-pose
-gates.  Search is limited to predefined offsets and never rotates the tool.
+gates. The workflow never commands wrist_3_joint directly and refuses any
+trajectory that has not passed waypoint FK validation.
 """
 
 from __future__ import annotations
@@ -30,9 +36,10 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import rclpy  # noqa: E402
-from geometry_msgs.msg import PoseStamped  # noqa: E402
+from geometry_msgs.msg import Pose  # noqa: E402
 from moveit_msgs.action import ExecuteTrajectory  # noqa: E402
-from moveit_msgs.srv import GetPositionIK  # noqa: E402
+from moveit_msgs.srv import GetStateValidity  # noqa: E402
+from std_srvs.srv import Empty  # noqa: E402
 from ur_dashboard_msgs.msg import RobotMode, SafetyMode  # noqa: E402
 
 from scripts.real_dynamic_obstacle_avoidance_plan import (  # noqa: E402
@@ -55,13 +62,13 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
     DEFAULT_TRAJECTORY_ACCELERATION_SCALING,
     DEFAULT_TRAJECTORY_VELOCITY_SCALING,
     EXPECTED_JOINTS,
-    FINAL_ORIENTATION_TOLERANCE_RAD,
     GROUP_NAME,
     MAX_MOUTH_POSE_AGE_SEC,
     MAX_PLAN_TRANSLATION_M,
     MAX_POSE_SPREAD_M,
     MAX_PRE_EXECUTION_TARGET_DRIFT_M,
     MAX_TOOL0_RADIUS_FROM_UR_BASE_M,
+    MAX_TOOL_VERTICAL_TILT_RAD,
     MAX_EXECUTION_SPEED_PERCENT,
     MIN_EXECUTION_SPEED_PERCENT,
     MIN_STABLE_SAMPLES,
@@ -78,19 +85,33 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
     _rotate_tool_vector,
     _subtract,
     _trajectory_summary,
+    _tool_vertical_tilt_rad,
 )
 
 
 SEARCH_MAX_TIME_SEC = 15.0
 SEARCH_STABILITY_RESERVE_SEC = 1.25
+SEARCH_PLANNING_PIPELINE = PILZ_PIPELINE
+SEARCH_PLANNER = PILZ_PLANNER
+SEARCH_ALLOWED_PLANNING_TIME_SEC = 2.0
+SEARCH_PLAN_RESULT_TIMEOUT_SEC = 3.0
 SEARCH_BACK_DISTANCE_M = 0.040
-SEARCH_LATERAL_DISTANCE_M = 0.050
 SEARCH_VERTICAL_DISTANCE_M = 0.050
 SEARCH_MAX_ACTUAL_SEGMENT_M = 0.110
 SEARCH_FINAL_POSITION_TOLERANCE_M = 0.010
+SEARCH_FINAL_ORIENTATION_TOLERANCE_RAD = math.radians(3.0)
+SEARCH_MAX_JOINT_EXCURSION_RAD = math.radians(45.0)
+SEARCH_MAX_CUMULATIVE_JOINT_TRAVEL_RAD = 2.0
+SEARCH_MAX_TRAJECTORY_DURATION_SEC = 3.0
+SEARCH_WRIST_Z_TOTAL_SWEEP_DEG = 30.0
+SEARCH_WRIST_Z_ANGLE_DEG = SEARCH_WRIST_Z_TOTAL_SWEEP_DEG / 2.0
+SEARCH_WRIST_Z_CANDIDATE_ANGLES_RAD = tuple(
+    math.radians(value) for value in (SEARCH_WRIST_Z_ANGLE_DEG, 10.0, 5.0)
+)
 SEARCH_MAX_STATIONARY_JOINT_SPEED_RAD_SEC = 0.010
 SEARCH_STATIONARY_SAMPLE_COUNT = 2
 SEARCH_STATIONARY_TIMEOUT_SEC = 0.75
+SEARCH_OCTOMAP_REBUILD_TIMEOUT_SEC = 1.5
 SEARCH_BACK_CANDIDATE_DISTANCES_M = (0.040, 0.030, 0.020)
 SEARCH_DIRECTIONAL_CANDIDATE_DISTANCES_M = (0.050, 0.040, 0.030, 0.020)
 EXECUTION_MOUTH_DRIFT_CONFIRMATION_WINDOW_SEC = 1.0
@@ -98,14 +119,6 @@ EXECUTION_MOUTH_DRIFT_CONFIRMATION_MIN_SAMPLES = 3
 MAX_EXECUTION_TARGET_DRIFT_M = 0.050
 SEARCH_OFFSETS_CAMERA_OPTICAL = (
     ("backward_wide", (0.0, 0.0, -SEARCH_BACK_DISTANCE_M)),
-    (
-        "scan_left",
-        (-SEARCH_LATERAL_DISTANCE_M, 0.0, -SEARCH_BACK_DISTANCE_M),
-    ),
-    (
-        "scan_right",
-        (SEARCH_LATERAL_DISTANCE_M, 0.0, -SEARCH_BACK_DISTANCE_M),
-    ),
     (
         "scan_up",
         (0.0, -SEARCH_VERTICAL_DISTANCE_M, -SEARCH_BACK_DISTANCE_M),
@@ -115,6 +128,37 @@ SEARCH_OFFSETS_CAMERA_OPTICAL = (
         (0.0, SEARCH_VERTICAL_DISTANCE_M, -SEARCH_BACK_DISTANCE_M),
     ),
 )
+
+
+def _quaternion_multiply_xyzw(
+    first: list[float], second: list[float]
+) -> list[float]:
+    """Return the normalized Hamilton product ``first * second`` in XYZW."""
+    if len(first) != 4 or len(second) != 4:
+        raise ValueError("quaternions must contain four values")
+    x1, y1, z1, w1 = (float(value) for value in first)
+    x2, y2, z2, w2 = (float(value) for value in second)
+    result = [
+        w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+        w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+        w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+        w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+    ]
+    magnitude = math.sqrt(sum(value * value for value in result))
+    if not math.isfinite(magnitude) or magnitude < 1e-9:
+        raise ValueError("quaternion product is not finite and nonzero")
+    return [value / magnitude for value in result]
+
+
+def _orientation_after_local_tool_z_rotation(
+    tool_orientation_xyzw: list[float], angle_rad: float
+) -> list[float]:
+    """Rotate a tool pose about its own +Z axis without commanding a joint."""
+    if not math.isfinite(float(angle_rad)):
+        raise ValueError("tool-local Z rotation must be finite")
+    half = float(angle_rad) / 2.0
+    local_z_rotation = [0.0, 0.0, math.sin(half), math.cos(half)]
+    return _quaternion_multiply_xyzw(tool_orientation_xyzw, local_z_rotation)
 
 
 class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
@@ -138,7 +182,14 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             trajectory_acceleration_scaling=trajectory_acceleration_scaling,
         )
         self._frozen_execution_mouth_position: list[float] | None = None
-        self._search_ik_client = self.create_client(GetPositionIK, "/compute_ik")
+        self._state_validity_client = self.create_client(
+            GetStateValidity,
+            "/check_state_validity",
+        )
+        self._clear_octomap_client = self.create_client(
+            Empty,
+            "/clear_octomap",
+        )
 
     @staticmethod
     def _search_waypoints_from_offsets(
@@ -177,6 +228,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             waypoints.append(
                 {
                     "name": name,
+                    "search_motion_type": "cartesian_translation",
                     "direction_reference": (
                         f"{CAMERA_OPTICAL_FRAME} frozen at initial {TOOL_FRAME} pose"
                     ),
@@ -187,9 +239,43 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     "offset_initial_tool0_m": tool_offset,
                     "offset_from_origin_m": base_offset,
                     "target_tool0_position_m": _add(origin, base_offset),
+                    "target_tool0_orientation_quat_xyzw": list(
+                        tool_orientation_xyzw
+                    ),
+                    "tool_local_z_rotation_rad": 0.0,
                 }
             )
         return waypoints
+
+    @staticmethod
+    def _rotation_search_waypoint(
+        origin: list[float],
+        tool_orientation_xyzw: list[float],
+        *,
+        name: str,
+        angle_rad: float,
+    ) -> dict[str, Any]:
+        """Describe a local-tool-Z pose goal; no joint is selected directly."""
+        return {
+            "name": name,
+            "search_motion_type": "tool_local_z_rotation",
+            "direction_reference": f"{TOOL_FRAME} local +Z axis",
+            "camera_extrinsic_applied": False,
+            "offset_camera_optical_m": [0.0, 0.0, 0.0],
+            "offset_initial_tool0_m": [0.0, 0.0, 0.0],
+            "offset_from_origin_m": [0.0, 0.0, 0.0],
+            "target_tool0_position_m": list(origin),
+            "target_tool0_orientation_quat_xyzw": (
+                _orientation_after_local_tool_z_rotation(
+                    tool_orientation_xyzw,
+                    angle_rad,
+                )
+            ),
+            "tool_local_z_rotation_rad": float(angle_rad),
+            "tool_local_z_rotation_deg": math.degrees(float(angle_rad)),
+            "wrist_3_direct_command": False,
+            "joint_selection": "MoveIt pose-goal IK and planning",
+        }
 
     @staticmethod
     def search_waypoints(
@@ -199,18 +285,37 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
     ) -> list[dict[str, Any]]:
         """Return camera-corrected directions frozen at the initial flange pose.
 
-        Search semantics follow the camera view rigidly attached to ``tool0``:
-        optical -Z moves backward for a wider frame, optical -/+X scans image
-        left/right, and optical -/+Y scans image up/down.  Transforming those
-        vectors with the live camera orientation applies the calibrated camera
-        extrinsic instead of incorrectly adding fixed ``base_link`` offsets.
+        Optical -Z moves backward for a wider frame and optical -/+Y scans
+        image up/down. Left/right are absolute +/-15 degree rotations from the
+        frozen initial orientation about tool0 local Z. Those rotations are
+        pose goals, so MoveIt—not this workflow—selects wrist_3_joint motion.
         """
-        return RealIntegratedFeedWater._search_waypoints_from_offsets(
+        translations = RealIntegratedFeedWater._search_waypoints_from_offsets(
             origin,
             tool_orientation_xyzw,
             camera_orientation_xyzw,
             SEARCH_OFFSETS_CAMERA_OPTICAL,
         )
+        by_name = {item["name"]: item for item in translations}
+        left = RealIntegratedFeedWater._rotation_search_waypoint(
+            origin,
+            tool_orientation_xyzw,
+            name="scan_left",
+            angle_rad=math.radians(SEARCH_WRIST_Z_ANGLE_DEG),
+        )
+        right = RealIntegratedFeedWater._rotation_search_waypoint(
+            origin,
+            tool_orientation_xyzw,
+            name="scan_right",
+            angle_rad=-math.radians(SEARCH_WRIST_Z_ANGLE_DEG),
+        )
+        return [
+            by_name["backward_wide"],
+            left,
+            right,
+            by_name["scan_up"],
+            by_name["scan_down"],
+        ]
 
     @staticmethod
     def search_waypoint_variants(
@@ -227,10 +332,23 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 (name, (0.0, 0.0, -distance))
                 for distance in SEARCH_BACK_CANDIDATE_DISTANCES_M
             )
+        elif name in ("scan_left", "scan_right"):
+            sign = 1.0 if name == "scan_left" else -1.0
+            variants = [
+                RealIntegratedFeedWater._rotation_search_waypoint(
+                    origin,
+                    tool_orientation_xyzw,
+                    name=name,
+                    angle_rad=sign * angle,
+                )
+                for angle in SEARCH_WRIST_Z_CANDIDATE_ANGLES_RAD
+            ]
+            for index, variant in enumerate(variants):
+                variant["adaptive_candidate_index"] = index
+                variant["adaptive_scale_applied"] = index > 0
+            return variants
         else:
             axes = {
-                "scan_left": (-1.0, 0.0),
-                "scan_right": (1.0, 0.0),
                 "scan_up": (0.0, -1.0),
                 "scan_down": (0.0, 1.0),
             }
@@ -266,6 +384,15 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             failures.append("real /joint_states is missing or incomplete")
         if not snapshot["tool0_pose"].get("available"):
             failures.append("real TF base_link -> tool0 is unavailable")
+        vertical_axis = snapshot.get("tool_vertical_axis_guard", {})
+        if not vertical_axis.get("available"):
+            failures.append("tool vertical-axis alignment could not be verified")
+        elif not vertical_axis.get("within_limit"):
+            failures.append(
+                "tool0 +Z is not aligned with base_link -Z: "
+                f"tilt {float(vertical_axis.get('tilt_deg', float('nan'))):.2f} deg exceeds "
+                f"the {math.degrees(MAX_TOOL_VERTICAL_TILT_RAD):.1f} deg limit"
+            )
         if not snapshot["ur_base_tf"].get("available"):
             failures.append("real TF base -> base_link is unavailable")
         if not snapshot["camera_tf"].get("available"):
@@ -312,6 +439,25 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             failures.append("UR robot mode is not RUNNING")
         return failures
 
+    def _live_ur_execution_state_failure(self) -> str | None:
+        """Return the first lightweight in-motion UR state failure."""
+        if (
+            self.latest_robot_program_running is None
+            or not self.latest_robot_program_running.data
+        ):
+            return "UR External Control program stopped during execution"
+        if not bool(
+            self.latest_safety_mode is not None
+            and int(self.latest_safety_mode.mode) == int(SafetyMode.NORMAL)
+        ):
+            return "UR safety mode left NORMAL during execution"
+        if not bool(
+            self.latest_robot_mode is not None
+            and int(self.latest_robot_mode.mode) == int(RobotMode.RUNNING)
+        ):
+            return "UR robot mode left RUNNING during execution"
+        return None
+
     def _explicit_no_face(self) -> bool:
         status = self.latest_mouth_status
         return bool(
@@ -347,6 +493,115 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             result = self._selected_observation(started)
         return result
 
+    def _search_goal_for_target(self, target: dict[str, Any]):
+        """Build a translation or tool-local-Z rotation active-search goal."""
+        goal = RealPreMouthFromPerceptionPlan._goal_for_target(self, target)
+        # Active-search moves are short, bounded Cartesian pose changes.  Use
+        # Pilz LIN here so a background OMPL solve cannot consume the search
+        # deadline or preempt the next adaptive candidate.  OMPL remains the
+        # alternate-path planner for the later dynamic-obstacle stage.
+        goal.request.pipeline_id = SEARCH_PLANNING_PIPELINE
+        goal.request.planner_id = SEARCH_PLANNER
+        goal.request.num_planning_attempts = 1
+        goal.request.allowed_planning_time = SEARCH_ALLOWED_PLANNING_TIME_SEC
+        rotation_goal = target.get("search_motion_type") == "tool_local_z_rotation"
+        for constraints in goal.request.goal_constraints:
+            if rotation_goal:
+                constraints.name = (
+                    "active_search_tool_local_z_pose_goal_with_vertical_path"
+                )
+            else:
+                source = constraints.orientation_constraints[0]
+                pose = Pose()
+                pose.orientation = source.orientation
+                constraints.orientation_constraints.clear()
+                constraints.orientation_constraints.append(
+                    self._vertical_axis_constraint(pose)
+                )
+                constraints.name = (
+                    "active_search_position_and_vertical_axis"
+                )
+        goal.request.path_constraints.name = (
+            "vertical_axis_intermediate_active_search"
+        )
+        goal.planning_options.plan_only = True
+        goal.planning_options.look_around = False
+        goal.planning_options.replan = False
+        return goal
+
+    @staticmethod
+    def _validate_search_joint_motion(trajectory: Any) -> dict[str, Any]:
+        """Reject a small visual-search goal that hides a large joint route."""
+        joint_trajectory = getattr(trajectory, "joint_trajectory", None)
+        names = list(getattr(joint_trajectory, "joint_names", []))
+        points = list(getattr(joint_trajectory, "points", []))
+        result: dict[str, Any] = {
+            "success": False,
+            "maximum_joint_excursion_rad": None,
+            "maximum_allowed_joint_excursion_rad": (
+                SEARCH_MAX_JOINT_EXCURSION_RAD
+            ),
+            "cumulative_joint_travel_rad": None,
+            "maximum_cumulative_joint_travel_rad": (
+                SEARCH_MAX_CUMULATIVE_JOINT_TRAVEL_RAD
+            ),
+            "trajectory_duration_sec": None,
+            "maximum_trajectory_duration_sec": (
+                SEARCH_MAX_TRAJECTORY_DURATION_SEC
+            ),
+        }
+        if not names or not points:
+            result["reason"] = "planned search trajectory has no joint waypoints"
+            return result
+        positions = [
+            [float(value) for value in point.positions]
+            for point in points
+        ]
+        if any(
+            len(values) != len(names)
+            or not all(math.isfinite(value) for value in values)
+            for values in positions
+        ):
+            result["reason"] = "planned search trajectory has invalid joint positions"
+            return result
+        start = positions[0]
+        excursions = {
+            name: max(abs(values[index] - start[index]) for values in positions)
+            for index, name in enumerate(names)
+        }
+        maximum_excursion = max(excursions.values(), default=0.0)
+        cumulative_travel = sum(
+            abs(current[index] - previous[index])
+            for previous, current in zip(positions, positions[1:])
+            for index in range(len(names))
+        )
+        final_time = points[-1].time_from_start
+        duration = float(final_time.sec) + float(final_time.nanosec) * 1e-9
+        result.update(
+            {
+                "maximum_joint_excursion_rad": maximum_excursion,
+                "joint_excursions_rad": excursions,
+                "cumulative_joint_travel_rad": cumulative_travel,
+                "trajectory_duration_sec": duration,
+            }
+        )
+        failures: list[str] = []
+        if maximum_excursion > SEARCH_MAX_JOINT_EXCURSION_RAD:
+            failures.append(
+                "joint excursion exceeds the bounded active-search limit"
+            )
+        if cumulative_travel > SEARCH_MAX_CUMULATIVE_JOINT_TRAVEL_RAD:
+            failures.append(
+                "cumulative joint travel exceeds the bounded active-search limit"
+            )
+        if duration > SEARCH_MAX_TRAJECTORY_DURATION_SEC:
+            failures.append(
+                "trajectory duration is excessive for a local active-search step"
+            )
+        result["success"] = not failures
+        result["reason"] = "; ".join(failures) if failures else None
+        return result
+
     def _search_plan(
         self,
         target: dict[str, Any],
@@ -354,7 +609,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         deadline: float,
         stationary_verified: bool = False,
     ) -> tuple[dict[str, Any], Any | None]:
-        """Plan one Pilz-LIN search segment while preserving orientation."""
+        """Plan one bounded Pilz translation or tool-local-Z rotation."""
         remaining = deadline - time.monotonic()
         if remaining <= 0.0:
             return {
@@ -363,7 +618,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "reason": "search deadline expired before planning the next segment",
                 "execution_sent": False,
             }, None
-        goal = RealPreMouthFromPerceptionPlan._goal_for_target(self, target)
+        goal = self._search_goal_for_target(target)
         if stationary_verified:
             start_joint_state = goal.request.start_state.joint_state
             start_joint_state.velocity = [0.0] * len(start_joint_state.name)
@@ -386,7 +641,10 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         rclpy.spin_until_future_complete(
             self,
             result_future,
-            timeout_sec=max(0.0, min(3.0, remaining)),
+            timeout_sec=max(
+                0.0,
+                min(SEARCH_PLAN_RESULT_TIMEOUT_SEC, remaining),
+            ),
         )
         wrapped = result_future.result()
         if wrapped is None:
@@ -400,7 +658,32 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             }, None
         result = wrapped.result
         success = int(result.error_code.val) == 1
-        trajectory = result.planned_trajectory if success else None
+        vertical_axis_validation = None
+        joint_motion_validation = None
+        trajectory = None
+        if success:
+            vertical_axis_validation = self._validate_trajectory_vertical_axis(
+                result.planned_trajectory,
+                deadline=deadline,
+            )
+            success = bool(vertical_axis_validation.get("success"))
+        if success:
+            joint_motion_validation = self._validate_search_joint_motion(
+                result.planned_trajectory
+            )
+            success = bool(joint_motion_validation.get("success"))
+        if success:
+            trajectory = result.planned_trajectory
+        rotation_goal = target.get("search_motion_type") == "tool_local_z_rotation"
+        validation_reason = None
+        if vertical_axis_validation is not None and not vertical_axis_validation.get(
+            "success"
+        ):
+            validation_reason = vertical_axis_validation.get("reason")
+        elif joint_motion_validation is not None and not joint_motion_validation.get(
+            "success"
+        ):
+            validation_reason = joint_motion_validation.get("reason")
         return {
             "success": success,
             "stage": "search_plan_only",
@@ -408,6 +691,24 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "error_message": result.error_code.message,
             "planning_time_sec": float(result.planning_time),
             "planned_trajectory": _trajectory_summary(result.planned_trajectory),
+            "planner": f"{SEARCH_PLANNING_PIPELINE}/{SEARCH_PLANNER}",
+            "position_goal_constraint": True,
+            "goal_orientation_constraint": rotation_goal,
+            "goal_vertical_axis_constraint": not rotation_goal,
+            "orientation_path_constraint": True,
+            "maximum_tool_vertical_tilt_rad": MAX_TOOL_VERTICAL_TILT_RAD,
+            "tool_axis_spin_free": True,
+            "intermediate_flange_orientation_unconstrained": False,
+            "vertical_axis_validation": vertical_axis_validation,
+            "joint_motion_validation": joint_motion_validation,
+            "reason": validation_reason,
+            "search_motion_type": target.get(
+                "search_motion_type", "cartesian_translation"
+            ),
+            "tool_local_z_rotation_rad": target.get(
+                "tool_local_z_rotation_rad", 0.0
+            ),
+            "wrist_3_direct_command": False,
             "execution_sent": False,
         }, trajectory
 
@@ -417,116 +718,183 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         *,
         deadline: float,
     ) -> dict[str, Any]:
-        """Classify a generic MoveGroup search-plan failure without motion."""
-        diagnostic: dict[str, Any] = {
-            "classification": "IK_DIAGNOSTIC_UNAVAILABLE",
-            "reason": "MoveIt IK diagnostic did not complete",
+        """Describe a failed collision-checked active-search pose plan."""
+        rotation_goal = target.get("search_motion_type") == "tool_local_z_rotation"
+        return {
+            "classification": "SEARCH_PLANNING_FAILED",
+            "reason": (
+                "Pilz LIN could not generate a collision-free bounded route to the "
+                "bounded search goal before the deadline; this may be a "
+                "start-state collision, IK failure, or unavailable route"
+            ),
             "target": target,
-            "checks": {},
+            "planner": f"{SEARCH_PLANNING_PIPELINE}/{SEARCH_PLANNER}",
+            "position_goal_constraint": True,
+            "goal_orientation_constraint": rotation_goal,
+            "goal_vertical_axis_constraint": not rotation_goal,
+            "orientation_path_constraint": True,
+            "maximum_tool_vertical_tilt_rad": MAX_TOOL_VERTICAL_TILT_RAD,
+            "tool_axis_spin_free": True,
+            "intermediate_flange_orientation_unconstrained": False,
+            "search_motion_type": target.get(
+                "search_motion_type", "cartesian_translation"
+            ),
+            "wrist_3_direct_command": False,
+            "deadline_remaining_sec": max(0.0, deadline - time.monotonic()),
         }
-        if self.latest_joint_state is None:
-            diagnostic["reason"] = "fresh joint state is unavailable for IK diagnosis"
-            return diagnostic
-        remaining = deadline - time.monotonic()
-        if remaining <= 0.0 or not self._search_ik_client.wait_for_service(
-            timeout_sec=min(0.25, remaining)
-        ):
-            diagnostic["reason"] = "/compute_ik is unavailable within the search deadline"
-            return diagnostic
 
-        def solve(*, avoid_collisions: bool) -> dict[str, Any]:
-            request = GetPositionIK.Request()
-            request.ik_request.group_name = GROUP_NAME
-            request.ik_request.ik_link_name = TOOL_FRAME
-            request.ik_request.pose_stamped = PoseStamped()
-            request.ik_request.pose_stamped.header.frame_id = BASE_FRAME
-            pose = request.ik_request.pose_stamped.pose
-            pose.position.x, pose.position.y, pose.position.z = target["position_m"]
-            (
-                pose.orientation.x,
-                pose.orientation.y,
-                pose.orientation.z,
-                pose.orientation.w,
-            ) = target["orientation_quat_xyzw"]
-            request.ik_request.avoid_collisions = avoid_collisions
-            request.ik_request.timeout.nanosec = 250_000_000
-            request.ik_request.robot_state.joint_state = self.latest_joint_state
-            request.ik_request.robot_state.is_diff = False
-            future = self._search_ik_client.call_async(request)
-            rclpy.spin_until_future_complete(
-                self,
-                future,
-                timeout_sec=max(0.0, min(0.5, deadline - time.monotonic())),
-            )
-            response = future.result()
-            if response is None:
-                return {"response_received": False, "success": False}
-            code = int(response.error_code.val)
+    def _search_start_state_validity(self, deadline: float) -> dict[str, Any]:
+        """Ask MoveIt whether the live robot state collides with its scene."""
+        client = getattr(self, "_state_validity_client", None)
+        latest_joint_state = getattr(self, "latest_joint_state", None)
+        if client is None or latest_joint_state is None:
             return {
-                "response_received": True,
-                "success": code == 1,
-                "error_code": code,
+                "available": False,
+                "valid": None,
+                "reason": "state-validity diagnostic is unavailable",
             }
-
-        collision_disabled = solve(avoid_collisions=False)
-        diagnostic["checks"]["collision_disabled"] = collision_disabled
-        if not collision_disabled.get("response_received"):
-            diagnostic["reason"] = (
-                "/compute_ik did not return the collision-disabled diagnostic "
-                "before the bounded search deadline"
-            )
-            return diagnostic
-        if not collision_disabled.get("success"):
-            diagnostic.update(
-                {
-                    "classification": "NO_IK_SOLUTION",
-                    "reason": (
-                        "MoveIt found no IK solution for the fixed-orientation "
-                        "tool0 search target, even with collision checking disabled"
-                    ),
-                }
-            )
-            return diagnostic
-
-        collision_enabled = solve(avoid_collisions=True)
-        diagnostic["checks"]["collision_enabled"] = collision_enabled
-        if not collision_enabled.get("response_received"):
-            diagnostic["reason"] = (
-                "/compute_ik did not return the collision-enabled diagnostic "
-                "before the bounded search deadline"
-            )
-            return diagnostic
-        if not collision_enabled.get("success"):
-            diagnostic.update(
-                {
-                    "classification": "GOAL_IN_COLLISION",
-                    "reason": (
-                        "the tool0 search target has IK but no collision-free IK "
-                        "solution in the current PlanningScene"
-                    ),
-                }
-            )
-            return diagnostic
-
-        diagnostic.update(
-            {
-                "classification": "PILZ_CARTESIAN_PATH_FAILED",
-                "reason": (
-                    "the target has collision-free IK, but Pilz could not generate "
-                    "the fixed-orientation Cartesian path; an intermediate IK or "
-                    "joint dynamic limit was rejected"
-                ),
+        remaining = deadline - time.monotonic()
+        if remaining <= 0.0 or not client.wait_for_service(
+            timeout_sec=min(0.25, max(0.0, remaining))
+        ):
+            return {
+                "available": False,
+                "valid": None,
+                "reason": "/check_state_validity is unavailable",
             }
+        request = GetStateValidity.Request()
+        request.robot_state.joint_state = latest_joint_state
+        request.robot_state.is_diff = False
+        request.group_name = GROUP_NAME
+        future = client.call_async(request)
+        rclpy.spin_until_future_complete(
+            self,
+            future,
+            timeout_sec=min(0.75, max(0.0, deadline - time.monotonic())),
         )
-        return diagnostic
+        result = future.result()
+        if result is None:
+            return {
+                "available": False,
+                "valid": None,
+                "reason": "/check_state_validity timed out",
+            }
+        contacts = [
+            {
+                "body_1": str(contact.contact_body_1),
+                "body_2": str(contact.contact_body_2),
+                "depth_m": float(contact.depth),
+                "position_m": [
+                    float(contact.position.x),
+                    float(contact.position.y),
+                    float(contact.position.z),
+                ],
+            }
+            for contact in result.contacts
+        ]
+        octomap_only = bool(contacts) and all(
+            "<octomap>" in (contact["body_1"], contact["body_2"])
+            for contact in contacts
+        )
+        return {
+            "available": True,
+            "valid": bool(result.valid),
+            "contacts": contacts,
+            "octomap_only_collision": octomap_only,
+            "classification": (
+                "START_STATE_VALID"
+                if result.valid
+                else (
+                    "START_STATE_IN_OCTOMAP_COLLISION"
+                    if octomap_only
+                    else "START_STATE_COLLISION"
+                )
+            ),
+        }
+
+    def _ensure_valid_search_start_state(self, deadline: float) -> dict[str, Any]:
+        """Clear a stale robot-overlap map once, rebuild it, and revalidate.
+
+        Collision checking is never bypassed: recovery is permitted only when
+        every reported contact is with the OctoMap, and planning resumes only
+        after newer raw and MoveIt-filtered clouds arrive and the rebuilt scene
+        reports the live robot state valid.
+        """
+        before = self._search_start_state_validity(deadline)
+        result: dict[str, Any] = {
+            "before": before,
+            "octomap_clear_attempted": False,
+            "octomap_rebuilt_from_fresh_clouds": False,
+            "recovered": False,
+        }
+        if not before.get("available") or before.get("valid"):
+            return result
+        if not before.get("octomap_only_collision"):
+            return result
+
+        clear_client = getattr(self, "_clear_octomap_client", None)
+        if clear_client is None or not clear_client.wait_for_service(
+            timeout_sec=min(0.25, max(0.0, deadline - time.monotonic()))
+        ):
+            result["recovery_reason"] = "/clear_octomap is unavailable"
+            return result
+        clear_future = clear_client.call_async(Empty.Request())
+        rclpy.spin_until_future_complete(
+            self,
+            clear_future,
+            timeout_sec=min(0.75, max(0.0, deadline - time.monotonic())),
+        )
+        result["octomap_clear_attempted"] = True
+        if clear_future.result() is None:
+            result["recovery_reason"] = "/clear_octomap timed out"
+            return result
+
+        cleared_at = time.monotonic()
+        rebuild_deadline = min(
+            deadline,
+            cleared_at + SEARCH_OCTOMAP_REBUILD_TIMEOUT_SEC,
+        )
+        fresh_topics: set[str] = set()
+        while rclpy.ok() and time.monotonic() < rebuild_deadline:
+            rclpy.spin_once(
+                self,
+                timeout_sec=min(
+                    0.05,
+                    max(0.0, rebuild_deadline - time.monotonic()),
+                ),
+            )
+            for topic in (RAW_CLOUD_TOPIC, FILTERED_CLOUD_TOPIC):
+                record = self._clouds.get(topic)
+                if record is not None and float(
+                    record["received_monotonic"]
+                ) > cleared_at:
+                    fresh_topics.add(topic)
+            if len(fresh_topics) == 2:
+                break
+        result["fresh_cloud_topics"] = sorted(fresh_topics)
+        result["octomap_rebuilt_from_fresh_clouds"] = len(fresh_topics) == 2
+        if len(fresh_topics) != 2:
+            result["recovery_reason"] = (
+                "fresh raw and filtered clouds did not arrive after OctoMap clear"
+            )
+            return result
+
+        after = self._search_start_state_validity(deadline)
+        result["after"] = after
+        result["recovered"] = bool(after.get("available") and after.get("valid"))
+        if not result["recovered"]:
+            result["recovery_reason"] = (
+                "rebuilt OctoMap still collides with the current robot state"
+            )
+        return result
 
     def _wait_for_search_stationary(self, deadline: float) -> dict[str, Any]:
-        """Require fresh stationary joint samples before each Pilz LIN plan.
+        """Require fresh stationary joint samples before each OMPL search plan.
 
         The UR controller can report one final nonzero velocity sample after a
-        trajectory result succeeds. Pilz rejects any nonzero start velocity,
-        so wait for two new stationary samples before representing the
-        verified start state with exact zero velocities in the planning goal.
+        trajectory result succeeds.  Wait for two new stationary samples
+        before representing the verified start state with exact zero
+        velocities in the planning goal.
         """
         settle_deadline = min(
             deadline,
@@ -608,6 +976,62 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         deadline: float,
     ) -> dict[str, Any]:
         """Execute one validated segment and cancel when any face appears."""
+        vertical_axis_validation = self._validate_trajectory_vertical_axis(
+            trajectory,
+            deadline=deadline,
+        )
+        if not vertical_axis_validation.get("success"):
+            return {
+                "success": False,
+                "stage": "search_pre_execution_vertical_axis_validation",
+                "reason": vertical_axis_validation.get("reason"),
+                "vertical_axis_validation": vertical_axis_validation,
+                "execution_attempted": False,
+            }
+        joint_motion_validation = self._validate_search_joint_motion(trajectory)
+        if not joint_motion_validation.get("success"):
+            return {
+                "success": False,
+                "stage": "search_pre_execution_joint_motion_validation",
+                "reason": joint_motion_validation.get("reason"),
+                "vertical_axis_validation": vertical_axis_validation,
+                "joint_motion_validation": joint_motion_validation,
+                "execution_attempted": False,
+            }
+        current_pose = self._tool0_pose()
+        if not current_pose.get("available"):
+            return {
+                "success": False,
+                "stage": "search_pre_execution_vertical_axis_guard",
+                "reason": "live tool0 pose is unavailable immediately before execution",
+                "vertical_axis_validation": vertical_axis_validation,
+                "execution_attempted": False,
+            }
+        try:
+            current_tilt = _tool_vertical_tilt_rad(
+                current_pose["orientation_quat_xyzw"]
+            )
+        except (RuntimeError, TypeError, ValueError) as exc:
+            return {
+                "success": False,
+                "stage": "search_pre_execution_vertical_axis_guard",
+                "reason": f"live tool vertical-axis check failed: {exc}",
+                "vertical_axis_validation": vertical_axis_validation,
+                "execution_attempted": False,
+            }
+        if current_tilt > MAX_TOOL_VERTICAL_TILT_RAD:
+            return {
+                "success": False,
+                "stage": "search_pre_execution_vertical_axis_guard",
+                "reason": (
+                    f"live tool tilt {math.degrees(current_tilt):.2f} deg exceeds "
+                    f"the {math.degrees(MAX_TOOL_VERTICAL_TILT_RAD):.1f} deg limit"
+                ),
+                "live_tool_tilt_rad": current_tilt,
+                "vertical_axis_validation": vertical_axis_validation,
+                "joint_motion_validation": joint_motion_validation,
+                "execution_attempted": False,
+            }
         client = self._execution_action_client()
         if not client.wait_for_server(timeout_sec=2.0):
             return {
@@ -643,6 +1067,60 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         result_future = handle.get_result_async()
         while rclpy.ok() and not result_future.done() and time.monotonic() < deadline:
             rclpy.spin_once(self, timeout_sec=0.02)
+            live_ur_failure = self._live_ur_execution_state_failure()
+            if live_ur_failure is not None:
+                self._cancel_goal(handle)
+                return {
+                    "success": False,
+                    "stage": "search_cancelled_for_ur_execution_state",
+                    "reason": live_ur_failure,
+                    "vertical_axis_validation": vertical_axis_validation,
+                    "joint_motion_validation": joint_motion_validation,
+                    "execution_attempted": True,
+                    "trajectory_cancel_requested": True,
+                }
+            live_pose = self._tool0_pose()
+            if not live_pose.get("available"):
+                self._cancel_goal(handle)
+                return {
+                    "success": False,
+                    "stage": "search_cancelled_for_vertical_axis_guard",
+                    "reason": "live tool0 pose became unavailable during search",
+                    "vertical_axis_validation": vertical_axis_validation,
+                    "joint_motion_validation": joint_motion_validation,
+                    "execution_attempted": True,
+                    "trajectory_cancel_requested": True,
+                }
+            try:
+                live_tilt = _tool_vertical_tilt_rad(
+                    live_pose["orientation_quat_xyzw"]
+                )
+            except (RuntimeError, TypeError, ValueError) as exc:
+                self._cancel_goal(handle)
+                return {
+                    "success": False,
+                    "stage": "search_cancelled_for_vertical_axis_guard",
+                    "reason": f"live tool vertical-axis check failed: {exc}",
+                    "vertical_axis_validation": vertical_axis_validation,
+                    "joint_motion_validation": joint_motion_validation,
+                    "execution_attempted": True,
+                    "trajectory_cancel_requested": True,
+                }
+            if live_tilt > MAX_TOOL_VERTICAL_TILT_RAD:
+                self._cancel_goal(handle)
+                return {
+                    "success": False,
+                    "stage": "search_cancelled_for_vertical_axis_guard",
+                    "reason": (
+                        f"live tool tilt {math.degrees(live_tilt):.2f} deg exceeded "
+                        f"the {math.degrees(MAX_TOOL_VERTICAL_TILT_RAD):.1f} deg limit"
+                    ),
+                    "live_tool_tilt_rad": live_tilt,
+                    "vertical_axis_validation": vertical_axis_validation,
+                    "joint_motion_validation": joint_motion_validation,
+                    "execution_attempted": True,
+                    "trajectory_cancel_requested": True,
+                }
             if self._candidate_visible():
                 self._cancel_goal(handle)
                 return {
@@ -651,6 +1129,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     "candidate_detected": True,
                     "execution_attempted": True,
                     "trajectory_cancel_requested": True,
+                    "vertical_axis_validation": vertical_axis_validation,
+                    "joint_motion_validation": joint_motion_validation,
                 }
         wrapped = result_future.result() if result_future.done() else None
         if wrapped is None:
@@ -662,14 +1142,60 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "execution_attempted": True,
             }
         result = wrapped.result
+        error_code = int(result.error_code.val)
+        success = error_code == 1
+        controller_failure = None
+        if error_code == -4:
+            controller_state = self._controller_status()
+            controller_failure = {
+                "classification": "CONTROL_FAILED",
+                "moveit_error_code": error_code,
+                "reason": (
+                    "MoveIt lost or aborted trajectory control after goal "
+                    "acceptance; check the UR reverse interface and External "
+                    "Control program"
+                ),
+                "scaled_joint_trajectory_controller_active": (
+                    controller_state.get(
+                        "scaled_joint_trajectory_controller_active"
+                    )
+                ),
+                "external_control_program_running": bool(
+                    self.latest_robot_program_running is not None
+                    and self.latest_robot_program_running.data
+                ),
+                "safety_mode": (
+                    None
+                    if self.latest_safety_mode is None
+                    else int(self.latest_safety_mode.mode)
+                ),
+                "robot_mode": (
+                    None
+                    if self.latest_robot_mode is None
+                    else int(self.latest_robot_mode.mode)
+                ),
+            }
         return {
-            "success": int(result.error_code.val) == 1,
+            "success": success,
             "stage": "search_execute",
-            "error_code": int(result.error_code.val),
+            "error_code": error_code,
             "error_message": result.error_code.message,
+            "reason": (
+                None
+                if success
+                else (
+                    controller_failure["reason"]
+                    if controller_failure is not None
+                    else result.error_code.message
+                    or f"MoveIt execution error code {error_code}"
+                )
+            ),
+            "failure_diagnostic": controller_failure,
             "result_status": int(wrapped.status),
             "candidate_detected": self._candidate_visible(),
             "execution_attempted": True,
+            "vertical_axis_validation": vertical_axis_validation,
+            "joint_motion_validation": joint_motion_validation,
         }
 
     def active_search(
@@ -691,11 +1217,35 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "execute": execute,
             "target_selection": self.target_selection,
             "maximum_time_sec": SEARCH_MAX_TIME_SEC,
-            "translation_only": True,
-            "rotation_search_enabled": False,
-            "search_direction_reference": (
-                f"{CAMERA_OPTICAL_FRAME} frozen at initial {TOOL_FRAME} pose"
+            "planner": f"{SEARCH_PLANNING_PIPELINE}/{SEARCH_PLANNER}",
+            "ompl_active_search_enabled": False,
+            "translation_only": False,
+            "position_only_search_goals": False,
+            "vertical_axis_constraint_active": True,
+            "maximum_tool_vertical_tilt_deg": math.degrees(
+                MAX_TOOL_VERTICAL_TILT_RAD
             ),
+            "tool_axis_spin_free": True,
+            "intermediate_flange_orientation_unconstrained": False,
+            "fk_waypoint_vertical_axis_validation": True,
+            "maximum_joint_excursion_rad": SEARCH_MAX_JOINT_EXCURSION_RAD,
+            "maximum_cumulative_joint_travel_rad": (
+                SEARCH_MAX_CUMULATIVE_JOINT_TRAVEL_RAD
+            ),
+            "maximum_search_trajectory_duration_sec": (
+                SEARCH_MAX_TRAJECTORY_DURATION_SEC
+            ),
+            "rotation_search_enabled": True,
+            "left_right_search_strategy": "MoveIt tool0-local-Z pose rotations",
+            "left_right_rotation_each_side_deg": SEARCH_WRIST_Z_ANGLE_DEG,
+            "left_right_total_sweep_deg": SEARCH_WRIST_Z_TOTAL_SWEEP_DEG,
+            "wrist_3_direct_command": False,
+            "search_direction_reference": {
+                "backward_up_down": (
+                    f"{CAMERA_OPTICAL_FRAME} frozen at initial {TOOL_FRAME} pose"
+                ),
+                "left_right": f"{TOOL_FRAME} local Z rotation",
+            },
             "camera_extrinsic_applied": True,
             "search_order": [
                 "backward_wide",
@@ -706,13 +1256,18 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             ],
             "adaptive_distance_policy_m": {
                 "backward": list(SEARCH_BACK_CANDIDATE_DISTANCES_M),
-                "directional": list(SEARCH_DIRECTIONAL_CANDIDATE_DISTANCES_M),
+                "up_down": list(SEARCH_DIRECTIONAL_CANDIDATE_DISTANCES_M),
                 "skip_if_all_bounded_candidates_fail": True,
             },
+            "adaptive_left_right_angles_deg": [
+                math.degrees(value)
+                for value in SEARCH_WRIST_Z_CANDIDATE_ANGLES_RAD
+            ],
             "trajectory_sent": False,
             "checks": snapshot,
             "search_steps": [],
             "skipped_search_waypoints": [],
+            "start_state_checks": [],
         }
         failures = self._base_readiness_failures(snapshot)
         if execute:
@@ -828,13 +1383,43 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             current_orientation = [
                 float(value) for value in current["orientation_quat_xyzw"]
             ]
-            orientation_error = _quaternion_distance_rad(current_orientation, orientation)
-            if orientation_error > FINAL_ORIENTATION_TOLERANCE_RAD:
+
+            state_check = self._ensure_valid_search_start_state(motion_deadline)
+            state_check["before_search_waypoint"] = requested_waypoint["name"]
+            response["start_state_checks"].append(state_check)
+            before_state = state_check.get("before", {})
+            start_state_valid = bool(
+                before_state.get("valid") or state_check.get("recovered")
+            )
+            if before_state.get("available") and not start_state_valid:
+                contacts = (
+                    state_check.get("after", {}).get("contacts")
+                    or before_state.get("contacts")
+                    or []
+                )
+                contact_pairs = ", ".join(
+                    f"{item['body_1']} - {item['body_2']}"
+                    for item in contacts
+                )
                 response.update(
                     {
-                        "stage": "active_search_orientation_guard",
-                        "reason": "tool orientation changed during translation-only search",
-                        "orientation_error_rad": orientation_error,
+                        "stage": "active_search_start_state_collision",
+                        "reason": (
+                            "MoveIt reports the current robot state in "
+                            "collision"
+                            + (f": {contact_pairs}" if contact_pairs else "")
+                            + "; no search trajectory was requested"
+                        ),
+                        "failure_diagnostic": {
+                            "classification": (
+                                state_check.get("after", {}).get(
+                                    "classification"
+                                )
+                                or before_state.get("classification")
+                            ),
+                            "contacts": contacts,
+                            "stale_octomap_recovery": state_check,
+                        },
                     }
                 )
                 return response
@@ -853,8 +1438,20 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             for variant in variants:
                 if time.monotonic() >= motion_deadline:
                     break
+                variant = dict(variant)
+                rotation_goal = (
+                    variant.get("search_motion_type") == "tool_local_z_rotation"
+                )
+                if rotation_goal:
+                    # Hold the live tool position while requesting an absolute
+                    # local-Z scan orientation from the frozen initial pose.
+                    variant["target_tool0_position_m"] = list(current_position)
                 segment = _norm(
                     _subtract(variant["target_tool0_position_m"], current_position)
+                )
+                angular_segment = _quaternion_distance_rad(
+                    current_orientation,
+                    variant["target_tool0_orientation_quat_xyzw"],
                 )
                 target_in_ur_base = self._point_in_ur_base(
                     variant["target_tool0_position_m"],
@@ -864,8 +1461,18 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 attempt: dict[str, Any] = {
                     **variant,
                     "segment_distance_m": segment,
-                    "orientation_error_rad": orientation_error,
+                    "segment_orientation_distance_rad": angular_segment,
                     "target_tool0_radius_from_ur_base_m": radius,
+                    "position_goal_constraint": True,
+                    "goal_orientation_constraint": rotation_goal,
+                    "goal_vertical_axis_constraint": not rotation_goal,
+                    "orientation_path_constraint": True,
+                    "maximum_tool_vertical_tilt_rad": (
+                        MAX_TOOL_VERTICAL_TILT_RAD
+                    ),
+                    "tool_axis_spin_free": True,
+                    "intermediate_flange_orientation_unconstrained": False,
+                    "wrist_3_direct_command": False,
                     "plan_result": None,
                     "failure_diagnostic": None,
                 }
@@ -890,7 +1497,15 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     "frame_id": BASE_FRAME,
                     "link_name": TOOL_FRAME,
                     "position_m": variant["target_tool0_position_m"],
-                    "orientation_quat_xyzw": orientation,
+                    "orientation_quat_xyzw": (
+                        variant["target_tool0_orientation_quat_xyzw"]
+                        if rotation_goal
+                        else current_orientation
+                    ),
+                    "search_motion_type": variant["search_motion_type"],
+                    "tool_local_z_rotation_rad": variant[
+                        "tool_local_z_rotation_rad"
+                    ],
                 }
                 plan, candidate_trajectory = self._search_plan(
                     target,
@@ -998,11 +1613,23 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         "stage": "active_search_execution",
                         "reason": f"bounded search segment failed: {detail}",
                         "failure_diagnostic": {
-                            "classification": "SEARCH_EXECUTION_FAILED",
+                            "classification": (
+                                execution.get("failure_diagnostic", {}).get(
+                                    "classification"
+                                )
+                                if isinstance(
+                                    execution.get("failure_diagnostic"), dict
+                                )
+                                else None
+                            )
+                            or "SEARCH_EXECUTION_FAILED",
                             "reason": detail,
                             "execution_stage": execution.get("stage"),
                             "error_code": execution.get("error_code"),
                             "error_message": execution.get("error_message"),
+                            "controller_diagnostic": execution.get(
+                                "failure_diagnostic"
+                            ),
                         },
                     }
                 )
@@ -1036,6 +1663,34 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 _subtract(final["position_m"], waypoint["target_tool0_position_m"])
             )
             step["final_tool0_position_error_m"] = final_error
+            step["final_tool0_orientation_quat_xyzw"] = [
+                float(value) for value in final["orientation_quat_xyzw"]
+            ]
+            if waypoint.get("search_motion_type") == "tool_local_z_rotation":
+                final_orientation_error = _quaternion_distance_rad(
+                    step["final_tool0_orientation_quat_xyzw"],
+                    waypoint["target_tool0_orientation_quat_xyzw"],
+                )
+                step["final_tool0_orientation_error_rad"] = (
+                    final_orientation_error
+                )
+                if (
+                    final_orientation_error
+                    > SEARCH_FINAL_ORIENTATION_TOLERANCE_RAD
+                ):
+                    response.update(
+                        {
+                            "stage": "active_search_verification",
+                            "reason": (
+                                "tool-local-Z search rotation missed its "
+                                "bounded pose target"
+                            ),
+                            "final_orientation_error_rad": (
+                                final_orientation_error
+                            ),
+                        }
+                    )
+                    return response
             if final_error > SEARCH_FINAL_POSITION_TOLERANCE_M:
                 response.update(
                     {
@@ -1081,8 +1736,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         if not response.get("success") and not response.get("stage"):
             response["stage"] = "dynamic_route_plan_only"
             response["reason"] = (
-                "the direct fixed-orientation path and the constrained OMPL "
-                "detour both failed for the frozen real pre-mouth target"
+                "the direct path and vertical-axis OMPL detour both failed "
+                "for the frozen real pre-mouth target; the tool constraint "
+                "was not relaxed"
             )
             response["planning_error_code"] = plan_result.get("error_code")
             response["failure_diagnostic"] = {
@@ -1174,6 +1830,57 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "reason": "no validated frozen dynamic target is available",
                 "execution_attempted": False,
             }
+        if self._validated_trajectory is None:
+            return {
+                "success": False,
+                "stage": "dynamic_validated_trajectory",
+                "reason": "no prevalidated dynamic trajectory is cached",
+                "execution_attempted": False,
+            }
+        vertical_axis_validation = self._validate_trajectory_vertical_axis(
+            self._validated_trajectory
+        )
+        if not vertical_axis_validation.get("success"):
+            return {
+                "success": False,
+                "stage": "dynamic_pre_execution_vertical_axis_validation",
+                "reason": vertical_axis_validation.get("reason"),
+                "vertical_axis_validation": vertical_axis_validation,
+                "execution_attempted": False,
+            }
+        current_pose = self._tool0_pose()
+        if not current_pose.get("available"):
+            return {
+                "success": False,
+                "stage": "dynamic_pre_execution_vertical_axis_guard",
+                "reason": "live tool0 pose is unavailable immediately before execution",
+                "vertical_axis_validation": vertical_axis_validation,
+                "execution_attempted": False,
+            }
+        try:
+            current_tilt = _tool_vertical_tilt_rad(
+                current_pose["orientation_quat_xyzw"]
+            )
+        except (RuntimeError, TypeError, ValueError) as exc:
+            return {
+                "success": False,
+                "stage": "dynamic_pre_execution_vertical_axis_guard",
+                "reason": f"live tool vertical-axis check failed: {exc}",
+                "vertical_axis_validation": vertical_axis_validation,
+                "execution_attempted": False,
+            }
+        if current_tilt > MAX_TOOL_VERTICAL_TILT_RAD:
+            return {
+                "success": False,
+                "stage": "dynamic_pre_execution_vertical_axis_guard",
+                "reason": (
+                    f"live tool tilt {math.degrees(current_tilt):.2f} deg exceeds "
+                    f"the {math.degrees(MAX_TOOL_VERTICAL_TILT_RAD):.1f} deg limit"
+                ),
+                "live_tool_tilt_rad": current_tilt,
+                "vertical_axis_validation": vertical_axis_validation,
+                "execution_attempted": False,
+            }
         route_strategy = getattr(self, "_selected_dynamic_route_strategy", None)
         if route_strategy not in (DIRECT_ROUTE_STRATEGY, DETOUR_ROUTE_STRATEGY):
             return {
@@ -1228,8 +1935,38 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "window_sec": EXECUTION_MOUTH_DRIFT_CONFIRMATION_WINDOW_SEC,
             "threshold_m": MAX_EXECUTION_TARGET_DRIFT_M,
         }
+        live_vertical_axis_guard: dict[str, Any] = {
+            "maximum_allowed_tilt_rad": MAX_TOOL_VERTICAL_TILT_RAD,
+            "maximum_observed_tilt_rad": 0.0,
+            "active": True,
+        }
         while rclpy.ok() and not result_future.done() and time.monotonic() < deadline:
             rclpy.spin_once(self, timeout_sec=0.05)
+            live_ur_failure = self._live_ur_execution_state_failure()
+            if live_ur_failure is not None:
+                cancel_reason = live_ur_failure
+                break
+            live_pose = self._tool0_pose()
+            if not live_pose.get("available"):
+                cancel_reason = "live tool0 pose became unavailable during execution"
+                break
+            try:
+                live_tilt = _tool_vertical_tilt_rad(
+                    live_pose["orientation_quat_xyzw"]
+                )
+            except (RuntimeError, TypeError, ValueError) as exc:
+                cancel_reason = f"live tool vertical-axis check failed: {exc}"
+                break
+            live_vertical_axis_guard["maximum_observed_tilt_rad"] = max(
+                float(live_vertical_axis_guard["maximum_observed_tilt_rad"]),
+                live_tilt,
+            )
+            if live_tilt > MAX_TOOL_VERTICAL_TILT_RAD:
+                cancel_reason = (
+                    f"live tool tilt {math.degrees(live_tilt):.2f} deg exceeded "
+                    f"the {math.degrees(MAX_TOOL_VERTICAL_TILT_RAD):.1f} deg limit"
+                )
+                break
             raw = self._cloud_status(RAW_CLOUD_TOPIC)
             filtered = self._cloud_status(FILTERED_CLOUD_TOPIC)
             if not raw.get("active") or not filtered.get("active"):
@@ -1277,6 +2014,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "route_strategy": route_strategy,
                 "planner": planner,
                 "mouth_drift_confirmation": mouth_drift_confirmation,
+                "vertical_axis_validation": vertical_axis_validation,
+                "live_vertical_axis_guard": live_vertical_axis_guard,
             }
         wrapped = result_future.result()
         if wrapped is None:
@@ -1307,6 +2046,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "replan_delay_sec": REPLAN_DELAY_SEC,
             "wait_for_clear": False,
             "mouth_drift_confirmation": mouth_drift_confirmation,
+            "vertical_axis_validation": vertical_axis_validation,
+            "live_vertical_axis_guard": live_vertical_axis_guard,
         }
         if not success:
             detail = result.error_code.message or (
@@ -1315,11 +2056,22 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             )
             response["reason"] = detail
             response["failure_diagnostic"] = {
-                "classification": "DYNAMIC_PLAN_OR_EXECUTION_FAILED",
+                "classification": (
+                    "CONTROL_FAILED"
+                    if int(result.error_code.val) == -4
+                    else "DYNAMIC_PLAN_OR_EXECUTION_FAILED"
+                ),
                 "reason": detail,
                 "error_code": int(result.error_code.val),
                 "error_message": result.error_code.message,
             }
+            if int(result.error_code.val) == -4:
+                response["reason"] = (
+                    "MoveIt CONTROL_FAILED (-4) after dispatch; check the UR "
+                    "reverse interface, External Control program, and scaled "
+                    "joint trajectory controller"
+                )
+                response["failure_diagnostic"]["reason"] = response["reason"]
         return response
 
     def run_integrated(
@@ -1334,11 +2086,38 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "multi_target_identity_lock": True,
             "target_selection": self.target_selection,
             "active_search": True,
-            "translation_only_search": True,
-            "rotation_search_enabled": False,
-            "active_search_direction_reference": (
-                f"{CAMERA_OPTICAL_FRAME} frozen at initial {TOOL_FRAME} pose"
+            "active_search_planner": (
+                f"{SEARCH_PLANNING_PIPELINE}/{SEARCH_PLANNER}"
             ),
+            "ompl_active_search_enabled": False,
+            "ompl_dynamic_obstacle_detour_enabled": True,
+            "translation_only_search": False,
+            "position_only_active_search_goals": False,
+            "active_search_vertical_axis_constraint": True,
+            "maximum_tool_vertical_tilt_deg": math.degrees(
+                MAX_TOOL_VERTICAL_TILT_RAD
+            ),
+            "tool_axis_spin_free": True,
+            "active_search_intermediate_flange_orientation_unconstrained": False,
+            "fk_waypoint_vertical_axis_validation": True,
+            "maximum_joint_excursion_rad": SEARCH_MAX_JOINT_EXCURSION_RAD,
+            "maximum_cumulative_joint_travel_rad": (
+                SEARCH_MAX_CUMULATIVE_JOINT_TRAVEL_RAD
+            ),
+            "maximum_search_trajectory_duration_sec": (
+                SEARCH_MAX_TRAJECTORY_DURATION_SEC
+            ),
+            "rotation_search_enabled": True,
+            "left_right_search_strategy": "MoveIt tool0-local-Z pose rotations",
+            "left_right_rotation_each_side_deg": SEARCH_WRIST_Z_ANGLE_DEG,
+            "left_right_total_sweep_deg": SEARCH_WRIST_Z_TOTAL_SWEEP_DEG,
+            "wrist_3_direct_command": False,
+            "active_search_direction_reference": {
+                "backward_up_down": (
+                    f"{CAMERA_OPTICAL_FRAME} frozen at initial {TOOL_FRAME} pose"
+                ),
+                "left_right": f"{TOOL_FRAME} local Z rotation",
+            },
             "active_search_camera_extrinsic_applied": True,
             "active_search_order": [
                 "backward_wide",
@@ -1349,12 +2128,17 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             ],
             "adaptive_search_distances_m": {
                 "backward": list(SEARCH_BACK_CANDIDATE_DISTANCES_M),
-                "directional": list(SEARCH_DIRECTIONAL_CANDIDATE_DISTANCES_M),
+                "up_down": list(SEARCH_DIRECTIONAL_CANDIDATE_DISTANCES_M),
                 "skip_unreachable_direction": True,
             },
+            "adaptive_left_right_angles_deg": [
+                math.degrees(value)
+                for value in SEARCH_WRIST_Z_CANDIDATE_ANGLES_RAD
+            ],
             "dynamic_obstacle_avoidance": True,
             "direct_clear_path_first": True,
-            "constrained_detour_only_after_direct_rejection": True,
+            "vertical_axis_detour_after_direct_rejection": True,
+            "detour_final_goal_orientation_constraint": True,
             "combined_static_and_dynamic_scene_checks": True,
             "same_target_replanning": True,
             "wait_for_clear": False,

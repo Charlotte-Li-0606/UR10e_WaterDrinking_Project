@@ -12,8 +12,16 @@ from scripts.real_dynamic_obstacle_avoidance_plan import (
     DIRECT_ROUTE_STRATEGY,
     RealDynamicObstacleAvoidancePlan,
 )
-from scripts.real_feed_water_integrated import RealIntegratedFeedWater
-from scripts.real_feed_water_integrated import MAX_EXECUTION_TARGET_DRIFT_M
+from scripts.real_active_search_plan import RealActiveSearchPlan
+from scripts.real_feed_water_integrated import (
+    MAX_EXECUTION_TARGET_DRIFT_M,
+    SEARCH_ALLOWED_PLANNING_TIME_SEC,
+    SEARCH_PLANNER,
+    SEARCH_PLANNING_PIPELINE,
+    SEARCH_WRIST_Z_ANGLE_DEG,
+    RealIntegratedFeedWater,
+    _orientation_after_local_tool_z_rotation,
+)
 
 
 class RealIntegratedFeedWaterTest(unittest.TestCase):
@@ -25,6 +33,11 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
                 "available": True,
                 "position_m": [-0.25, -0.04, 0.61],
                 "orientation_quat_xyzw": [0.6, 0.8, 0.0, 0.0],
+            },
+            "tool_vertical_axis_guard": {
+                "available": True,
+                "within_limit": True,
+                "tilt_deg": 0.0,
             },
             "ur_base_tf": {
                 "available": True,
@@ -62,7 +75,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         )
         return node
 
-    def test_search_waypoints_match_the_bounded_translation_only_policy(self) -> None:
+    def test_search_waypoints_mix_translations_and_tool_z_rotations(self) -> None:
         origin = [-0.25, -0.04, 0.61]
         identity = [0.0, 0.0, 0.0, 1.0]
         waypoints = RealIntegratedFeedWater.search_waypoints(
@@ -77,21 +90,115 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             [item["name"] for item in waypoints],
         )
         self.assertEqual([0.0, 0.0, -0.04], waypoints[0]["offset_from_origin_m"])
-        positions = [origin] + [item["target_tool0_position_m"] for item in waypoints]
-        segment_lengths = [
-            sum((float(a) - float(b)) ** 2 for a, b in zip(current, previous)) ** 0.5
-            for previous, current in zip(positions, positions[1:])
-        ]
-        self.assertLessEqual(max(segment_lengths), 0.10 + 1e-9)
-        self.assertLessEqual(
-            max(abs(item["offset_camera_optical_m"][0]) for item in waypoints),
-            0.05,
+        self.assertEqual(
+            [
+                "cartesian_translation",
+                "tool_local_z_rotation",
+                "tool_local_z_rotation",
+                "cartesian_translation",
+                "cartesian_translation",
+            ],
+            [item["search_motion_type"] for item in waypoints],
         )
-        self.assertLessEqual(
-            max(abs(item["offset_camera_optical_m"][1]) for item in waypoints),
-            0.05,
+        self.assertAlmostEqual(
+            SEARCH_WRIST_Z_ANGLE_DEG,
+            waypoints[1]["tool_local_z_rotation_deg"],
         )
-        self.assertTrue(all(item["camera_extrinsic_applied"] for item in waypoints))
+        self.assertAlmostEqual(
+            -SEARCH_WRIST_Z_ANGLE_DEG,
+            waypoints[2]["tool_local_z_rotation_deg"],
+        )
+        self.assertTrue(waypoints[0]["camera_extrinsic_applied"])
+        self.assertFalse(waypoints[1]["camera_extrinsic_applied"])
+        self.assertFalse(waypoints[1]["wrist_3_direct_command"])
+
+    def test_translation_search_goal_constrains_vertical_axis_with_free_spin(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.trajectory_velocity_scaling = 0.60
+        node.trajectory_acceleration_scaling = 0.60
+        node.latest_joint_state = None
+        target = {
+            "position_m": [-0.20, 0.10, 0.55],
+            "orientation_quat_xyzw": [0.60, 0.80, 0.0, 0.0],
+            "search_motion_type": "cartesian_translation",
+        }
+
+        goal = node._search_goal_for_target(target)
+
+        self.assertEqual("pilz_industrial_motion_planner", goal.request.pipeline_id)
+        self.assertEqual("LIN", goal.request.planner_id)
+        self.assertEqual(SEARCH_PLANNING_PIPELINE, goal.request.pipeline_id)
+        self.assertEqual(SEARCH_PLANNER, goal.request.planner_id)
+        self.assertEqual(1, goal.request.num_planning_attempts)
+        self.assertEqual(
+            SEARCH_ALLOWED_PLANNING_TIME_SEC,
+            goal.request.allowed_planning_time,
+        )
+        self.assertEqual(1, len(goal.request.goal_constraints))
+        self.assertEqual(1, len(goal.request.goal_constraints[0].position_constraints))
+        self.assertEqual(1, len(goal.request.goal_constraints[0].orientation_constraints))
+        self.assertEqual(1, len(goal.request.path_constraints.orientation_constraints))
+        self.assertEqual(
+            "vertical_axis_intermediate_active_search",
+            goal.request.path_constraints.name,
+        )
+
+    def test_left_right_search_uses_pose_goal_about_tool_local_z(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.trajectory_velocity_scaling = 0.60
+        node.trajectory_acceleration_scaling = 0.60
+        node.latest_joint_state = None
+        initial = [0.60, 0.80, 0.0, 0.0]
+        target = {
+            "position_m": [-0.20, 0.10, 0.55],
+            "orientation_quat_xyzw": _orientation_after_local_tool_z_rotation(
+                initial,
+                0.25,
+            ),
+            "search_motion_type": "tool_local_z_rotation",
+        }
+
+        goal = node._search_goal_for_target(target)
+
+        constraints = goal.request.goal_constraints[0]
+        self.assertEqual(
+            "active_search_tool_local_z_pose_goal_with_vertical_path",
+            constraints.name,
+        )
+        self.assertEqual(1, len(constraints.position_constraints))
+        self.assertEqual(1, len(constraints.orientation_constraints))
+        self.assertEqual(1, len(goal.request.path_constraints.orientation_constraints))
+
+    def test_independent_search_plan_uses_the_same_vertical_profile(self) -> None:
+        node = RealActiveSearchPlan.__new__(RealActiveSearchPlan)
+        node.trajectory_velocity_scaling = 0.60
+        node.trajectory_acceleration_scaling = 0.60
+        node.latest_joint_state = None
+        target = {
+            "position_m": [-0.20, 0.10, 0.55],
+            "orientation_quat_xyzw": [0.60, 0.80, 0.0, 0.0],
+        }
+
+        goal = node._goal_for_target(target)
+
+        self.assertEqual("pilz_industrial_motion_planner", goal.request.pipeline_id)
+        self.assertEqual("LIN", goal.request.planner_id)
+        self.assertEqual(1, len(goal.request.goal_constraints[0].orientation_constraints))
+        self.assertEqual(1, len(goal.request.path_constraints.orientation_constraints))
+
+    def test_active_search_readiness_rejects_unsafe_flange_tilt(self) -> None:
+        snapshot = self._snapshot(
+            {"available": False, "stable": False, "reason": "no face"}
+        )
+        snapshot["tool_vertical_axis_guard"] = {
+            "available": True,
+            "within_limit": False,
+            "tilt_deg": 97.6,
+        }
+
+        failures = RealIntegratedFeedWater._base_readiness_failures(snapshot)
+
+        self.assertTrue(any("tilt" in failure.lower() for failure in failures))
 
     def test_search_waypoints_apply_camera_extrinsic_instead_of_base_axes(self) -> None:
         origin = [0.0, 0.0, 0.0]
@@ -113,7 +220,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             backward["offset_initial_tool0_m"],
         )
 
-    def test_search_waypoint_variants_shrink_without_changing_direction(self) -> None:
+    def test_left_right_search_variants_shrink_rotation_angle(self) -> None:
         origin = [-0.25, -0.04, 0.61]
         identity = [0.0, 0.0, 0.0, 1.0]
 
@@ -126,16 +233,57 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            [-0.05, -0.04, -0.03, -0.02],
-            [item["offset_camera_optical_m"][0] for item in variants],
-        )
-        self.assertTrue(
-            all(item["offset_camera_optical_m"][2] == -0.04 for item in variants)
+            [15.0, 10.0, 5.0],
+            [round(item["tool_local_z_rotation_deg"], 6) for item in variants],
         )
         self.assertEqual(
-            [False, True, True, True],
+            [False, True, True],
             [item["adaptive_scale_applied"] for item in variants],
         )
+
+    def test_local_search_joint_motion_validator_accepts_small_route(self) -> None:
+        trajectory = SimpleNamespace(
+            joint_trajectory=SimpleNamespace(
+                joint_names=["shoulder_pan_joint", "wrist_3_joint"],
+                points=[
+                    SimpleNamespace(
+                        positions=[0.0, 0.0],
+                        time_from_start=SimpleNamespace(sec=0, nanosec=0),
+                    ),
+                    SimpleNamespace(
+                        positions=[0.10, 0.25],
+                        time_from_start=SimpleNamespace(sec=1, nanosec=0),
+                    ),
+                ],
+            )
+        )
+
+        result = RealIntegratedFeedWater._validate_search_joint_motion(trajectory)
+
+        self.assertTrue(result["success"])
+
+    def test_local_search_joint_motion_validator_rejects_long_route(self) -> None:
+        trajectory = SimpleNamespace(
+            joint_trajectory=SimpleNamespace(
+                joint_names=["shoulder_pan_joint", "wrist_3_joint"],
+                points=[
+                    SimpleNamespace(
+                        positions=[0.0, 0.0],
+                        time_from_start=SimpleNamespace(sec=0, nanosec=0),
+                    ),
+                    SimpleNamespace(
+                        positions=[1.20, -1.20],
+                        time_from_start=SimpleNamespace(sec=4, nanosec=710000000),
+                    ),
+                ],
+            )
+        )
+
+        result = RealIntegratedFeedWater._validate_search_joint_motion(trajectory)
+
+        self.assertFalse(result["success"])
+        self.assertIn("joint excursion", result["reason"])
+        self.assertIn("trajectory duration", result["reason"])
 
     def test_stable_selected_mouth_skips_search_motion(self) -> None:
         mouth = {
@@ -151,6 +299,11 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertTrue(result["found_without_motion"])
         self.assertFalse(result["trajectory_sent"])
+        self.assertEqual(
+            "pilz_industrial_motion_planner/LIN",
+            result["planner"],
+        )
+        self.assertFalse(result["ompl_active_search_enabled"])
         node._search_plan.assert_not_called()
 
     def test_no_face_plan_only_validates_first_real_search_waypoint(self) -> None:
@@ -170,6 +323,39 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertFalse(result["trajectory_sent"])
         self.assertEqual(1, len(result["search_steps"]))
         node._search_plan.assert_called_once()
+
+    def test_octomap_start_collision_is_reported_before_planning(self) -> None:
+        mouth = {"available": False, "stable": False, "reason": "no face"}
+        node = self._policy_only_node(mouth)
+        node._ensure_valid_search_start_state = Mock(
+            return_value={
+                "before": {
+                    "available": True,
+                    "valid": False,
+                    "classification": "START_STATE_IN_OCTOMAP_COLLISION",
+                    "contacts": [
+                        {
+                            "body_1": "<octomap>",
+                            "body_2": "forearm_link",
+                            "depth_m": 0.02,
+                        }
+                    ],
+                },
+                "octomap_clear_attempted": True,
+                "recovered": False,
+            }
+        )
+
+        result = node.active_search(execute=False, confirm_real_motion=False)
+
+        self.assertEqual("active_search_start_state_collision", result["stage"])
+        self.assertIn("<octomap> - forearm_link", result["reason"])
+        self.assertEqual(
+            "START_STATE_IN_OCTOMAP_COLLISION",
+            result["failure_diagnostic"]["classification"],
+        )
+        self.assertFalse(result["trajectory_sent"])
+        node._search_plan.assert_not_called()
 
     def test_unreachable_direction_is_reported_and_remaining_search_continues(self) -> None:
         mouth = {"available": False, "stable": False, "reason": "no face"}
@@ -201,7 +387,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertEqual("active_search_timeout", result["stage"])
         self.assertFalse(result["trajectory_sent"])
         self.assertEqual(5, len(result["skipped_search_waypoints"]))
-        self.assertEqual(19, node._search_plan.call_count)
+        self.assertEqual(17, node._search_plan.call_count)
         self.assertIn("NO_IK_SOLUTION", result["reason"])
 
     def test_smaller_search_candidate_is_selected_after_nominal_ik_failure(self) -> None:
@@ -276,7 +462,33 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertTrue(result["integrated_real_feed_water"]["multi_target_identity_lock"])
         self.assertTrue(result["integrated_real_feed_water"]["active_search"])
+        self.assertEqual(
+            "pilz_industrial_motion_planner/LIN",
+            result["integrated_real_feed_water"]["active_search_planner"],
+        )
+        self.assertFalse(
+            result["integrated_real_feed_water"]["ompl_active_search_enabled"]
+        )
+        self.assertTrue(
+            result["integrated_real_feed_water"][
+                "ompl_dynamic_obstacle_detour_enabled"
+            ]
+        )
         self.assertTrue(result["integrated_real_feed_water"]["dynamic_obstacle_avoidance"])
+        self.assertFalse(result["integrated_real_feed_water"]["translation_only_search"])
+        self.assertFalse(
+            result["integrated_real_feed_water"][
+                "active_search_intermediate_flange_orientation_unconstrained"
+            ]
+        )
+        self.assertTrue(
+            result["integrated_real_feed_water"][
+                "vertical_axis_detour_after_direct_rejection"
+            ]
+        )
+        self.assertTrue(
+            result["integrated_real_feed_water"]["active_search_vertical_axis_constraint"]
+        )
         node.dynamic_readiness.assert_called_once_with(execution_mode=None)
         node.active_search.assert_called_once_with(execute=False, confirm_real_motion=False)
         node.plan.assert_called_once_with()
@@ -298,7 +510,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertEqual(2, code)
         self.assertEqual("dynamic_route_plan_only", result["stage"])
         self.assertEqual(99999, result["planning_error_code"])
-        self.assertIn("direct fixed-orientation path", result["reason"])
+        self.assertIn("vertical-axis OMPL detour", result["reason"])
         self.assertEqual(
             "DIRECT_AND_DETOUR_PLANNING_FAILED",
             result["failure_diagnostic"]["classification"],
@@ -379,8 +591,9 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             )
         )
 
-        with patch(
-            "scripts.real_feed_water_integrated.RealPreMouthFromPerceptionPlan._goal_for_target",
+        with patch.object(
+            node,
+            "_search_goal_for_target",
             return_value=fake_goal,
         ), patch(
             "scripts.real_feed_water_integrated.rclpy.spin_until_future_complete"

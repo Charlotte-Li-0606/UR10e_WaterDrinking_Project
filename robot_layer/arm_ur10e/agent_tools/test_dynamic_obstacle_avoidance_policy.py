@@ -362,7 +362,7 @@ class MoveGroupDynamicProfileTest(unittest.TestCase):
 
 
 class RealPlanOnlyDynamicProfileTest(unittest.TestCase):
-    def test_real_wrapper_reuses_constraints_and_changes_only_planner_profile(self) -> None:
+    def test_real_wrapper_keeps_final_orientation_and_vertical_detour_axis(self) -> None:
         with patch.dict(os.environ, {}, clear=False):
             module = importlib.import_module(
                 "scripts.real_dynamic_obstacle_avoidance_plan"
@@ -386,30 +386,30 @@ class RealPlanOnlyDynamicProfileTest(unittest.TestCase):
         self.assertEqual(module.REPLAN_ATTEMPTS, goal.request.num_planning_attempts)
         self.assertEqual(1, len(goal.request.goal_constraints))
         self.assertEqual(1, len(goal.request.path_constraints.orientation_constraints))
-        path_orientation = goal.request.path_constraints.orientation_constraints[0]
+        goal_orientation = goal.request.goal_constraints[0].orientation_constraints[0]
         self.assertEqual(
-            module.MAX_PATH_ORIENTATION_DEVIATION_RAD,
+            module.ORIENTATION_TOLERANCE_RAD,
+            goal_orientation.absolute_x_axis_tolerance,
+        )
+        path_orientation = goal.request.path_constraints.orientation_constraints[0]
+        self.assertAlmostEqual(
+            module.VERTICAL_AXIS_COMPONENT_TOLERANCE_RAD,
             path_orientation.absolute_x_axis_tolerance,
         )
-        self.assertEqual(
-            module.MAX_PATH_ORIENTATION_DEVIATION_RAD,
-            path_orientation.absolute_y_axis_tolerance,
-        )
-        self.assertEqual(
-            module.MAX_PATH_ORIENTATION_DEVIATION_RAD,
+        self.assertAlmostEqual(
+            module.FREE_TOOL_AXIS_SPIN_TOLERANCE_RAD,
             path_orientation.absolute_z_axis_tolerance,
         )
-        goal_orientation = goal.request.goal_constraints[0].orientation_constraints[0]
-        self.assertLess(
-            goal_orientation.absolute_x_axis_tolerance,
-            path_orientation.absolute_x_axis_tolerance,
+        self.assertEqual(
+            "vertical_axis_intermediate_dynamic_detour",
+            goal.request.path_constraints.name,
         )
         self.assertTrue(goal.planning_options.plan_only)
         self.assertTrue(goal.planning_options.replan)
         self.assertEqual(module.REPLAN_ATTEMPTS, goal.planning_options.replan_attempts)
         self.assertEqual(0.0, goal.planning_options.replan_delay)
 
-    def test_direct_profile_preserves_exact_orientation_pilz_path(self) -> None:
+    def test_direct_profile_uses_vertical_axis_pilz_path(self) -> None:
         module = importlib.import_module(
             "scripts.real_dynamic_obstacle_avoidance_plan"
         )
@@ -429,9 +429,18 @@ class RealPlanOnlyDynamicProfileTest(unittest.TestCase):
         self.assertEqual(module.PILZ_PIPELINE, goal.request.pipeline_id)
         self.assertEqual(module.PILZ_PLANNER, goal.request.planner_id)
         path_orientation = goal.request.path_constraints.orientation_constraints[0]
+        self.assertAlmostEqual(
+            module.VERTICAL_AXIS_COMPONENT_TOLERANCE_RAD,
+            path_orientation.absolute_x_axis_tolerance,
+        )
+        self.assertAlmostEqual(
+            module.FREE_TOOL_AXIS_SPIN_TOLERANCE_RAD,
+            path_orientation.absolute_z_axis_tolerance,
+        )
+        goal_orientation = goal.request.goal_constraints[0].orientation_constraints[0]
         self.assertEqual(
             module.ORIENTATION_TOLERANCE_RAD,
-            path_orientation.absolute_x_axis_tolerance,
+            goal_orientation.absolute_x_axis_tolerance,
         )
         self.assertFalse(goal.planning_options.replan)
 
@@ -508,6 +517,10 @@ class RealPlanOnlyDynamicProfileTest(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(module.DETOUR_ROUTE_STRATEGY, result["route_strategy"])
         self.assertTrue(result["detour_attempted"])
+        self.assertTrue(result["orientation_path_constraint"])
+        self.assertTrue(result["final_goal_orientation_constraint"])
+        self.assertFalse(result["intermediate_flange_orientation_unconstrained"])
+        self.assertTrue(result["tool_axis_spin_free"])
         self.assertEqual(direct_failure, result["direct_path_plan_result"])
         self.assertEqual(
             [direct_goal, detour_goal],

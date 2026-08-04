@@ -39,6 +39,7 @@ from controller_manager_msgs.srv import ListControllers  # noqa: E402
 from geometry_msgs.msg import Pose  # noqa: E402
 from moveit_msgs.action import ExecuteTrajectory, MoveGroup  # noqa: E402
 from moveit_msgs.msg import BoundingVolume, Constraints, OrientationConstraint, PositionConstraint  # noqa: E402
+from moveit_msgs.srv import GetPositionFK  # noqa: E402
 from rclpy.action import ActionClient  # noqa: E402
 from rclpy.duration import Duration  # noqa: E402
 from rclpy.node import Node  # noqa: E402
@@ -127,6 +128,21 @@ MAX_POSE_SPREAD_M = 0.025
 POSITION_TOLERANCE_M = 0.002
 ORIENTATION_TOLERANCE_RAD = 0.001
 FINAL_ORIENTATION_TOLERANCE_RAD = 0.01
+# The physical cup/tool must remain upright.  On this installation tool0 +Z is
+# the flange's downward axis, so it must stay within 5 degrees of base_link -Z.
+# The MoveIt rotation-vector constraint bounds the two tilt components.  Each
+# component is limited to 5/sqrt(2) degrees so their combined magnitude cannot
+# exceed the independently checked 5-degree physical limit.  Rotation about
+# tool0 +Z (wrist-3-style spin) remains free.
+MAX_TOOL_VERTICAL_TILT_RAD = math.radians(5.0)
+VERTICAL_AXIS_COMPONENT_TOLERANCE_RAD = MAX_TOOL_VERTICAL_TILT_RAD / math.sqrt(2.0)
+FREE_TOOL_AXIS_SPIN_TOLERANCE_RAD = math.pi
+TOOL_VERTICAL_AXIS_TOOL0 = (0.0, 0.0, 1.0)
+REQUIRED_VERTICAL_AXIS_BASE_LINK = (0.0, 0.0, -1.0)
+FK_SERVICE = "/compute_fk"
+FK_SERVICE_DISCOVERY_TIMEOUT_SEC = 2.0
+FK_WAYPOINT_TIMEOUT_SEC = 0.5
+FK_TRAJECTORY_VALIDATION_TIMEOUT_SEC = 15.0
 FINAL_STRAW_TARGET_TOLERANCE_M = 0.02
 RETURN_START_MATCH_TOLERANCE_M = 0.02
 RETURN_START_MATCH_ORIENTATION_TOLERANCE_RAD = 0.02
@@ -219,6 +235,48 @@ def _tool_x_axis_base(orientation_xyzw: list[float]) -> list[float]:
 def _quaternion_distance_rad(first: list[float], second: list[float]) -> float:
     dot = abs(sum(float(a) * float(b) for a, b in zip(first, second)))
     return 2.0 * math.acos(max(-1.0, min(1.0, dot)))
+
+
+def _tool_vertical_tilt_rad(orientation_xyzw: list[float]) -> float:
+    """Angle between tool0 +Z and base_link -Z, independent of tool spin."""
+    axis = _rotate_tool_vector(orientation_xyzw, TOOL_VERTICAL_AXIS_TOOL0)
+    magnitude = _norm(axis)
+    if not math.isfinite(magnitude) or magnitude < 1e-9:
+        raise RuntimeError("tool0 vertical axis in base_link is invalid")
+    dot = sum(
+        float(component) * float(required)
+        for component, required in zip(axis, REQUIRED_VERTICAL_AXIS_BASE_LINK)
+    ) / magnitude
+    return math.acos(max(-1.0, min(1.0, dot)))
+
+
+def _vertical_reference_quaternion(orientation_xyzw: list[float]) -> list[float]:
+    """Project an orientation to exact vertical while preserving its spin.
+
+    The returned orientation maps tool0 +Z to base_link -Z.  Its horizontal
+    tool +X heading is taken from the supplied orientation, avoiding an
+    unnecessary wrist spin when the constraint becomes active.
+    """
+    source = [float(component) for component in orientation_xyzw]
+    if len(source) != 4 or not all(math.isfinite(component) for component in source):
+        raise RuntimeError("tool0 orientation quaternion is invalid")
+    magnitude = math.sqrt(sum(component * component for component in source))
+    if magnitude < 1e-9:
+        raise RuntimeError("tool0 orientation quaternion has zero length")
+    source = [component / magnitude for component in source]
+    tool_x = _rotate_tool_vector(source, (1.0, 0.0, 0.0))
+    horizontal = math.hypot(tool_x[0], tool_x[1])
+    if horizontal >= 1e-6:
+        heading = math.atan2(tool_x[1], tool_x[0])
+    else:
+        tool_y = _rotate_tool_vector(source, (0.0, 1.0, 0.0))
+        if math.hypot(tool_y[0], tool_y[1]) < 1e-6:
+            raise RuntimeError("tool0 spin cannot be recovered from the supplied orientation")
+        heading = math.atan2(tool_y[1], tool_y[0]) + math.pi / 2.0
+    reference = [math.cos(heading / 2.0), math.sin(heading / 2.0), 0.0, 0.0]
+    if sum(a * b for a, b in zip(reference, source)) < 0.0:
+        reference = [-component for component in reference]
+    return reference
 
 
 def _quaternion_from_rpy(rpy: list[float]) -> list[float]:
@@ -349,6 +407,7 @@ class RealPreMouthFromPerceptionPlan(Node):
         # planning action and never contact the execution action endpoint.
         self.execute_trajectory: ActionClient | None = None
         self.controllers = self.create_client(ListControllers, "/controller_manager/list_controllers")
+        self.compute_fk = self.create_client(GetPositionFK, FK_SERVICE)
 
     def _execution_action_client(self) -> ActionClient:
         """Create the execution client only on the guarded execute path."""
@@ -586,6 +645,26 @@ class RealPreMouthFromPerceptionPlan(Node):
             for name, namespace in self.get_node_names_and_namespaces()
         ]
         tool0 = self._tool0_pose()
+        vertical_axis_guard: dict[str, Any] = {
+            "available": False,
+            "tool_axis_tool0": list(TOOL_VERTICAL_AXIS_TOOL0),
+            "required_axis_base_link": list(REQUIRED_VERTICAL_AXIS_BASE_LINK),
+            "maximum_tilt_rad": MAX_TOOL_VERTICAL_TILT_RAD,
+            "maximum_tilt_deg": math.degrees(MAX_TOOL_VERTICAL_TILT_RAD),
+        }
+        if tool0.get("available"):
+            try:
+                tilt = _tool_vertical_tilt_rad(tool0["orientation_quat_xyzw"])
+                vertical_axis_guard.update(
+                    {
+                        "available": True,
+                        "tilt_rad": tilt,
+                        "tilt_deg": math.degrees(tilt),
+                        "within_limit": tilt <= MAX_TOOL_VERTICAL_TILT_RAD,
+                    }
+                )
+            except (RuntimeError, TypeError, ValueError) as exc:
+                vertical_axis_guard["reason"] = str(exc)
         straw = None
         if tool0.get("available"):
             straw = _add(
@@ -605,6 +684,7 @@ class RealPreMouthFromPerceptionPlan(Node):
         return {
             "joint_state": self._joint_state_status(),
             "tool0_pose": tool0,
+            "tool_vertical_axis_guard": vertical_axis_guard,
             "ur_base_tf": self._frame_transform(UR_BASE_FRAME, BASE_FRAME),
             "current_straw_tip_pose": None
             if straw is None
@@ -712,6 +792,15 @@ class RealPreMouthFromPerceptionPlan(Node):
             failures.append("/joint_states is missing or incomplete")
         if not snapshot["tool0_pose"].get("available"):
             failures.append("TF base_link -> tool0 is unavailable")
+        vertical_axis = snapshot.get("tool_vertical_axis_guard", {})
+        if not vertical_axis.get("available"):
+            failures.append("tool vertical-axis alignment could not be verified")
+        elif not vertical_axis.get("within_limit"):
+            failures.append(
+                "tool0 +Z is not aligned with base_link -Z: "
+                f"tilt {float(vertical_axis.get('tilt_deg', float('nan'))):.2f} deg exceeds "
+                f"the {math.degrees(MAX_TOOL_VERTICAL_TILT_RAD):.1f} deg limit"
+            )
         if not snapshot["ur_base_tf"].get("available"):
             failures.append("TF base -> base_link is unavailable")
         if not snapshot["camera_tf"].get("available"):
@@ -765,6 +854,33 @@ class RealPreMouthFromPerceptionPlan(Node):
         constraint.weight = 1.0
         return constraint
 
+    @staticmethod
+    def _vertical_axis_constraint(target_pose: Pose) -> OrientationConstraint:
+        """Constrain tilt while leaving rotation about tool0 +Z free."""
+        reference = _vertical_reference_quaternion(
+            [
+                target_pose.orientation.x,
+                target_pose.orientation.y,
+                target_pose.orientation.z,
+                target_pose.orientation.w,
+            ]
+        )
+        constraint = OrientationConstraint()
+        constraint.header.frame_id = BASE_FRAME
+        constraint.link_name = TOOL_FRAME
+        (
+            constraint.orientation.x,
+            constraint.orientation.y,
+            constraint.orientation.z,
+            constraint.orientation.w,
+        ) = reference
+        constraint.absolute_x_axis_tolerance = VERTICAL_AXIS_COMPONENT_TOLERANCE_RAD
+        constraint.absolute_y_axis_tolerance = VERTICAL_AXIS_COMPONENT_TOLERANCE_RAD
+        constraint.absolute_z_axis_tolerance = FREE_TOOL_AXIS_SPIN_TOLERANCE_RAD
+        constraint.parameterization = OrientationConstraint.ROTATION_VECTOR
+        constraint.weight = 1.0
+        return constraint
+
     def _goal_for_target(self, target: dict[str, Any]) -> MoveGroup.Goal:
         pose = Pose()
         pose.position.x, pose.position.y, pose.position.z = target["position_m"]
@@ -797,11 +913,135 @@ class RealPreMouthFromPerceptionPlan(Node):
             goal.request.start_state.joint_state = self.latest_joint_state
             goal.request.start_state.is_diff = False
         goal.request.goal_constraints.append(constraints)
-        goal.request.path_constraints.orientation_constraints.append(self._orientation_constraint(pose))
+        goal.request.path_constraints.name = "tool_vertical_axis_with_free_spin"
+        goal.request.path_constraints.orientation_constraints.append(
+            self._vertical_axis_constraint(pose)
+        )
         goal.planning_options.plan_only = True
         goal.planning_options.look_around = False
         goal.planning_options.replan = False
         return goal
+
+    def _validate_trajectory_vertical_axis(
+        self,
+        trajectory: Any,
+        *,
+        deadline: float | None = None,
+    ) -> dict[str, Any]:
+        """Use MoveIt FK to reject any trajectory waypoint that tilts the cup."""
+        validation_deadline = min(
+            deadline if deadline is not None else float("inf"),
+            time.monotonic() + FK_TRAJECTORY_VALIDATION_TIMEOUT_SEC,
+        )
+        joint_trajectory = getattr(trajectory, "joint_trajectory", None)
+        names = list(getattr(joint_trajectory, "joint_names", []))
+        points = list(getattr(joint_trajectory, "points", []))
+        base = {
+            "success": False,
+            "stage": "trajectory_vertical_axis_validation",
+            "frame_id": BASE_FRAME,
+            "link_name": TOOL_FRAME,
+            "tool_axis_tool0": list(TOOL_VERTICAL_AXIS_TOOL0),
+            "required_axis_base_link": list(REQUIRED_VERTICAL_AXIS_BASE_LINK),
+            "maximum_tilt_rad": MAX_TOOL_VERTICAL_TILT_RAD,
+            "maximum_tilt_deg": math.degrees(MAX_TOOL_VERTICAL_TILT_RAD),
+            "sampled_waypoints": 0,
+            "trajectory_waypoints": len(points),
+        }
+        if not names or not points:
+            return {**base, "reason": "planned trajectory has no joint waypoints"}
+        if time.monotonic() >= validation_deadline:
+            return {**base, "reason": "vertical-axis validation deadline expired"}
+        if not self.compute_fk.wait_for_service(
+            timeout_sec=min(
+                FK_SERVICE_DISCOVERY_TIMEOUT_SEC,
+                max(0.0, validation_deadline - time.monotonic()),
+            )
+        ):
+            return {**base, "reason": f"{FK_SERVICE} is unavailable; refusing unvalidated trajectory"}
+
+        maximum_tilt = -1.0
+        maximum_index: int | None = None
+        for index, point in enumerate(points):
+            positions = [float(value) for value in point.positions]
+            if len(positions) != len(names) or not all(math.isfinite(value) for value in positions):
+                return {
+                    **base,
+                    "sampled_waypoints": index,
+                    "reason": f"trajectory waypoint {index} has invalid joint positions",
+                }
+            remaining = validation_deadline - time.monotonic()
+            if remaining <= 0.0:
+                return {
+                    **base,
+                    "sampled_waypoints": index,
+                    "reason": "vertical-axis validation timed out before all waypoints were checked",
+                }
+            request = GetPositionFK.Request()
+            request.header.frame_id = BASE_FRAME
+            request.fk_link_names = [TOOL_FRAME]
+            request.robot_state.joint_state.name = names
+            request.robot_state.joint_state.position = positions
+            request.robot_state.is_diff = False
+            future = self.compute_fk.call_async(request)
+            rclpy.spin_until_future_complete(
+                self,
+                future,
+                timeout_sec=min(FK_WAYPOINT_TIMEOUT_SEC, remaining),
+            )
+            response = future.result()
+            if response is None:
+                return {
+                    **base,
+                    "sampled_waypoints": index,
+                    "reason": f"FK timed out at trajectory waypoint {index}",
+                }
+            if int(response.error_code.val) != 1:
+                return {
+                    **base,
+                    "sampled_waypoints": index,
+                    "reason": (
+                        f"FK failed at trajectory waypoint {index} with error code "
+                        f"{int(response.error_code.val)}"
+                    ),
+                }
+            try:
+                pose_index = list(response.fk_link_names).index(TOOL_FRAME)
+                orientation = response.pose_stamped[pose_index].pose.orientation
+                quaternion = [orientation.x, orientation.y, orientation.z, orientation.w]
+                tilt = _tool_vertical_tilt_rad(quaternion)
+            except (IndexError, RuntimeError, TypeError, ValueError) as exc:
+                return {
+                    **base,
+                    "sampled_waypoints": index,
+                    "reason": f"invalid FK result at trajectory waypoint {index}: {exc}",
+                }
+            if tilt > maximum_tilt:
+                maximum_tilt = tilt
+                maximum_index = index
+            if tilt > MAX_TOOL_VERTICAL_TILT_RAD:
+                return {
+                    **base,
+                    "sampled_waypoints": index + 1,
+                    "maximum_observed_tilt_rad": tilt,
+                    "maximum_observed_tilt_deg": math.degrees(tilt),
+                    "maximum_tilt_waypoint_index": index,
+                    "reason": (
+                        f"trajectory waypoint {index} tilts tool0 +Z by "
+                        f"{math.degrees(tilt):.2f} deg from base_link -Z, above the "
+                        f"{math.degrees(MAX_TOOL_VERTICAL_TILT_RAD):.1f} deg limit"
+                    ),
+                }
+        return {
+            **base,
+            "success": True,
+            "sampled_waypoints": len(points),
+            "maximum_observed_tilt_rad": maximum_tilt,
+            "maximum_observed_tilt_deg": math.degrees(maximum_tilt),
+            "maximum_tilt_waypoint_index": maximum_index,
+            "wrist_3_joint_directly_commanded": False,
+            "tool_axis_spin_free": True,
+        }
 
     def _run_plan(self, target: dict[str, Any]) -> dict[str, Any]:
         self._validated_trajectory = None
@@ -823,8 +1063,14 @@ class RealPreMouthFromPerceptionPlan(Node):
             }
         result = wrapped_result.result
         success = int(result.error_code.val) == 1
+        vertical_axis_validation = None
         if success:
-            self._validated_trajectory = result.planned_trajectory
+            vertical_axis_validation = self._validate_trajectory_vertical_axis(
+                result.planned_trajectory
+            )
+            success = bool(vertical_axis_validation.get("success"))
+            if success:
+                self._validated_trajectory = result.planned_trajectory
         return {
             "success": success,
             "stage": "move_group_plan_only",
@@ -833,6 +1079,10 @@ class RealPreMouthFromPerceptionPlan(Node):
             "error_message": result.error_code.message,
             "planning_time_sec": float(result.planning_time),
             "planned_trajectory": _trajectory_summary(result.planned_trajectory),
+            "vertical_axis_validation": vertical_axis_validation,
+            "reason": None
+            if success or vertical_axis_validation is None
+            else vertical_axis_validation.get("reason"),
             "execution_sent": False,
         }
 
@@ -1389,6 +1639,17 @@ class RealPreMouthFromPerceptionPlan(Node):
         """Execute only the RobotTrajectory returned by the immediately prior plan."""
         if self._validated_trajectory is None:
             return {"success": False, "stage": "validated_trajectory", "reason": "no validated trajectory is cached"}
+        vertical_axis_validation = self._validate_trajectory_vertical_axis(
+            self._validated_trajectory
+        )
+        if not vertical_axis_validation.get("success"):
+            return {
+                "success": False,
+                "stage": "pre_execution_vertical_axis_validation",
+                "reason": vertical_axis_validation.get("reason"),
+                "vertical_axis_validation": vertical_axis_validation,
+                "execution_attempted": False,
+            }
         goal = ExecuteTrajectory.Goal()
         goal.trajectory = self._validated_trajectory
         client = self._execution_action_client()
@@ -1429,6 +1690,7 @@ class RealPreMouthFromPerceptionPlan(Node):
             "error_code": int(result.error_code.val),
             "error_message": result.error_code.message,
             "execution_attempted": True,
+            "vertical_axis_validation": vertical_axis_validation,
             "controller_goal_type": "MoveIt ExecuteTrajectory (validated MoveIt plan; no raw FollowJointTrajectory goal)",
         }
 
