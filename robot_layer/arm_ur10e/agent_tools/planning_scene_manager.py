@@ -53,6 +53,49 @@ COMBINED_TOOL_COLLISION_CENTER_TOOL0_M = (0.0, 0.0, 0.15)
 COMBINED_TOOL_COLLISION_TOUCH_LINKS = ("tool0", "flange", "wrist_3_link")
 
 
+def _normalized_quaternion_xyzw(value: Sequence[float]) -> list[float]:
+    magnitude = math.sqrt(sum(float(component) ** 2 for component in value))
+    if not math.isfinite(magnitude) or magnitude < 1e-12:
+        return [0.0, 0.0, 0.0, 1.0]
+    return [float(component) / magnitude for component in value]
+
+
+def _quaternion_multiply_xyzw(
+    first: Sequence[float], second: Sequence[float]
+) -> list[float]:
+    x1, y1, z1, w1 = _normalized_quaternion_xyzw(first)
+    x2, y2, z2, w2 = _normalized_quaternion_xyzw(second)
+    return _normalized_quaternion_xyzw(
+        [
+            w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+            w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+            w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+            w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+        ]
+    )
+
+
+def _rotate_vector_xyzw(
+    orientation: Sequence[float], vector: Sequence[float]
+) -> list[float]:
+    quaternion = _normalized_quaternion_xyzw(orientation)
+    # Use the equivalent rotation-matrix expression so the vector magnitude is
+    # retained exactly.
+    x, y, z, w = quaternion
+    vx, vy, vz = (float(component) for component in vector)
+    return [
+        (1.0 - 2.0 * (y * y + z * z)) * vx
+        + 2.0 * (x * y - z * w) * vy
+        + 2.0 * (x * z + y * w) * vz,
+        2.0 * (x * y + z * w) * vx
+        + (1.0 - 2.0 * (x * x + z * z)) * vy
+        + 2.0 * (y * z - x * w) * vz,
+        2.0 * (x * z - y * w) * vx
+        + 2.0 * (y * z + x * w) * vy
+        + (1.0 - 2.0 * (x * x + y * y)) * vz,
+    ]
+
+
 def combined_tool_collision_verification(
     attached_objects: Sequence[AttachedCollisionObject],
 ) -> dict[str, Any]:
@@ -98,7 +141,7 @@ def combined_tool_collision_verification(
         if primitive is not None
         else []
     )
-    actual_center = (
+    primitive_center = (
         [
             float(primitive_pose.position.x),
             float(primitive_pose.position.y),
@@ -107,13 +150,43 @@ def combined_tool_collision_verification(
         if primitive_pose is not None
         else []
     )
-    actual_orientation = (
+    primitive_orientation = (
         [
             float(primitive_pose.orientation.x),
             float(primitive_pose.orientation.y),
             float(primitive_pose.orientation.z),
             float(primitive_pose.orientation.w),
         ]
+        if primitive_pose is not None
+        else []
+    )
+    object_position = [
+        float(collision.pose.position.x),
+        float(collision.pose.position.y),
+        float(collision.pose.position.z),
+    ]
+    object_orientation = [
+        float(collision.pose.orientation.x),
+        float(collision.pose.orientation.y),
+        float(collision.pose.orientation.z),
+        float(collision.pose.orientation.w),
+    ]
+    # MoveIt may canonicalize an attached shape by moving the submitted
+    # primitive offset into CollisionObject.pose.  Verify the composed pose so
+    # both equivalent message representations are accepted without weakening
+    # the physical geometry check.
+    actual_center = (
+        [
+            object_position[index] + rotated
+            for index, rotated in enumerate(
+                _rotate_vector_xyzw(object_orientation, primitive_center)
+            )
+        ]
+        if primitive_pose is not None
+        else []
+    )
+    actual_orientation = (
+        _quaternion_multiply_xyzw(object_orientation, primitive_orientation)
         if primitive_pose is not None
         else []
     )
@@ -172,6 +245,10 @@ def combined_tool_collision_verification(
         "actual_dimensions_m": actual_dimensions,
         "actual_center_tool0_m": actual_center,
         "actual_orientation_quat_xyzw": actual_orientation,
+        "object_pose_position_tool0_m": object_position,
+        "object_pose_orientation_quat_xyzw": object_orientation,
+        "primitive_pose_position_m": primitive_center,
+        "primitive_pose_orientation_quat_xyzw": primitive_orientation,
         "actual_touch_links": actual_touch_links,
         "checks": {
             "link": link_ok,

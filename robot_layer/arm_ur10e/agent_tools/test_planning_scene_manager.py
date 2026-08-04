@@ -85,6 +85,16 @@ class MultiPersonPlanningSceneTest(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertFalse(result["checks"]["dimensions"])
 
+    def test_combined_tool_verification_accepts_moveit_pose_canonicalization(self) -> None:
+        attached = PlanningSceneObstacleManager.build_combined_tool_attached_collision()
+        attached.object.pose.position.z = 0.15
+        attached.object.primitive_poses[0].position.z = 0.0
+
+        result = combined_tool_collision_verification([attached])
+
+        self.assertTrue(result["success"])
+        self.assertEqual([0.0, 0.0, 0.15], result["actual_center_tool0_m"])
+
     def test_geometry_is_built_behind_each_face_from_the_camera(self) -> None:
         manager = _manager()
         objects, people = manager.build_collision_objects_for_people(
