@@ -368,6 +368,109 @@ def _quaternion_distance_rad(first: list[float], second: list[float]) -> float:
     return 2.0 * math.acos(max(-1.0, min(1.0, dot)))
 
 
+def _execution_target_verification(
+    *,
+    final_tool0: dict[str, Any],
+    start_tool0: dict[str, Any],
+    target_tool0: dict[str, Any],
+    target_straw_tip_position_m: list[float],
+) -> dict[str, Any]:
+    """Verify the executed pose against the planned target, not the start.
+
+    Adaptive yaw intentionally changes the tool quaternion from its starting
+    value.  The start-to-final difference remains useful diagnostic data, but
+    only final-to-target error determines whether execution reached the
+    orientation MoveIt planned and collision-checked.
+    """
+    if not final_tool0.get("available"):
+        return {
+            "available": False,
+            "reason": "final TF base_link -> tool0 is unavailable",
+        }
+    final_position = _finite_xyz(final_tool0.get("position_m"))
+    start_position = _finite_xyz(start_tool0.get("position_m"))
+    target_straw = _finite_xyz(target_straw_tip_position_m)
+    orientations: dict[str, list[float]] = {}
+    for label, source in (
+        ("final", final_tool0),
+        ("start", start_tool0),
+        ("target", target_tool0),
+    ):
+        raw = source.get("orientation_quat_xyzw")
+        if not isinstance(raw, (list, tuple)) or len(raw) != 4:
+            return {
+                "available": False,
+                "reason": f"{label} tool0 orientation is unavailable",
+            }
+        try:
+            converted = [float(value) for value in raw]
+        except (TypeError, ValueError):
+            return {
+                "available": False,
+                "reason": f"{label} tool0 orientation is invalid",
+            }
+        magnitude = math.sqrt(sum(value * value for value in converted))
+        if (
+            not all(math.isfinite(value) for value in converted)
+            or not math.isfinite(magnitude)
+            or magnitude < 1e-9
+        ):
+            return {
+                "available": False,
+                "reason": f"{label} tool0 orientation is invalid",
+            }
+        orientations[label] = [value / magnitude for value in converted]
+    if final_position is None or start_position is None or target_straw is None:
+        return {
+            "available": False,
+            "reason": "start, final, or target execution position is invalid",
+        }
+
+    final_straw = _add(
+        final_position,
+        _rotate_tool_vector(
+            orientations["final"],
+            STRAW_TIP_OFFSET_TOOL0_M,
+        ),
+    )
+    final_error = _norm(_subtract(final_straw, target_straw))
+    start_to_final = _quaternion_distance_rad(
+        orientations["final"], orientations["start"]
+    )
+    start_to_target = _quaternion_distance_rad(
+        orientations["target"], orientations["start"]
+    )
+    final_to_target = _quaternion_distance_rad(
+        orientations["final"], orientations["target"]
+    )
+    orientation_matches_target = (
+        final_to_target <= FINAL_ORIENTATION_TOLERANCE_RAD
+    )
+    return {
+        "available": True,
+        "final_tool0_pose": final_tool0,
+        "final_straw_tip_pose": {
+            "frame_id": BASE_FRAME,
+            "position_m": final_straw,
+        },
+        "final_straw_tip_to_pre_mouth_error_m": final_error,
+        "actual_tool0_displacement_m": _subtract(
+            final_position, start_position
+        ),
+        "orientation_difference_from_start_rad": start_to_final,
+        "planned_orientation_difference_from_start_rad": start_to_target,
+        "final_orientation_error_from_planned_target_rad": final_to_target,
+        "straw_tip_within_target_tolerance": (
+            final_error <= FINAL_STRAW_TARGET_TOLERANCE_M
+        ),
+        "orientation_matches_planned_target": orientation_matches_target,
+        # Compatibility alias for existing report consumers.  "Stable" now
+        # means stable at the planned target, not unchanged from the start.
+        "orientation_stable": orientation_matches_target,
+        "orientation_verification_reference": "planned_target_tool0_orientation",
+    }
+
+
 def _tool_vertical_tilt_rad(orientation_xyzw: list[float]) -> float:
     """Angle between tool0 +Z and base_link -Z, independent of tool spin."""
     axis = _rotate_tool_vector(orientation_xyzw, TOOL_VERTICAL_AXIS_TOOL0)
@@ -3425,33 +3528,19 @@ class RealPreMouthFromPerceptionPlan(Node):
 
         execution_result = self._execute_validated_trajectory()
         final_tool0 = self._tool0_pose()
-        actual: dict[str, Any]
-        if final_tool0.get("available"):
-            final_straw = _add(
-                final_tool0["position_m"],
-                _rotate_tool_vector(final_tool0["orientation_quat_xyzw"], STRAW_TIP_OFFSET_TOOL0_M),
-            )
-            target_pre_mouth = prepared["pre_mouth_pose"]["position_m"]
-            final_error = _norm(_subtract(final_straw, target_pre_mouth))
-            orientation_error = _quaternion_distance_rad(
-                final_tool0["orientation_quat_xyzw"], start_tool0["orientation_quat_xyzw"]
-            )
-            actual = {
-                "final_tool0_pose": final_tool0,
-                "final_straw_tip_pose": {"frame_id": BASE_FRAME, "position_m": final_straw},
-                "final_straw_tip_to_pre_mouth_error_m": final_error,
-                "actual_tool0_displacement_m": _subtract(final_tool0["position_m"], start_tool0["position_m"]),
-                "orientation_difference_from_start_rad": orientation_error,
-                "straw_tip_within_target_tolerance": final_error <= FINAL_STRAW_TARGET_TOLERANCE_M,
-                "orientation_stable": orientation_error <= FINAL_ORIENTATION_TOLERANCE_RAD,
-            }
-        else:
-            actual = {"available": False, "reason": "final TF base_link -> tool0 is unavailable"}
+        actual = _execution_target_verification(
+            final_tool0=final_tool0,
+            start_tool0=start_tool0,
+            target_tool0=prepared.get("target_tool0_pose", {}),
+            target_straw_tip_position_m=prepared.get("pre_mouth_pose", {}).get(
+                "position_m", []
+            ),
+        )
 
         success = bool(
             execution_result.get("success")
             and actual.get("straw_tip_within_target_tolerance")
-            and actual.get("orientation_stable")
+            and actual.get("orientation_matches_planned_target")
         )
         prepared.update(
             {
@@ -3465,7 +3554,16 @@ class RealPreMouthFromPerceptionPlan(Node):
             }
         )
         if not success:
-            prepared["reason"] = "MoveIt execution failed, the tool orientation changed, or the straw missed the pre-mouth target"
+            failures: list[str] = []
+            if not execution_result.get("success"):
+                failures.append("MoveIt execution failed")
+            if not actual.get("straw_tip_within_target_tolerance"):
+                failures.append("the straw missed the pre-mouth target")
+            if not actual.get("orientation_matches_planned_target"):
+                failures.append("the final tool orientation missed the planned target")
+            prepared["reason"] = "; ".join(failures) or (
+                actual.get("reason") or "post-execution verification failed"
+            )
         return (0 if success else 2), prepared
 
 

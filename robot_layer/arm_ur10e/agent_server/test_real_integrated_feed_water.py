@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -30,10 +31,95 @@ from scripts.real_premouth_from_perception_plan import (
     ADAPTIVE_PREMOUTH_YAWS_DEG,
     RealPreMouthFromPerceptionPlan,
     _adaptive_premouth_pose_candidates,
+    _execution_target_verification,
 )
 
 
 class RealIntegratedFeedWaterTest(unittest.TestCase):
+    def test_execution_verification_accepts_planned_adaptive_yaw(self) -> None:
+        actual = _execution_target_verification(
+            start_tool0={
+                "available": True,
+                "position_m": [-0.19486736, 0.16107203, 0.85729495],
+                "orientation_quat_xyzw": [
+                    0.63927172,
+                    0.76898093,
+                    -0.00002742,
+                    -0.0000234,
+                ],
+            },
+            target_tool0={
+                "position_m": [-0.57143579, 0.27594522, 0.72439055],
+                "orientation_quat_xyzw": [
+                    0.41846215,
+                    0.90823423,
+                    -0.00002043,
+                    -0.0000297,
+                ],
+            },
+            final_tool0={
+                "available": True,
+                "position_m": [-0.57158251, 0.275892, 0.72437274],
+                "orientation_quat_xyzw": [
+                    0.41830535,
+                    0.90830646,
+                    -0.00003931,
+                    -0.00003945,
+                ],
+            },
+            target_straw_tip_position_m=[
+                -0.64291147,
+                0.35955878,
+                0.72439461,
+            ],
+        )
+
+        self.assertTrue(actual["straw_tip_within_target_tolerance"])
+        self.assertTrue(actual["orientation_matches_planned_target"])
+        self.assertTrue(actual["orientation_stable"])
+        self.assertAlmostEqual(
+            math.radians(30.0),
+            actual["planned_orientation_difference_from_start_rad"],
+            places=6,
+        )
+        self.assertLess(
+            actual["final_orientation_error_from_planned_target_rad"],
+            math.radians(0.02),
+        )
+        self.assertGreater(
+            actual["orientation_difference_from_start_rad"],
+            math.radians(29.0),
+        )
+
+    def test_execution_verification_rejects_start_pose_when_target_has_yaw(self) -> None:
+        start = {
+            "available": True,
+            "position_m": [0.0, 0.0, 0.0],
+            "orientation_quat_xyzw": [1.0, 0.0, 0.0, 0.0],
+        }
+        target = {
+            "position_m": [0.0, 0.0, 0.0],
+            "orientation_quat_xyzw": [
+                math.cos(math.radians(15.0)),
+                math.sin(math.radians(15.0)),
+                0.0,
+                0.0,
+            ],
+        }
+
+        actual = _execution_target_verification(
+            start_tool0=start,
+            target_tool0=target,
+            final_tool0=start,
+            target_straw_tip_position_m=[0.11, 0.0, 0.0],
+        )
+
+        self.assertFalse(actual["orientation_matches_planned_target"])
+        self.assertAlmostEqual(
+            0.0,
+            actual["orientation_difference_from_start_rad"],
+        )
+
     def test_adaptive_goal_generator_builds_all_standoff_yaw_candidates(self) -> None:
         candidates = _adaptive_premouth_pose_candidates(
             mouth_position_m=[-0.9, 0.03, 0.65],
