@@ -9,7 +9,8 @@
 - Preserve the OpenClaw implementation as a legacy fallback. Do not delete or
   modify it unless the user explicitly asks to maintain or remove that version.
 - The physical workflow supports only the high-level, center-target
-  `feed_water` operation ending at an 80 mm pre-mouth hold. Keep tool0 +Z
+  `feed_water` operation. Its outbound segment ends at a validated pre-mouth
+  hold. Keep tool0 +Z
   aligned with base_link -Z within 5 degrees throughout active-search and
   obstacle-detour trajectories, while allowing spin around tool0 Z. Validate
   every trajectory waypoint with MoveIt FK before execution and refuse if the
@@ -21,7 +22,38 @@
   and collision-check every segment through MoveIt, enforce joint and workspace
   limits, and preserve all unrelated runtime gates. Never substitute arbitrary
   user-supplied joints, poses, trajectories, controller commands, gripper
-  actions, direct mouth contact, cup tilt, pouring, or an automatic retreat.
+  actions, direct mouth contact, cup tilt, or pouring.
+
+## Guarded return to initial position
+
+- The high-level real `feed_water` workflow may include one automatic return
+  after a successful pre-mouth hold. The return is part of that same guarded
+  operation; it is not exposed as a standalone real-motion tool and does not
+  broaden authorization to arbitrary joint or pose commands.
+- The only approved return target is the versioned `initial_position` defined
+  by project configuration. Reject runtime overrides of its joints, pose,
+  frame, orientation, or name. Treat the configured joint target as
+  authoritative and use its recorded tool pose only as an FK verification
+  reference in the verified MoveIt planning frame.
+- Preserve tool0 +Z alignment with base_link -Z within 5 degrees throughout
+  the return, while allowing free spin around tool0 Z. Validate every sampled
+  return waypoint with MoveIt FK before execution and never command
+  `wrist_3_joint` directly.
+- Collision checking is mandatory for the complete return. A Cartesian return
+  may be used only when MoveIt reports a complete, collision-free path. If it
+  is incomplete or invalid, use a collision-checked MoveIt detour to the same
+  fixed target. Never send a raw joint/controller command, ignore a collision,
+  or silently relax the flange-axis constraint.
+- Recheck the controller, External Control program, robot/safety mode, speed
+  slider, start state, target state, attached tool geometry, fixed human
+  objects, and current OctoMap immediately before sending the return
+  trajectory. If any gate, target verification, plan, or execution check
+  fails, remain at pre-mouth and report the exact refusal; do not attempt an
+  alternate unguarded retreat.
+- Plan-only mode may validate the return but must never send it. Real return
+  execution retains `UR10E_ALLOW_REAL_EXECUTION=1` and
+  `--confirm-real-motion`, and the structured report must distinguish outbound
+  and return planning/execution results.
 
 ## Real-motion authorization
 
