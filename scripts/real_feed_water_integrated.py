@@ -10,7 +10,11 @@ steps are bounded Cartesian translations and left/right steps are bounded pose
 rotations about tool0 local Z. Throughout search and obstacle routes, tool0 +Z
 must remain aligned with base_link -Z within five degrees; MoveIt may choose
 spin about that axis, including wrist_3_joint motion. The final pre-mouth goal
-retains its validated full orientation.
+retains its validated full orientation. After a successful real hold, the same
+guarded process plans one collision-checked return to the fixed, versioned
+`initial_position`; it preserves the human scene, OctoMap, attached tool body,
+and vertical-axis constraint, and rechecks every return waypoint immediately
+before dispatch.
 
 Plan mode never creates an execution request.  Execute mode retains the
 existing environment, confirmation, controller, External Control, safety,
@@ -37,9 +41,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import rclpy  # noqa: E402
 from geometry_msgs.msg import Pose  # noqa: E402
-from moveit_msgs.action import ExecuteTrajectory  # noqa: E402
-from moveit_msgs.msg import RobotState  # noqa: E402
+from moveit_msgs.action import ExecuteTrajectory, MoveGroup  # noqa: E402
+from moveit_msgs.msg import Constraints, JointConstraint, RobotState  # noqa: E402
 from moveit_msgs.srv import GetStateValidity  # noqa: E402
+from sensor_msgs.msg import JointState  # noqa: E402
 from std_srvs.srv import Empty  # noqa: E402
 from ur_dashboard_msgs.msg import RobotMode, SafetyMode  # noqa: E402
 
@@ -77,6 +82,7 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
     PILZ_PLANNER,
     STRAW_TIP_OFFSET_TOOL0_M,
     TOOL_FRAME,
+    UR_BASE_FRAME,
     RealPreMouthFromPerceptionPlan,
     _add,
     _adaptive_premouth_pose_candidates,
@@ -119,6 +125,15 @@ SEARCH_DIRECTIONAL_CANDIDATE_DISTANCES_M = (0.050, 0.040, 0.030, 0.020)
 EXECUTION_MOUTH_DRIFT_CONFIRMATION_WINDOW_SEC = 1.0
 EXECUTION_MOUTH_DRIFT_CONFIRMATION_MIN_SAMPLES = 3
 MAX_EXECUTION_TARGET_DRIFT_M = 0.050
+INITIAL_POSITION_CONFIG = (
+    PROJECT_ROOT / "config" / "ur10e_real" / "initial_position.json"
+)
+DEFAULT_PREMOUTH_HOLD_SEC = 10.0
+MIN_PREMOUTH_HOLD_SEC = 2.0
+MAX_PREMOUTH_HOLD_SEC = 10.0
+RETURN_JOINT_GOAL_TOLERANCE_RAD = math.radians(1.0)
+RETURN_PLANNING_ATTEMPTS = 3
+RETURN_PLANNING_TIME_SEC = 10.0
 SEARCH_OFFSETS_CAMERA_OPTICAL = (
     ("backward_wide", (0.0, 0.0, -SEARCH_BACK_DISTANCE_M)),
     (
@@ -150,6 +165,200 @@ def _quaternion_multiply_xyzw(
     if not math.isfinite(magnitude) or magnitude < 1e-9:
         raise ValueError("quaternion product is not finite and nonzero")
     return [value / magnitude for value in result]
+
+
+def _axis_angle_vector_to_quaternion_xyzw(
+    rotation_vector_rad: list[float],
+) -> list[float]:
+    """Convert a UR/PolyScope rotation vector to a normalized quaternion."""
+    if len(rotation_vector_rad) != 3:
+        raise ValueError("rotation vector must contain three values")
+    vector = [float(value) for value in rotation_vector_rad]
+    if not all(math.isfinite(value) for value in vector):
+        raise ValueError("rotation vector must contain finite values")
+    angle = _norm(vector)
+    if angle < 1e-12:
+        return [0.0, 0.0, 0.0, 1.0]
+    scale = math.sin(angle / 2.0) / angle
+    return [
+        vector[0] * scale,
+        vector[1] * scale,
+        vector[2] * scale,
+        math.cos(angle / 2.0),
+    ]
+
+
+def _load_initial_position_config(
+    path: Path = INITIAL_POSITION_CONFIG,
+) -> dict[str, Any]:
+    """Load the one immutable return target and normalize degrees to radians."""
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if raw.get("schema_version") != 2:
+        raise ValueError("initial_position must use schema version 2")
+    if raw.get("name") != "initial_position":
+        raise ValueError("return configuration name must be initial_position")
+    names = raw.get("joint_names")
+    degrees = raw.get("joint_positions_deg")
+    if names != list(EXPECTED_JOINTS):
+        raise ValueError("initial_position joint_names must exactly match the MoveIt group")
+    if not isinstance(degrees, list) or len(degrees) != len(EXPECTED_JOINTS):
+        raise ValueError("initial_position must contain six joint positions")
+    joint_degrees = [float(value) for value in degrees]
+    if not all(math.isfinite(value) for value in joint_degrees):
+        raise ValueError("initial_position joint positions must be finite")
+    if raw.get("authoritative_target") != "joint_positions_deg":
+        raise ValueError("initial_position must declare the fixed joints authoritative")
+    fk_reference = raw.get("moveit_tool0_fk_reference")
+    if not isinstance(fk_reference, dict):
+        raise ValueError("initial_position MoveIt FK reference is missing")
+    if fk_reference.get("frame_id") != BASE_FRAME:
+        raise ValueError("initial-position FK reference must use base_link")
+    fk_position = fk_reference.get("position_m")
+    fk_orientation = fk_reference.get("orientation_quat_xyzw")
+    if not isinstance(fk_position, list) or len(fk_position) != 3:
+        raise ValueError("initial-position FK reference must contain three position values")
+    if not isinstance(fk_orientation, list) or len(fk_orientation) != 4:
+        raise ValueError("initial-position FK reference must contain a quaternion")
+    fk_position_m = [float(value) for value in fk_position]
+    fk_orientation_xyzw = [float(value) for value in fk_orientation]
+    fk_orientation_norm = _norm(fk_orientation_xyzw)
+    if not all(
+        math.isfinite(value)
+        for value in fk_position_m + fk_orientation_xyzw
+    ) or fk_orientation_norm < 1e-12:
+        raise ValueError("initial-position FK reference must be finite and nonzero")
+    fk_orientation_xyzw = [
+        value / fk_orientation_norm for value in fk_orientation_xyzw
+    ]
+    fk_source = str(fk_reference.get("source", "")).strip()
+    if not fk_source:
+        raise ValueError("initial-position FK reference source is missing")
+    displayed = raw.get("operator_displayed_tool_pose")
+    if not isinstance(displayed, dict):
+        raise ValueError("operator-displayed initial tool pose is missing")
+    if displayed.get("frame_id") != "unverified_polyscope_active_feature":
+        raise ValueError("operator-displayed pose must retain its unverified feature frame")
+    if displayed.get("rotation_convention") != "polyscope_axis_angle_vector":
+        raise ValueError("operator-displayed orientation must use a PolyScope rotation vector")
+    displayed_position = displayed.get("position_m")
+    displayed_rotation = displayed.get("rotation_vector_rad")
+    if not isinstance(displayed_position, list) or len(displayed_position) != 3:
+        raise ValueError("operator-displayed tool position must contain three values")
+    if not isinstance(displayed_rotation, list) or len(displayed_rotation) != 3:
+        raise ValueError("operator-displayed tool rotation vector must contain three values")
+    displayed_position_m = [float(value) for value in displayed_position]
+    displayed_rotation_rad = [float(value) for value in displayed_rotation]
+    if not all(
+        math.isfinite(value)
+        for value in displayed_position_m + displayed_rotation_rad
+    ):
+        raise ValueError("operator-displayed initial tool pose must be finite")
+    displayed_delta = float(
+        displayed.get("moveit_target_position_delta_m", float("nan"))
+    )
+    if not math.isfinite(displayed_delta) or displayed_delta <= 0.0:
+        raise ValueError("operator-displayed pose must record the measured FK offset")
+    if displayed.get("verification_status") != (
+        "not_used_as_a_moveit_base_frame_reference"
+    ):
+        raise ValueError("operator-displayed pose verification status is invalid")
+    verification = raw.get("verification")
+    if not isinstance(verification, dict):
+        raise ValueError("initial_position verification tolerances are missing")
+    required_tolerances = (
+        "maximum_fk_position_error_m",
+        "maximum_fk_orientation_error_deg",
+        "maximum_final_joint_error_deg",
+        "maximum_final_tool_position_error_m",
+        "maximum_final_tool_orientation_error_deg",
+        "maximum_tool_vertical_tilt_deg",
+    )
+    tolerances = {name: float(verification[name]) for name in required_tolerances}
+    if not all(math.isfinite(value) and value > 0.0 for value in tolerances.values()):
+        raise ValueError("initial_position verification tolerances must be finite and positive")
+    return {
+        "schema_version": 2,
+        "name": "initial_position",
+        "config_path": str(path),
+        "joint_names": list(EXPECTED_JOINTS),
+        "joint_positions_deg": joint_degrees,
+        "joint_positions_rad": [math.radians(value) for value in joint_degrees],
+        "authoritative_target": "joint_positions_deg",
+        "moveit_tool0_fk_reference": {
+            "frame_id": BASE_FRAME,
+            "position_m": fk_position_m,
+            "orientation_quat_xyzw": fk_orientation_xyzw,
+            "source": fk_source,
+        },
+        "operator_displayed_tool_pose": {
+            "frame_id": "unverified_polyscope_active_feature",
+            "position_m": displayed_position_m,
+            "rotation_vector_rad": displayed_rotation_rad,
+            "orientation_quat_xyzw": _axis_angle_vector_to_quaternion_xyzw(
+                displayed_rotation_rad
+            ),
+            "rotation_convention": "polyscope_axis_angle_vector",
+            "moveit_target_position_delta_m": displayed_delta,
+            "verification_status": str(displayed.get("verification_status", "")),
+            "note": str(displayed.get("note", "")),
+        },
+        "verification": tolerances,
+    }
+
+
+def _recorded_tool_pose_in_base_link(
+    config: dict[str, Any],
+    base_from_base_link: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return the versioned calibrated FK reference in MoveIt's base_link."""
+    del base_from_base_link  # Kept for source compatibility with older tests/tools.
+    reference = config["moveit_tool0_fk_reference"]
+    return {
+        "frame_id": BASE_FRAME,
+        "link_name": TOOL_FRAME,
+        "position_m": list(reference["position_m"]),
+        "orientation_quat_xyzw": list(reference["orientation_quat_xyzw"]),
+        "source": reference["source"],
+    }
+
+
+def _trajectory_final_joint_error(
+    trajectory: Any,
+    target_positions_rad: dict[str, float],
+) -> dict[str, Any]:
+    """Measure the final planned joints against the fixed initial target."""
+    joint_trajectory = getattr(trajectory, "joint_trajectory", None)
+    names = list(getattr(joint_trajectory, "joint_names", []))
+    points = list(getattr(joint_trajectory, "points", []))
+    if not names or not points:
+        return {"available": False, "reason": "trajectory has no joint waypoints"}
+    final_positions = list(points[-1].positions)
+    if len(final_positions) != len(names):
+        return {"available": False, "reason": "trajectory final joint waypoint is incomplete"}
+    final = dict(zip(names, (float(value) for value in final_positions)))
+    missing = sorted(set(target_positions_rad) - set(final))
+    if missing:
+        return {
+            "available": False,
+            "reason": f"trajectory final waypoint is missing joints: {', '.join(missing)}",
+            "missing_joints": missing,
+        }
+    errors = {
+        name: abs(
+            math.atan2(
+                math.sin(final[name] - float(target)),
+                math.cos(final[name] - float(target)),
+            )
+        )
+        for name, target in target_positions_rad.items()
+    }
+    return {
+        "available": True,
+        "joint_errors_rad": errors,
+        "maximum_joint_error_rad": max(errors.values(), default=0.0),
+        "maximum_joint_error_deg": math.degrees(max(errors.values(), default=0.0)),
+        "final_joint_positions_rad": {name: final[name] for name in target_positions_rad},
+    }
 
 
 def _orientation_after_local_tool_z_rotation(
@@ -459,6 +668,636 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         ):
             return "UR robot mode left RUNNING during execution"
         return None
+
+    @staticmethod
+    def _fixed_initial_robot_state(config: dict[str, Any]) -> RobotState:
+        state = RobotState()
+        state.joint_state = JointState()
+        state.joint_state.name = list(config["joint_names"])
+        state.joint_state.position = list(config["joint_positions_rad"])
+        # Keep the monitored PlanningScene's attached collision geometry while
+        # replacing the manipulator joints with this fixed candidate state.
+        state.is_diff = True
+        return state
+
+    def _joint_goal_for_initial_position(
+        self,
+        config: dict[str, Any],
+        target_pose: dict[str, Any],
+    ) -> MoveGroup.Goal:
+        constraints = Constraints()
+        constraints.name = "fixed_initial_position_joint_goal"
+        for name, position in zip(
+            config["joint_names"], config["joint_positions_rad"]
+        ):
+            joint = JointConstraint()
+            joint.joint_name = str(name)
+            joint.position = float(position)
+            joint.tolerance_above = RETURN_JOINT_GOAL_TOLERANCE_RAD
+            joint.tolerance_below = RETURN_JOINT_GOAL_TOLERANCE_RAD
+            joint.weight = 1.0
+            constraints.joint_constraints.append(joint)
+
+        pose = Pose()
+        pose.position.x, pose.position.y, pose.position.z = target_pose["position_m"]
+        (
+            pose.orientation.x,
+            pose.orientation.y,
+            pose.orientation.z,
+            pose.orientation.w,
+        ) = target_pose["orientation_quat_xyzw"]
+        goal = MoveGroup.Goal()
+        goal.request.group_name = GROUP_NAME
+        goal.request.pipeline_id = OMPL_PIPELINE
+        goal.request.planner_id = OMPL_PLANNER
+        goal.request.num_planning_attempts = RETURN_PLANNING_ATTEMPTS
+        goal.request.allowed_planning_time = RETURN_PLANNING_TIME_SEC
+        goal.request.max_velocity_scaling_factor = self.trajectory_velocity_scaling
+        goal.request.max_acceleration_scaling_factor = (
+            self.trajectory_acceleration_scaling
+        )
+        if self.latest_joint_state is not None:
+            goal.request.start_state.joint_state = self.latest_joint_state
+            goal.request.start_state.is_diff = True
+        goal.request.goal_constraints.append(constraints)
+        goal.request.path_constraints.name = (
+            "return_tool_vertical_axis_with_free_spin"
+        )
+        goal.request.path_constraints.orientation_constraints.append(
+            self._vertical_axis_constraint(pose)
+        )
+        goal.planning_options.plan_only = True
+        goal.planning_options.look_around = False
+        goal.planning_options.replan = False
+        return goal
+
+    def _prepare_initial_position_target(self) -> dict[str, Any]:
+        """Verify the immutable joint target, FK reference, scene, and states."""
+        result: dict[str, Any] = {
+            "success": False,
+            "stage": "initial_position_validation",
+            "execution_sent": False,
+            "wrist_3_direct_command": False,
+            "collision_checking_required": True,
+            "vertical_axis_constraint_active": True,
+        }
+        try:
+            config = _load_initial_position_config()
+        except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            return {**result, "reason": f"initial position configuration is invalid: {exc}"}
+        self._wait_for_joint_state()
+        self._spin_for(0.2)
+        current_state = self._current_robot_state()
+        base_tf = self._frame_transform(UR_BASE_FRAME, BASE_FRAME)
+        target_state = self._fixed_initial_robot_state(config)
+        fk = self._fk_positions(target_state, (TOOL_FRAME,))
+        scene, _ = self._planning_scene_geometry()
+        current_validity = self._state_validity(
+            current_state,
+            label="return_start_state",
+        )
+        target_validity = self._state_validity(
+            target_state,
+            label="fixed_initial_position_state",
+        )
+        result.update(
+            {
+                "config": config,
+                "ur_base_tf": base_tf,
+                "target_fk": fk,
+                "planning_scene": scene,
+                "start_state_validity": current_validity,
+                "target_state_validity": target_validity,
+            }
+        )
+        failures: list[str] = []
+        if not base_tf.get("available"):
+            failures.append("base <- base_link transform is unavailable")
+        if not fk.get("available") or TOOL_FRAME not in fk.get("poses", {}):
+            failures.append(fk.get("reason") or "fixed initial-position FK is unavailable")
+        if not scene.get("available"):
+            failures.append(scene.get("reason") or "MoveIt PlanningScene is unavailable")
+        else:
+            if not scene.get("human_collision_objects_preserved"):
+                failures.append("fixed human head/torso/face objects are absent")
+            if scene.get("human_allowed_collision_pairs"):
+                failures.append("human allowed-collision entries are present")
+            if not scene.get("combined_tool_collision_geometry", {}).get("success"):
+                failures.append("combined camera/cup-holder/straw geometry is not verified")
+            if not scene.get("octomap", {}).get("present"):
+                failures.append("the current dynamic OctoMap is absent")
+        if not current_validity.get("valid"):
+            failures.append(
+                current_validity.get("reason") or "return start state is invalid"
+            )
+        if not target_validity.get("valid"):
+            failures.append(
+                target_validity.get("reason") or "fixed initial-position state is invalid"
+            )
+        if failures:
+            return {**result, "failures": failures, "reason": "; ".join(failures)}
+
+        target_pose = {
+            "frame_id": BASE_FRAME,
+            "link_name": TOOL_FRAME,
+            **fk["poses"][TOOL_FRAME],
+        }
+        try:
+            recorded_pose = _recorded_tool_pose_in_base_link(config)
+            fk_position_error = _norm(
+                _subtract(target_pose["position_m"], recorded_pose["position_m"])
+            )
+            fk_orientation_error = _quaternion_distance_rad(
+                target_pose["orientation_quat_xyzw"],
+                recorded_pose["orientation_quat_xyzw"],
+            )
+            target_tilt = _tool_vertical_tilt_rad(
+                target_pose["orientation_quat_xyzw"]
+            )
+        except (RuntimeError, TypeError, ValueError) as exc:
+            return {**result, "reason": f"initial-position pose verification failed: {exc}"}
+        target_in_ur_base = self._point_in_ur_base(
+            target_pose["position_m"], base_tf
+        )
+        target_radius = _norm(target_in_ur_base)
+        limits = config["verification"]
+        result.update(
+            {
+                "target_tool0_pose": target_pose,
+                "moveit_tool0_fk_reference": recorded_pose,
+                "operator_displayed_tool_pose": config[
+                    "operator_displayed_tool_pose"
+                ],
+                "fk_reference_position_error_m": fk_position_error,
+                "fk_reference_orientation_error_rad": fk_orientation_error,
+                "fk_reference_orientation_error_deg": math.degrees(
+                    fk_orientation_error
+                ),
+                "target_tool_vertical_tilt_rad": target_tilt,
+                "target_tool_vertical_tilt_deg": math.degrees(target_tilt),
+                "target_tool0_position_in_ur_base_m": target_in_ur_base,
+                "target_tool0_radius_from_ur_base_m": target_radius,
+            }
+        )
+        if fk_position_error > limits["maximum_fk_position_error_m"]:
+            failures.append(
+                "configured joints disagree with the versioned MoveIt FK position: "
+                f"{fk_position_error:.4f} m > "
+                f"{limits['maximum_fk_position_error_m']:.4f} m"
+            )
+        if fk_orientation_error > math.radians(
+            limits["maximum_fk_orientation_error_deg"]
+        ):
+            failures.append(
+                "configured joints disagree with the versioned MoveIt FK orientation: "
+                f"{math.degrees(fk_orientation_error):.2f} deg > "
+                f"{limits['maximum_fk_orientation_error_deg']:.2f} deg"
+            )
+        maximum_tilt = min(
+            MAX_TOOL_VERTICAL_TILT_RAD,
+            math.radians(limits["maximum_tool_vertical_tilt_deg"]),
+        )
+        if target_tilt > maximum_tilt:
+            failures.append(
+                f"initial-position tool tilt is {math.degrees(target_tilt):.2f} deg, "
+                f"above the {math.degrees(maximum_tilt):.2f} deg limit"
+            )
+        if target_radius > MAX_TOOL0_RADIUS_FROM_UR_BASE_M:
+            failures.append(
+                "initial-position target is outside the UR10e reach envelope"
+            )
+        if failures:
+            return {**result, "failures": failures, "reason": "; ".join(failures)}
+        result.update(
+            {
+                "success": True,
+                "reason": None,
+                "fixed_target_verified": True,
+            }
+        )
+        self._initial_target_robot_state = target_state
+        return result
+
+    def _validate_trajectory_collision_states(
+        self,
+        trajectory: Any,
+    ) -> dict[str, Any]:
+        """Recheck every cached return waypoint against the latest MoveIt scene."""
+        joint_trajectory = getattr(trajectory, "joint_trajectory", None)
+        names = list(getattr(joint_trajectory, "joint_names", []))
+        points = list(getattr(joint_trajectory, "points", []))
+        base: dict[str, Any] = {
+            "success": False,
+            "stage": "return_trajectory_collision_validation",
+            "trajectory_waypoints": len(points),
+            "sampled_waypoints": 0,
+            "collision_checking_required": True,
+        }
+        if not names or not points:
+            return {**base, "reason": "return trajectory has no joint waypoints"}
+        for index, point in enumerate(points):
+            positions = [float(value) for value in point.positions]
+            if len(positions) != len(names) or not all(
+                math.isfinite(value) for value in positions
+            ):
+                return {
+                    **base,
+                    "sampled_waypoints": index,
+                    "reason": f"return trajectory waypoint {index} is invalid",
+                }
+            state = RobotState()
+            state.joint_state = JointState()
+            state.joint_state.name = names
+            state.joint_state.position = positions
+            state.is_diff = True
+            validity = self._state_validity(
+                state,
+                label=f"return_trajectory_waypoint_{index}",
+            )
+            if not validity.get("available") or not validity.get("valid"):
+                return {
+                    **base,
+                    "sampled_waypoints": index + 1,
+                    "rejected_waypoint_index": index,
+                    "rejected_state_validity": validity,
+                    "collision_pairs": list(validity.get("collision_pairs", [])),
+                    "reason": (
+                        validity.get("reason")
+                        or f"return trajectory waypoint {index} is not collision-free"
+                    ),
+                }
+        return {
+            **base,
+            "success": True,
+            "sampled_waypoints": len(points),
+            "collision_pairs": [],
+            "reason": None,
+        }
+
+    def _plan_return_to_initial_position(
+        self,
+        prepared: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Prefer a complete Cartesian route, then a constrained OMPL route."""
+        base: dict[str, Any] = {
+            "success": False,
+            "stage": "return_plan",
+            "execution_sent": False,
+            "collision_checking_required": True,
+            "vertical_axis_constraint_active": True,
+            "tool_axis_spin_free": True,
+            "wrist_3_direct_command": False,
+        }
+        if not prepared.get("success"):
+            return {**base, "reason": "fixed initial-position target is not valid"}
+        config = prepared["config"]
+        target_pose = prepared["target_tool0_pose"]
+        targets = dict(
+            zip(config["joint_names"], config["joint_positions_rad"])
+        )
+        tolerance = math.radians(
+            config["verification"]["maximum_final_joint_error_deg"]
+        )
+        cartesian = self._run_cartesian_plan(target_pose)
+        cartesian_trajectory = self._validated_trajectory
+        cartesian_joint_error = _trajectory_final_joint_error(
+            cartesian_trajectory,
+            targets,
+        ) if cartesian_trajectory is not None else {
+            "available": False,
+            "reason": "no validated Cartesian trajectory",
+        }
+        cartesian_exact = bool(
+            cartesian.get("success")
+            and cartesian_joint_error.get("available")
+            and float(cartesian_joint_error["maximum_joint_error_rad"]) <= tolerance
+        )
+        if cartesian_exact:
+            return {
+                **base,
+                "success": True,
+                "reason": None,
+                "route_strategy": "complete_collision_checked_cartesian_return",
+                "planner": "moveit_compute_cartesian_path",
+                "cartesian_plan": cartesian,
+                "cartesian_final_joint_error": cartesian_joint_error,
+                "ompl_needed": False,
+                "validated_trajectory": _trajectory_summary(
+                    self._validated_trajectory
+                ),
+            }
+
+        # Do not execute a Cartesian IK branch that reaches the pose with the
+        # wrong configured joints. Ask MoveIt for the exact fixed joint goal.
+        self._validated_trajectory = None
+        ompl = self._run_goal(
+            self._joint_goal_for_initial_position(config, target_pose)
+        )
+        ompl_trajectory = self._validated_trajectory
+        ompl_joint_error = _trajectory_final_joint_error(
+            ompl_trajectory,
+            targets,
+        ) if ompl_trajectory is not None else {
+            "available": False,
+            "reason": "no validated OMPL trajectory",
+        }
+        ompl_exact = bool(
+            ompl.get("success")
+            and ompl_joint_error.get("available")
+            and float(ompl_joint_error["maximum_joint_error_rad"]) <= tolerance
+        )
+        if not ompl_exact:
+            self._validated_trajectory = None
+        return {
+            **base,
+            "success": ompl_exact,
+            "reason": None
+            if ompl_exact
+            else "MoveIt could not produce a collision-free, flange-down route to the fixed initial joints",
+            "route_strategy": (
+                "collision_checked_ompl_joint_return" if ompl_exact else None
+            ),
+            "planner": f"{OMPL_PIPELINE}/{OMPL_PLANNER}",
+            "cartesian_plan": cartesian,
+            "cartesian_final_joint_error": cartesian_joint_error,
+            "ompl_plan": ompl,
+            "ompl_final_joint_error": ompl_joint_error,
+            "ompl_needed": True,
+            "validated_trajectory": _trajectory_summary(
+                self._validated_trajectory
+            ) if self._validated_trajectory is not None else None,
+        }
+
+    def return_to_initial_position(
+        self,
+        *,
+        execute: bool,
+        confirm_real_motion: bool,
+    ) -> tuple[int, dict[str, Any]]:
+        """Validate, plan, and optionally execute the one configured return."""
+        response: dict[str, Any] = {
+            "success": False,
+            "stage": "return_to_initial_position",
+            "mode": "execute" if execute else "plan",
+            "execution_attempted": False,
+            "execution_sent": False,
+            "automatic_retreat_sent": False,
+            "collision_checking_required": True,
+            "vertical_axis_constraint_active": True,
+            "wrist_3_direct_command": False,
+        }
+        combined = self._apply_combined_tool_collision_geometry()
+        dynamic = self.dynamic_readiness(execution_mode=True if execute else None)
+        prepared = self._prepare_initial_position_target()
+        response.update(
+            {
+                "combined_tool_collision_geometry": combined,
+                "dynamic_octomap_readiness": dynamic,
+                "target_validation": prepared,
+            }
+        )
+        failures: list[str] = []
+        if not combined.get("success"):
+            failures.append(
+                combined.get("reason") or "attached tool collision geometry is invalid"
+            )
+        if not dynamic.get("success"):
+            failures.extend(str(item) for item in dynamic.get("failures", []))
+        if not prepared.get("success"):
+            failures.append(
+                prepared.get("reason") or "fixed initial-position target is invalid"
+            )
+        if failures:
+            response.update(
+                {
+                    "stage": "return_target_or_scene_refused",
+                    "failures": failures,
+                    "reason": "; ".join(failures),
+                }
+            )
+            return 2, response
+        if not execute:
+            response.update(
+                {
+                    "success": True,
+                    "stage": "return_target_validated",
+                    "reason": None,
+                    "route_planning_deferred": True,
+                    "route_planning_deferred_reason": (
+                        "the sequential return must be planned from the actual post-hold state"
+                    ),
+                }
+            )
+            return 0, response
+
+        execution_failures = self._execution_state_failures(
+            confirm_real_motion=confirm_real_motion
+        )
+        if execution_failures:
+            response.update(
+                {
+                    "stage": "return_execution_readiness",
+                    "failures": execution_failures,
+                    "reason": "; ".join(execution_failures),
+                }
+            )
+            return 2, response
+        plan = self._plan_return_to_initial_position(prepared)
+        response["plan_result"] = plan
+        if not plan.get("success") or self._validated_trajectory is None:
+            response.update(
+                {
+                    "stage": "return_planning_refused",
+                    "reason": plan.get("reason") or "validated return trajectory is unavailable",
+                }
+            )
+            return 2, response
+
+        # Refresh every live execution gate and both endpoint states after the
+        # plan. Refuse if the scene or controller changed before dispatch.
+        self._spin_for(0.2)
+        pre_execution_failures = self._execution_state_failures(
+            confirm_real_motion=confirm_real_motion
+        )
+        latest_dynamic = self.dynamic_readiness(execution_mode=True)
+        latest_scene, _ = self._planning_scene_geometry()
+        latest_start_validity = self._state_validity(
+            self._current_robot_state(),
+            label="return_pre_execution_start_state",
+        )
+        latest_target_validity = self._state_validity(
+            getattr(self, "_initial_target_robot_state", None),
+            label="return_pre_execution_target_state",
+        )
+        response.update(
+            {
+                "pre_execution_dynamic_octomap_readiness": latest_dynamic,
+                "pre_execution_planning_scene": latest_scene,
+                "pre_execution_start_state_validity": latest_start_validity,
+                "pre_execution_target_state_validity": latest_target_validity,
+            }
+        )
+        if not latest_dynamic.get("success"):
+            pre_execution_failures.extend(
+                str(item) for item in latest_dynamic.get("failures", [])
+            )
+        if not latest_scene.get("available"):
+            pre_execution_failures.append(
+                latest_scene.get("reason")
+                or "MoveIt PlanningScene is unavailable before return execution"
+            )
+        else:
+            if not latest_scene.get("human_collision_objects_preserved"):
+                pre_execution_failures.append(
+                    "fixed human head/torso/face objects disappeared before return execution"
+                )
+            if latest_scene.get("human_allowed_collision_pairs"):
+                pre_execution_failures.append(
+                    "human allowed-collision entries appeared before return execution"
+                )
+            if not latest_scene.get("combined_tool_collision_geometry", {}).get(
+                "success"
+            ):
+                pre_execution_failures.append(
+                    "combined camera/cup-holder/straw geometry is invalid before return execution"
+                )
+            if not latest_scene.get("octomap", {}).get("present"):
+                pre_execution_failures.append(
+                    "the dynamic OctoMap is absent before return execution"
+                )
+        if not latest_start_validity.get("valid"):
+            pre_execution_failures.append(
+                latest_start_validity.get("reason")
+                or "return pre-execution start state is invalid"
+            )
+        if not latest_target_validity.get("valid"):
+            pre_execution_failures.append(
+                latest_target_validity.get("reason")
+                or "return pre-execution target state is invalid"
+            )
+        if pre_execution_failures:
+            response.update(
+                {
+                    "stage": "return_pre_execution_refused",
+                    "failures": pre_execution_failures,
+                    "reason": "; ".join(pre_execution_failures),
+                }
+            )
+            return 2, response
+
+        trajectory_collision_validation = self._validate_trajectory_collision_states(
+            self._validated_trajectory
+        )
+        response["pre_execution_trajectory_collision_validation"] = (
+            trajectory_collision_validation
+        )
+        if not trajectory_collision_validation.get("success"):
+            response.update(
+                {
+                    "stage": "return_pre_execution_trajectory_refused",
+                    "reason": (
+                        trajectory_collision_validation.get("reason")
+                        or "the cached return trajectory is invalid in the latest scene"
+                    ),
+                }
+            )
+            return 2, response
+
+        execution = RealPreMouthFromPerceptionPlan._execute_validated_trajectory(
+            self
+        )
+        self._spin_for(0.2)
+        actual_pose = self._tool0_pose()
+        target_pose = prepared["target_tool0_pose"]
+        config = prepared["config"]
+        target_joints = dict(
+            zip(config["joint_names"], config["joint_positions_rad"])
+        )
+        current_joints = {}
+        if self.latest_joint_state is not None:
+            current_joints = dict(
+                zip(self.latest_joint_state.name, self.latest_joint_state.position)
+            )
+        joint_errors = {
+            name: abs(
+                math.atan2(
+                    math.sin(float(current_joints[name]) - float(target)),
+                    math.cos(float(current_joints[name]) - float(target)),
+                )
+            )
+            for name, target in target_joints.items()
+            if name in current_joints
+        }
+        final_joint_error = (
+            max(joint_errors.values())
+            if len(joint_errors) == len(target_joints)
+            else float("inf")
+        )
+        if actual_pose.get("available"):
+            final_position_error = _norm(
+                _subtract(actual_pose["position_m"], target_pose["position_m"])
+            )
+            final_orientation_error = _quaternion_distance_rad(
+                actual_pose["orientation_quat_xyzw"],
+                target_pose["orientation_quat_xyzw"],
+            )
+            try:
+                final_tilt = _tool_vertical_tilt_rad(
+                    actual_pose["orientation_quat_xyzw"]
+                )
+            except (RuntimeError, TypeError, ValueError):
+                final_tilt = float("inf")
+        else:
+            final_position_error = float("inf")
+            final_orientation_error = float("inf")
+            final_tilt = float("inf")
+        limits = config["verification"]
+        verified = bool(
+            execution.get("success")
+            and final_joint_error
+            <= math.radians(limits["maximum_final_joint_error_deg"])
+            and final_position_error
+            <= limits["maximum_final_tool_position_error_m"]
+            and final_orientation_error
+            <= math.radians(limits["maximum_final_tool_orientation_error_deg"])
+            and final_tilt <= MAX_TOOL_VERTICAL_TILT_RAD
+        )
+        response.update(
+            {
+                "success": verified,
+                "stage": (
+                    "returned_initial_position"
+                    if verified
+                    else "return_execution_or_verification_failed"
+                ),
+                "reason": None
+                if verified
+                else (
+                    execution.get("reason")
+                    or "return execution did not finish within the fixed target tolerances"
+                ),
+                "execution_result": execution,
+                "execution_attempted": bool(execution.get("execution_attempted")),
+                "execution_sent": bool(execution.get("execution_attempted")),
+                "automatic_retreat_sent": bool(
+                    execution.get("execution_attempted")
+                ),
+                "actual": {
+                    "tool0_pose": actual_pose,
+                    "joint_errors_rad": joint_errors,
+                    "maximum_joint_error_rad": final_joint_error,
+                    "maximum_joint_error_deg": math.degrees(final_joint_error),
+                    "tool0_position_error_m": final_position_error,
+                    "tool0_orientation_error_rad": final_orientation_error,
+                    "tool0_orientation_error_deg": math.degrees(
+                        final_orientation_error
+                    ),
+                    "tool_vertical_tilt_rad": final_tilt,
+                    "tool_vertical_tilt_deg": math.degrees(final_tilt),
+                },
+            }
+        )
+        return (0 if verified else 2), response
 
     def _explicit_no_face(self) -> bool:
         status = self.latest_mouth_status
@@ -2285,6 +3124,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         confirm_real_motion: bool,
         allow_validated_camera_ray_execute: bool,
         no_execute: bool,
+        hold_duration_sec: float = DEFAULT_PREMOUTH_HOLD_SEC,
     ) -> tuple[int, dict[str, Any]]:
         contract = {
             "multi_target_identity_lock": True,
@@ -2346,7 +3186,32 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "combined_static_and_dynamic_scene_checks": True,
             "same_target_replanning": True,
             "wait_for_clear": False,
+            "automatic_return_to_initial_position": True,
+            "return_target": "initial_position",
+            "return_collision_checking": True,
+            "return_vertical_axis_constraint": True,
+            "return_wrist_3_direct_command": False,
+            "pre_mouth_hold_duration_sec": float(hold_duration_sec),
         }
+        if (
+            isinstance(hold_duration_sec, bool)
+            or not math.isfinite(float(hold_duration_sec))
+            or not MIN_PREMOUTH_HOLD_SEC
+            <= float(hold_duration_sec)
+            <= MAX_PREMOUTH_HOLD_SEC
+        ):
+            return 2, {
+                "success": False,
+                "mode": "execute" if execute else "plan",
+                "stage": "hold_duration_validation",
+                "reason": (
+                    "pre-mouth hold must be finite and between "
+                    f"{MIN_PREMOUTH_HOLD_SEC:.0f} and {MAX_PREMOUTH_HOLD_SEC:.0f} seconds"
+                ),
+                "execution_attempted": False,
+                "execution_sent": False,
+                "integrated_real_feed_water": contract,
+            }
         if execute and no_execute:
             return 2, {
                 "success": False,
@@ -2442,7 +3307,72 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         result["dynamic_octomap_readiness"] = dynamic
         result["combined_tool_collision_geometry"] = combined_tool_geometry
         result["integrated_real_feed_water"] = contract
-        return code, result
+        if code != 0 or not result.get("success"):
+            return code, result
+
+        hold_report = {
+            "success": True,
+            "duration_sec": float(hold_duration_sec),
+            "motion_command_sent": False,
+            "completed": False,
+        }
+        if execute:
+            # Keep ROS state and the wrist RGB-D scene fresh during this
+            # deliberate no-command dwell at the validated pre-mouth pose.
+            self._spin_for(float(hold_duration_sec))
+            hold_report["completed"] = True
+        else:
+            hold_report.update(
+                {
+                    "completed": False,
+                    "plan_only": True,
+                    "reason": "no dwell is performed in plan-only mode",
+                }
+            )
+        return_code, return_result = self.return_to_initial_position(
+            execute=execute,
+            confirm_real_motion=confirm_real_motion,
+        )
+        result["pre_mouth_hold"] = hold_report
+        result["return_to_initial_position"] = return_result
+        result["automatic_retreat_sent"] = bool(
+            return_result.get("automatic_retreat_sent")
+        )
+        result["return_execution_attempted"] = bool(
+            return_result.get("execution_attempted")
+        )
+        result["return_execution_sent"] = bool(
+            return_result.get("execution_sent")
+        )
+        if return_code != 0 or not return_result.get("success"):
+            result.update(
+                {
+                    "success": False,
+                    "stage": "return_to_initial_position_refused",
+                    "reason": (
+                        return_result.get("reason")
+                        or "guarded return to initial_position was refused"
+                    ),
+                    "final_state": "holding_pre_mouth",
+                }
+            )
+            return 2, result
+        result.update(
+            {
+                "stage": (
+                    "returned_initial_position"
+                    if execute
+                    else "pre_mouth_and_return_target_validated"
+                ),
+                "final_state": (
+                    "initial_position"
+                    if execute
+                    else "pre_mouth_and_return_target_validated"
+                ),
+                "reason": None,
+            }
+        )
+        return 0, result
 
 
 def _parse_args() -> argparse.Namespace:
@@ -2450,6 +3380,14 @@ def _parse_args() -> argparse.Namespace:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--plan-only", action="store_true")
     mode.add_argument("--execute", action="store_true")
+    mode.add_argument(
+        "--validate-initial-position",
+        action="store_true",
+        help=(
+            "No-motion validation of the fixed return configuration, FK, "
+            "state validity, attached tool geometry, human objects, and OctoMap."
+        ),
+    )
     mode.add_argument(
         "--diagnose-frozen-mouth",
         nargs=3,
@@ -2475,6 +3413,15 @@ def _parse_args() -> argparse.Namespace:
         type=float,
         default=DEFAULT_TRAJECTORY_ACCELERATION_SCALING,
     )
+    parser.add_argument(
+        "--hold-duration",
+        type=float,
+        default=DEFAULT_PREMOUTH_HOLD_SEC,
+        help=(
+            "Motionless pre-mouth dwell before the guarded return "
+            f"({MIN_PREMOUTH_HOLD_SEC:.0f}-{MAX_PREMOUTH_HOLD_SEC:.0f} seconds)."
+        ),
+    )
     parser.add_argument("--report-file", type=Path)
     return parser.parse_args()
 
@@ -2489,7 +3436,14 @@ def main() -> int:
         trajectory_acceleration_scaling=args.trajectory_acceleration_scaling,
     )
     try:
-        if args.diagnose_frozen_mouth is not None:
+        if args.validate_initial_position:
+            code, result = node.return_to_initial_position(
+                execute=False,
+                confirm_real_motion=False,
+            )
+            result["execution_disabled"] = True
+            result["diagnostic"] = "validate_initial_position"
+        elif args.diagnose_frozen_mouth is not None:
             dynamic = node.dynamic_readiness(execution_mode=None)
             if dynamic.get("success"):
                 code, result = node.diagnose_frozen_mouth_static_scene(
@@ -2515,6 +3469,7 @@ def main() -> int:
                     args.allow_validated_camera_ray_execute
                 ),
                 no_execute=bool(args.no_execute),
+                hold_duration_sec=float(args.hold_duration),
             )
     finally:
         node.destroy_node()

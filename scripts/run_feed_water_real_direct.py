@@ -24,7 +24,11 @@ TOOL_RUNNER = (
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--plan-only", action="store_true", help="Plan the safe pre-mouth target; never execute.")
+    mode.add_argument(
+        "--plan-only",
+        action="store_true",
+        help="Plan the safe pre-mouth target and validate the fixed return target; never execute.",
+    )
     mode.add_argument("--execute", action="store_true", help="Request guarded real pre-mouth execution.")
     parser.add_argument(
         "--confirm-real-motion",
@@ -34,8 +38,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--hold-duration",
         type=float,
-        default=3.0,
-        help="Motionless pre-mouth dwell after successful execution (2-5 seconds; default: 3).",
+        default=10.0,
+        help=(
+            "Motionless pre-mouth dwell before the guarded return "
+            "(2-10 seconds; default: 10)."
+        ),
     )
     return parser.parse_args()
 

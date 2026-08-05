@@ -7,8 +7,9 @@ invokes ``scripts/real_feed_water_integrated.py``.  That real-only state
 machine retains selected-person identity, performs bounded active search with
 vertical tool-axis alignment and free tool-axis spin when needed,
 freezes the camera-ray 80 mm pre-mouth target, and uses the wrist OctoMap for
-same-target alternate-path replanning.  This adapter then optionally performs
-a motionless dwell at the final pre-mouth pose.
+same-target alternate-path replanning.  The integrated process performs the
+motionless pre-mouth dwell and the guarded return to its fixed configured
+initial position so all ROS state and MoveIt checks remain in one process.
 """
 
 from __future__ import annotations
@@ -35,8 +36,8 @@ MOUTH_SAMPLE_SECONDS = 1.0
 TRAJECTORY_VELOCITY_SCALING = 0.60
 TRAJECTORY_ACCELERATION_SCALING = 0.60
 MIN_HOLD_SECONDS = 2.0
-MAX_HOLD_SECONDS = 5.0
-DEFAULT_HOLD_SECONDS = 3.0
+MAX_HOLD_SECONDS = 10.0
+DEFAULT_HOLD_SECONDS = 10.0
 PIPELINE_TIMEOUT_SECONDS = 240.0
 
 
@@ -47,10 +48,10 @@ def _timestamp() -> tuple[str, str]:
 
 def _finite_hold_duration(value: Any) -> float:
     if isinstance(value, bool):
-        raise ValueError("hold_duration_sec must be between 2 and 5 seconds")
+        raise ValueError("hold_duration_sec must be between 2 and 10 seconds")
     duration = float(value)
     if not math.isfinite(duration) or not MIN_HOLD_SECONDS <= duration <= MAX_HOLD_SECONDS:
-        raise ValueError("hold_duration_sec must be between 2 and 5 seconds")
+        raise ValueError("hold_duration_sec must be between 2 and 10 seconds")
     return duration
 
 
@@ -64,6 +65,7 @@ def _pipeline_command(
     execute: bool,
     report_path: Path,
     target_selection: str,
+    hold_duration_sec: float,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -77,6 +79,8 @@ def _pipeline_command(
         str(TRAJECTORY_VELOCITY_SCALING),
         "--trajectory-acceleration-scaling",
         str(TRAJECTORY_ACCELERATION_SCALING),
+        "--hold-duration",
+        str(hold_duration_sec),
         "--report-file",
         str(report_path),
     ]
@@ -166,12 +170,51 @@ def _tool_report(
         if isinstance(pipeline.get("plan_result"), Mapping)
         else {}
     )
+    return_result = (
+        pipeline.get("return_to_initial_position")
+        if isinstance(pipeline.get("return_to_initial_position"), Mapping)
+        else {}
+    )
+    hold_result = (
+        pipeline.get("pre_mouth_hold")
+        if isinstance(pipeline.get("pre_mouth_hold"), Mapping)
+        else {}
+    )
     success = bool(pipeline.get("success"))
     reason = pipeline.get("reason")
     if not reason and isinstance(pipeline.get("failures"), list):
         reason = "; ".join(str(item) for item in pipeline["failures"])
     if not reason and not success:
         reason = f"validated pre-mouth pipeline refused at {pipeline.get('stage', 'unknown stage')}"
+    successful_stage = (
+        "returned_initial_position"
+        if execute and return_result.get("success")
+        else "pre_mouth_and_return_target_validated"
+        if not execute and return_result.get("success")
+        else "holding_pre_mouth"
+    )
+    reported_final_state = pipeline.get("final_state")
+    if reported_final_state in {
+        "initial_position",
+        "pre_mouth_and_return_target_validated",
+        "holding_pre_mouth",
+    }:
+        final_state = str(reported_final_state)
+    else:
+        final_state = (
+            "initial_position"
+            if success and execute and return_result.get("success")
+            else "pre_mouth_and_return_target_validated"
+            if success and not execute and return_result.get("success")
+            else "refused"
+            if not success
+            else "holding_pre_mouth"
+        )
+    report_stage = (
+        successful_stage
+        if success
+        else str(pipeline.get("stage") or "refused")
+    )
     report = {
         "schema_version": 1,
         "tool": "feed_water",
@@ -179,7 +222,7 @@ def _tool_report(
         "captured_at": captured_at,
         "success": success,
         "mode": "execute" if execute else "plan_only",
-        "stage": "holding_pre_mouth" if success and execute else "pre_mouth_plan_validated" if success else "refused",
+        "stage": report_stage,
         "reason": reason,
         "camera_tf_used": checks.get("camera_tf"),
         "camera_mount_match": checks.get("camera_mount_match"),
@@ -208,13 +251,25 @@ def _tool_report(
         "planned_displacement_m": pipeline.get("planned_tool0_translation_m"),
         "planned_displacement_norm_m": pipeline.get("planned_tool0_translation_norm_m"),
         "maximum_planned_displacement_m": MAXIMUM_PLAN_TRANSLATION_M,
-        "execution_attempted": bool(pipeline.get("execution_attempted")),
-        "execution_sent": bool(pipeline.get("execution_sent")),
+        "execution_attempted": bool(
+            pipeline.get("execution_attempted")
+            or return_result.get("execution_attempted")
+        ),
+        "execution_sent": bool(
+            pipeline.get("execution_sent")
+            or return_result.get("execution_sent")
+        ),
+        "outbound_execution_attempted": bool(pipeline.get("execution_attempted")),
+        "outbound_execution_sent": bool(pipeline.get("execution_sent")),
+        "return_to_initial_position": return_result,
+        "return_execution_attempted": bool(return_result.get("execution_attempted")),
+        "return_execution_sent": bool(return_result.get("execution_sent")),
         "final_straw_tip_pose": actual.get("final_straw_tip_pose"),
         "final_error_m": actual.get("final_straw_tip_to_pre_mouth_error_m"),
         "controller_result": execution_result,
         "hold_duration_sec": hold_duration_sec,
-        "hold_completed": bool(success and execute),
+        "hold_completed": bool(hold_result.get("completed")),
+        "pre_mouth_hold": hold_result,
         "safety_gates": {
             **dict(gates),
             "stable_mouth_pose": bool(checks.get("mouth_pose", {}).get("stable")),
@@ -255,8 +310,10 @@ def _tool_report(
         "direct_mouth_contact": False,
         "cup_tilt_commanded": False,
         "pour_commanded": False,
-        "automatic_retreat_sent": bool(pipeline.get("automatic_retreat_sent", False)),
-        "final_state": "holding_pre_mouth" if success and execute else "pre_mouth_plan_validated" if success else "refused",
+        "automatic_retreat_sent": bool(
+            return_result.get("automatic_retreat_sent", False)
+        ),
+        "final_state": final_state,
         "elapsed_sec": elapsed_sec,
         "pipeline_report_path": str(pipeline_report_path),
         "report_path": str(report_path),
@@ -356,6 +413,7 @@ def run_real_feed_water(
                 execute=execute,
                 report_path=pipeline_report_path,
                 target_selection=target_selection,
+                hold_duration_sec=duration,
             ),
             cwd=PROJECT_ROOT,
             env=child_environment,
@@ -387,10 +445,6 @@ def run_real_feed_water(
             gates={**gates, "pipeline_exit_code": completed.returncode},
         )
 
-    if execute and pipeline.get("success"):
-        # Deliberate no-command dwell. The validated MoveIt action is
-        # synchronous and has already reached the 80 mm pre-mouth target.
-        time.sleep(duration)
     elapsed = time.monotonic() - started
     return _tool_report(
         captured_at=captured_at,

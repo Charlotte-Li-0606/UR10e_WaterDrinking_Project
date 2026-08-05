@@ -55,6 +55,18 @@ class RealFeedWaterBackendTest(unittest.TestCase):
             },
             "execution_attempted": False,
             "execution_sent": False,
+            "pre_mouth_hold": {
+                "completed": False,
+                "plan_only": True,
+                "motion_command_sent": False,
+            },
+            "return_to_initial_position": {
+                "success": True,
+                "stage": "return_target_validated",
+                "execution_attempted": False,
+                "execution_sent": False,
+                "automatic_retreat_sent": False,
+            },
         }
 
         def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
@@ -73,8 +85,10 @@ class RealFeedWaterBackendTest(unittest.TestCase):
             self.assertEqual("1.0", command[mouth_sample_argument])
             velocity_argument = command.index("--trajectory-velocity-scaling") + 1
             acceleration_argument = command.index("--trajectory-acceleration-scaling") + 1
+            hold_argument = command.index("--hold-duration") + 1
             self.assertEqual("0.6", command[velocity_argument])
             self.assertEqual("0.6", command[acceleration_argument])
+            self.assertEqual("10.0", command[hold_argument])
             return subprocess.CompletedProcess(command, 0, "", "")
 
         with tempfile.TemporaryDirectory() as directory, patch.object(
@@ -90,7 +104,105 @@ class RealFeedWaterBackendTest(unittest.TestCase):
         self.assertFalse(result["cup_tilt_commanded"])
         self.assertFalse(result["pour_commanded"])
         self.assertFalse(result["automatic_retreat_sent"])
+        self.assertEqual(
+            "pre_mouth_and_return_target_validated", result["final_state"]
+        )
         self.assertEqual(1.30, result["maximum_planned_displacement_m"])
+
+    def test_execute_report_distinguishes_outbound_and_return_trajectories(self) -> None:
+        pipeline = {
+            "success": True,
+            "stage": "returned_initial_position",
+            "execution_attempted": True,
+            "execution_sent": True,
+            "pre_mouth_hold": {
+                "completed": True,
+                "duration_sec": 10.0,
+                "motion_command_sent": False,
+            },
+            "return_to_initial_position": {
+                "success": True,
+                "stage": "returned_initial_position",
+                "execution_attempted": True,
+                "execution_sent": True,
+                "automatic_retreat_sent": True,
+            },
+        }
+
+        def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+            report_argument = command.index("--report-file") + 1
+            Path(command[report_argument]).write_text(
+                json.dumps(pipeline), encoding="utf-8"
+            )
+            return subprocess.CompletedProcess(command, 0, "", "")
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            backend, "REPORT_DIR", Path(directory)
+        ), patch.object(backend.subprocess, "run", side_effect=fake_run):
+            result = backend.run_real_feed_water(
+                execute=True,
+                confirm_real_motion=True,
+                hold_duration_sec=10.0,
+                environ={
+                    "UR10E_BACKEND": "real",
+                    "UR10E_ALLOW_REAL_EXECUTION": "1",
+                },
+            )
+
+        self.assertTrue(result["success"])
+        self.assertTrue(result["outbound_execution_sent"])
+        self.assertTrue(result["return_execution_sent"])
+        self.assertTrue(result["automatic_retreat_sent"])
+        self.assertTrue(result["hold_completed"])
+        self.assertEqual("initial_position", result["final_state"])
+
+    def test_return_refusal_reports_that_robot_remains_at_pre_mouth(self) -> None:
+        pipeline = {
+            "success": False,
+            "stage": "return_to_initial_position_refused",
+            "reason": "return trajectory waypoint 4 collides with octomap",
+            "final_state": "holding_pre_mouth",
+            "execution_attempted": True,
+            "execution_sent": True,
+            "pre_mouth_hold": {
+                "completed": True,
+                "duration_sec": 10.0,
+                "motion_command_sent": False,
+            },
+            "return_to_initial_position": {
+                "success": False,
+                "stage": "return_pre_execution_trajectory_refused",
+                "execution_attempted": False,
+                "execution_sent": False,
+                "automatic_retreat_sent": False,
+            },
+        }
+
+        def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+            report_argument = command.index("--report-file") + 1
+            Path(command[report_argument]).write_text(
+                json.dumps(pipeline), encoding="utf-8"
+            )
+            return subprocess.CompletedProcess(command, 2, "", "")
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            backend, "REPORT_DIR", Path(directory)
+        ), patch.object(backend.subprocess, "run", side_effect=fake_run):
+            result = backend.run_real_feed_water(
+                execute=True,
+                confirm_real_motion=True,
+                hold_duration_sec=10.0,
+                environ={
+                    "UR10E_BACKEND": "real",
+                    "UR10E_ALLOW_REAL_EXECUTION": "1",
+                },
+            )
+
+        self.assertFalse(result["success"])
+        self.assertTrue(result["outbound_execution_sent"])
+        self.assertFalse(result["return_execution_sent"])
+        self.assertEqual("holding_pre_mouth", result["final_state"])
+        self.assertEqual("return_to_initial_position_refused", result["stage"])
 
 
 if __name__ == "__main__":

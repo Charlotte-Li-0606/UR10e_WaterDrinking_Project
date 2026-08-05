@@ -33,8 +33,10 @@
 - The only approved return target is the versioned `initial_position` defined
   by project configuration. Reject runtime overrides of its joints, pose,
   frame, orientation, or name. Treat the configured joint target as
-  authoritative and use its recorded tool pose only as an FK verification
-  reference in the verified MoveIt planning frame.
+  authoritative and verify it against the versioned calibrated MoveIt FK
+  reference in `base_link`. Preserve the operator-displayed PolyScope pose as
+  audit data only: a live no-motion check found a 400.4 mm position offset, so
+  its active feature must not be assumed to be the physical UR base frame.
 - Preserve tool0 +Z alignment with base_link -Z within 5 degrees throughout
   the return, while allowing free spin around tool0 Z. Validate every sampled
   return waypoint with MoveIt FK before execution and never command
@@ -62,7 +64,7 @@
 
   ```bash
   UR10E_ALLOW_REAL_EXECUTION=1 scripts/codex_feed_water.sh \
-    --execute --confirm-real-motion --hold-duration 3
+    --execute --confirm-real-motion --hold-duration 10
   ```
 
 - Use `scripts/codex_feed_water.sh --plan-only` only when the user explicitly

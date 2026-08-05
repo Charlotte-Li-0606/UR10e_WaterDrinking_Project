@@ -18,13 +18,17 @@ from scripts.real_dynamic_obstacle_avoidance_plan import (
 )
 from scripts.real_active_search_plan import RealActiveSearchPlan
 from scripts.real_feed_water_integrated import (
+    DEFAULT_PREMOUTH_HOLD_SEC,
     MAX_EXECUTION_TARGET_DRIFT_M,
     SEARCH_ALLOWED_PLANNING_TIME_SEC,
     SEARCH_PLANNER,
     SEARCH_PLANNING_PIPELINE,
     SEARCH_WRIST_Z_ANGLE_DEG,
     RealIntegratedFeedWater,
+    _load_initial_position_config,
     _orientation_after_local_tool_z_rotation,
+    _recorded_tool_pose_in_base_link,
+    _trajectory_final_joint_error,
 )
 from scripts.real_premouth_from_perception_plan import (
     ADAPTIVE_PREMOUTH_STANDOFFS_M,
@@ -32,10 +36,187 @@ from scripts.real_premouth_from_perception_plan import (
     RealPreMouthFromPerceptionPlan,
     _adaptive_premouth_pose_candidates,
     _execution_target_verification,
+    _tool_vertical_tilt_rad,
 )
 
 
 class RealIntegratedFeedWaterTest(unittest.TestCase):
+    def test_initial_position_config_preserves_operator_joint_target(self) -> None:
+        config = _load_initial_position_config()
+
+        self.assertEqual("initial_position", config["name"])
+        self.assertEqual(
+            [3.23, -56.38, -100.43, -112.69, 91.03, 5.54],
+            config["joint_positions_deg"],
+        )
+        self.assertEqual("joint_positions_deg", config["authoritative_target"])
+        self.assertEqual("base_link", config["moveit_tool0_fk_reference"]["frame_id"])
+        self.assertEqual(
+            "unverified_polyscope_active_feature",
+            config["operator_displayed_tool_pose"]["frame_id"],
+        )
+        self.assertEqual(
+            "polyscope_axis_angle_vector",
+            config["operator_displayed_tool_pose"]["rotation_convention"],
+        )
+
+    def test_calibrated_moveit_fk_reference_is_not_the_unverified_display_pose(self) -> None:
+        config = _load_initial_position_config()
+        transformed = _recorded_tool_pose_in_base_link(config)
+
+        for measured, expected in zip(
+            transformed["position_m"], [-0.31619894, 0.15448432, 0.80049741]
+        ):
+            self.assertAlmostEqual(expected, measured, places=6)
+        self.assertAlmostEqual(
+            1.144934,
+            math.degrees(
+                _tool_vertical_tilt_rad(transformed["orientation_quat_xyzw"])
+            ),
+            places=5,
+        )
+        self.assertEqual(
+            [0.32366, -0.13817, 0.40047],
+            config["operator_displayed_tool_pose"]["position_m"],
+        )
+
+    def test_return_trajectory_final_joint_error_wraps_revolute_angles(self) -> None:
+        trajectory = RobotTrajectory()
+        trajectory.joint_trajectory.joint_names = ["shoulder_pan_joint"]
+        trajectory.joint_trajectory.points = [
+            JointTrajectoryPoint(positions=[-math.pi + 0.01])
+        ]
+
+        result = _trajectory_final_joint_error(
+            trajectory,
+            {"shoulder_pan_joint": math.pi - 0.01},
+        )
+
+        self.assertTrue(result["available"])
+        self.assertAlmostEqual(0.02, result["maximum_joint_error_rad"], places=6)
+
+    def test_fixed_initial_joint_goal_keeps_vertical_path_constraint(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.trajectory_velocity_scaling = 0.6
+        node.trajectory_acceleration_scaling = 0.6
+        node.latest_joint_state = None
+        config = _load_initial_position_config()
+
+        goal = node._joint_goal_for_initial_position(
+            config,
+            {
+                "position_m": [-0.32366, 0.13817, 0.40047],
+                "orientation_quat_xyzw": [1.0, 0.0, 0.0, 0.0],
+            },
+        )
+
+        self.assertEqual(6, len(goal.request.goal_constraints[0].joint_constraints))
+        self.assertEqual("ompl", goal.request.pipeline_id)
+        self.assertEqual(1, len(goal.request.path_constraints.orientation_constraints))
+        self.assertTrue(goal.planning_options.plan_only)
+
+    def test_return_collision_recheck_samples_every_trajectory_waypoint(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._state_validity = Mock(
+            side_effect=[
+                {"available": True, "valid": True, "collision_pairs": []},
+                {"available": True, "valid": True, "collision_pairs": []},
+            ]
+        )
+        trajectory = RobotTrajectory()
+        trajectory.joint_trajectory.joint_names = ["shoulder_pan_joint"]
+        trajectory.joint_trajectory.points = [
+            JointTrajectoryPoint(positions=[0.0]),
+            JointTrajectoryPoint(positions=[0.1]),
+        ]
+
+        result = node._validate_trajectory_collision_states(trajectory)
+
+        self.assertTrue(result["success"])
+        self.assertEqual(2, result["sampled_waypoints"])
+        self.assertEqual(2, node._state_validity.call_count)
+
+    def test_return_collision_recheck_reports_rejected_pair(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._state_validity = Mock(
+            return_value={
+                "available": True,
+                "valid": False,
+                "collision_pairs": ["wrist_3_link <-> octomap"],
+                "reason": "wrist_3_link <-> octomap",
+            }
+        )
+        trajectory = RobotTrajectory()
+        trajectory.joint_trajectory.joint_names = ["shoulder_pan_joint"]
+        trajectory.joint_trajectory.points = [
+            JointTrajectoryPoint(positions=[0.0])
+        ]
+
+        result = node._validate_trajectory_collision_states(trajectory)
+
+        self.assertFalse(result["success"])
+        self.assertEqual(0, result["rejected_waypoint_index"])
+        self.assertEqual(["wrist_3_link <-> octomap"], result["collision_pairs"])
+
+    def test_fixed_initial_target_passes_fk_scene_and_state_validation(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        config = _load_initial_position_config()
+        node._wait_for_joint_state = Mock()
+        node._spin_for = Mock()
+        node._current_robot_state = Mock(return_value=RobotState())
+        node._frame_transform = Mock(
+            return_value={
+                "available": True,
+                "position_m": [0.0, 0.0, 0.0],
+                "orientation_quat_xyzw": [0.0, 0.0, 1.0, 0.0],
+            }
+        )
+        node._fk_positions = Mock(
+            return_value={
+                "available": True,
+                "poses": {
+                    "tool0": {
+                        "position_m": list(
+                            config["moveit_tool0_fk_reference"]["position_m"]
+                        ),
+                        "orientation_quat_xyzw": list(
+                            config["moveit_tool0_fk_reference"][
+                                "orientation_quat_xyzw"
+                            ]
+                        ),
+                    }
+                },
+            }
+        )
+        node._planning_scene_geometry = Mock(
+            return_value=(
+                {
+                    "available": True,
+                    "human_collision_objects_preserved": True,
+                    "human_allowed_collision_pairs": [],
+                    "combined_tool_collision_geometry": {"success": True},
+                    "octomap": {"present": True},
+                },
+                None,
+            )
+        )
+        node._state_validity = Mock(
+            return_value={
+                "available": True,
+                "valid": True,
+                "collision_pairs": [],
+                "reason": None,
+            }
+        )
+        node._point_in_ur_base = Mock(return_value=[0.3162, -0.1545, 0.8005])
+
+        result = node._prepare_initial_position_target()
+
+        self.assertTrue(result["success"])
+        self.assertAlmostEqual(0.0, result["fk_reference_position_error_m"])
+        self.assertLess(result["target_tool_vertical_tilt_deg"], 5.0)
+        self.assertEqual([], result["target_state_validity"]["collision_pairs"])
+
     def test_execution_verification_accepts_planned_adaptive_yaw(self) -> None:
         actual = _execution_target_verification(
             start_tool0={
@@ -633,12 +814,16 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             execute=True,
             report_path=backend.REPORT_DIR / "test.json",
             target_selection="center",
+            hold_duration_sec=DEFAULT_PREMOUTH_HOLD_SEC,
         )
 
         self.assertEqual(str(backend.REAL_FEED_WATER_SCRIPT), command[1])
         self.assertIn("--execute", command)
         self.assertIn("--confirm-real-motion", command)
         self.assertIn("--allow-validated-camera-ray-execute", command)
+        self.assertIn("--hold-duration", command)
+        hold_argument = command.index("--hold-duration") + 1
+        self.assertEqual("10.0", command[hold_argument])
         self.assertNotIn("--no-execute", command)
 
     def test_integrated_plan_sequences_search_before_dynamic_target_plan(self) -> None:
@@ -663,6 +848,18 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             }
         )
         node.plan = Mock(return_value=(0, {"success": True, "stage": "move_group_plan_only"}))
+        node.return_to_initial_position = Mock(
+            return_value=(
+                0,
+                {
+                    "success": True,
+                    "stage": "return_target_validated",
+                    "execution_attempted": False,
+                    "execution_sent": False,
+                    "automatic_retreat_sent": False,
+                },
+            )
+        )
 
         code, result = node.run_integrated(
             execute=False,
@@ -710,6 +907,13 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         node.dynamic_readiness.assert_called_once_with(execution_mode=None)
         node.active_search.assert_called_once_with(execute=False, confirm_real_motion=False)
         node.plan.assert_called_once_with()
+        node.return_to_initial_position.assert_called_once_with(
+            execute=False,
+            confirm_real_motion=False,
+        )
+        self.assertEqual(
+            "pre_mouth_and_return_target_validated", result["final_state"]
+        )
 
     def test_integrated_pipeline_refuses_before_search_without_attached_tool_box(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)

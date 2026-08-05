@@ -1,0 +1,61 @@
+{
+  "schema_version": 2,
+  "name": "initial_position",
+  "authoritative_target": "joint_positions_deg",
+  "joint_names": [
+    "shoulder_pan_joint",
+    "shoulder_lift_joint",
+    "elbow_joint",
+    "wrist_1_joint",
+    "wrist_2_joint",
+    "wrist_3_joint"
+  ],
+  "joint_positions_deg": [
+    3.23,
+    -56.38,
+    -100.43,
+    -112.69,
+    91.03,
+    5.54
+  ],
+  "moveit_tool0_fk_reference": {
+    "frame_id": "base_link",
+    "position_m": [
+      -0.31619894,
+      0.15448432,
+      0.80049741
+    ],
+    "orientation_quat_xyzw": [
+      0.72115323,
+      0.69270354,
+      -0.00916316,
+      0.0039827
+    ],
+    "source": "live MoveIt GetPositionFK using the calibrated real-UR10e robot_description on 2026-08-05"
+  },
+  "operator_displayed_tool_pose": {
+    "frame_id": "unverified_polyscope_active_feature",
+    "position_m": [
+      0.32366,
+      -0.13817,
+      0.40047
+    ],
+    "rotation_vector_rad": [
+      2.246,
+      -2.222,
+      -0.013
+    ],
+    "rotation_convention": "polyscope_axis_angle_vector",
+    "moveit_target_position_delta_m": 0.40042946,
+    "verification_status": "not_used_as_a_moveit_base_frame_reference",
+    "note": "The live calibrated FK check on 2026-08-05 found an almost exact 0.400 m Z offset, so the active PolyScope feature cannot safely be assumed to be the physical UR base frame."
+  },
+  "verification": {
+    "maximum_fk_position_error_m": 0.02,
+    "maximum_fk_orientation_error_deg": 3.0,
+    "maximum_final_joint_error_deg": 1.0,
+    "maximum_final_tool_position_error_m": 0.02,
+    "maximum_final_tool_orientation_error_deg": 1.0,
+    "maximum_tool_vertical_tilt_deg": 5.0
+  }
+}
