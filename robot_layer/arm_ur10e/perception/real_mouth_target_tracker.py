@@ -75,6 +75,16 @@ class SelectedMouthSample:
     selected_candidate_index: int
     received_monotonic: float
     source_stamp_sec: float | None
+    raw_candidate_count: int
+    duplicate_candidates_suppressed: tuple[Mapping[str, Any], ...]
+
+
+@dataclass(frozen=True)
+class RejectedMouthSample:
+    received_monotonic: float
+    reason: str
+    identity_unsafe: bool
+    diagnostics: Mapping[str, Any] | None
 
 
 class RealMouthTargetTracker:
@@ -87,6 +97,10 @@ class RealMouthTargetTracker:
         base_frame: str = "base_link",
         max_identity_jump_m: float = 0.12,
         ambiguity_margin_m: float = 0.03,
+        duplicate_candidate_max_distance_m: float = 0.04,
+        duplicate_candidate_max_image_distance_px: float = 48.0,
+        ambiguity_confirmation_samples: int = 3,
+        ambiguity_confirmation_max_gap_sec: float = 0.5,
         history_size: int = 512,
     ) -> None:
         self.target_selection = validate_target_selection(target_selection)
@@ -97,13 +111,46 @@ class RealMouthTargetTracker:
             raise ValueError("max_identity_jump_m must be positive and finite")
         if not math.isfinite(ambiguity_margin_m) or ambiguity_margin_m < 0.0:
             raise ValueError("ambiguity_margin_m must be non-negative and finite")
+        if (
+            not math.isfinite(duplicate_candidate_max_distance_m)
+            or duplicate_candidate_max_distance_m <= 0.0
+        ):
+            raise ValueError("duplicate_candidate_max_distance_m must be positive and finite")
+        if (
+            not math.isfinite(duplicate_candidate_max_image_distance_px)
+            or duplicate_candidate_max_image_distance_px <= 0.0
+        ):
+            raise ValueError(
+                "duplicate_candidate_max_image_distance_px must be positive and finite"
+            )
+        if ambiguity_confirmation_samples < 1:
+            raise ValueError("ambiguity_confirmation_samples must be at least one")
+        if (
+            not math.isfinite(ambiguity_confirmation_max_gap_sec)
+            or ambiguity_confirmation_max_gap_sec <= 0.0
+        ):
+            raise ValueError(
+                "ambiguity_confirmation_max_gap_sec must be positive and finite"
+            )
         if history_size < 3:
             raise ValueError("history_size must be at least three")
         self.max_identity_jump_m = float(max_identity_jump_m)
         self.ambiguity_margin_m = float(ambiguity_margin_m)
+        self.duplicate_candidate_max_distance_m = float(
+            duplicate_candidate_max_distance_m
+        )
+        self.duplicate_candidate_max_image_distance_px = float(
+            duplicate_candidate_max_image_distance_px
+        )
+        self.ambiguity_confirmation_samples = int(ambiguity_confirmation_samples)
+        self.ambiguity_confirmation_max_gap_sec = float(
+            ambiguity_confirmation_max_gap_sec
+        )
         self._samples: deque[SelectedMouthSample] = deque(maxlen=int(history_size))
-        self._rejections: deque[tuple[float, str, bool]] = deque(maxlen=int(history_size))
+        self._rejections: deque[RejectedMouthSample] = deque(maxlen=int(history_size))
         self._reference_position: tuple[float, float, float] | None = None
+        self._consecutive_ambiguity_updates = 0
+        self._last_ambiguity_monotonic: float | None = None
         self._last_update: dict[str, Any] = {
             "success": False,
             "reason": "no mouth-candidate message has been received",
@@ -152,14 +199,110 @@ class RealMouthTargetTracker:
             return len(candidates) - 1
         return min(range(len(candidates)), key=lambda index: abs(candidates[index].image_x - image_center_x))
 
-    def _reject(self, reason: str, *, received_monotonic: float, identity_unsafe: bool) -> dict[str, Any]:
-        self._rejections.append((received_monotonic, reason, identity_unsafe))
+    @staticmethod
+    def _image_distance(first: MouthCandidate, second: MouthCandidate) -> float | None:
+        if first.image_y is None or second.image_y is None:
+            return None
+        return math.hypot(first.image_x - second.image_x, first.image_y - second.image_y)
+
+    def _deduplicate_candidates(
+        self,
+        candidates: Sequence[MouthCandidate],
+        *,
+        image_center_x: float,
+    ) -> tuple[list[MouthCandidate], list[dict[str, Any]]]:
+        """Collapse only detections that represent the same physical mouth.
+
+        MediaPipe can emit two overlapping face tracks for one partially
+        visible face near the image boundary.  Treating their two mouth
+        landmarks as two people makes the identity guard fail even though the
+        scene contains one person.  A pair is considered a duplicate only when
+        both its base-frame mouth positions and its 2D mouth pixels are close.
+        If either measurement is unavailable or outside its tight threshold,
+        both candidates remain and the normal ambiguity guard applies.
+        """
+
+        retained: list[MouthCandidate] = []
+        suppressed: list[dict[str, Any]] = []
+        for candidate in candidates:
+            duplicate_index: int | None = None
+            duplicate_position_distance = float("inf")
+            duplicate_image_distance: float | None = None
+            for index, existing in enumerate(retained):
+                position_distance = _distance(candidate.position_m, existing.position_m)
+                image_distance = self._image_distance(candidate, existing)
+                if (
+                    position_distance <= self.duplicate_candidate_max_distance_m
+                    and image_distance is not None
+                    and image_distance
+                    <= self.duplicate_candidate_max_image_distance_px
+                ):
+                    duplicate_index = index
+                    duplicate_position_distance = position_distance
+                    duplicate_image_distance = image_distance
+                    break
+            if duplicate_index is None:
+                retained.append(candidate)
+                continue
+
+            existing = retained[duplicate_index]
+            if self._reference_position is not None:
+                candidate_score = _distance(candidate.position_m, self._reference_position)
+                existing_score = _distance(existing.position_m, self._reference_position)
+                representative_reason = "closest_to_locked_3d_target"
+            else:
+                candidate_score = abs(candidate.image_x - image_center_x)
+                existing_score = abs(existing.image_x - image_center_x)
+                representative_reason = "closest_to_requested_image_center"
+            if candidate_score < existing_score:
+                retained[duplicate_index] = candidate
+                kept, removed = candidate, existing
+            else:
+                kept, removed = existing, candidate
+            suppressed.append(
+                {
+                    "reason": "same_mouth_duplicate",
+                    "position_distance_m": duplicate_position_distance,
+                    "image_distance_px": duplicate_image_distance,
+                    "maximum_position_distance_m": (
+                        self.duplicate_candidate_max_distance_m
+                    ),
+                    "maximum_image_distance_px": (
+                        self.duplicate_candidate_max_image_distance_px
+                    ),
+                    "representative_selection": representative_reason,
+                    "kept": kept.report(),
+                    "suppressed": removed.report(),
+                }
+            )
+        retained.sort(key=lambda item: item.image_x)
+        return retained, suppressed
+
+    def _reject(
+        self,
+        reason: str,
+        *,
+        received_monotonic: float,
+        identity_unsafe: bool,
+        diagnostics: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        copied_diagnostics = None if diagnostics is None else dict(diagnostics)
+        self._rejections.append(
+            RejectedMouthSample(
+                received_monotonic=received_monotonic,
+                reason=reason,
+                identity_unsafe=identity_unsafe,
+                diagnostics=copied_diagnostics,
+            )
+        )
         self._last_update = {
             "success": False,
             "reason": reason,
             "target_selection": self.target_selection,
             "identity_unsafe": identity_unsafe,
         }
+        if copied_diagnostics is not None:
+            self._last_update["diagnostics"] = copied_diagnostics
         return dict(self._last_update)
 
     def update_json(self, message_data: str, *, received_monotonic: float | None = None) -> dict[str, Any]:
@@ -189,15 +332,22 @@ class RealMouthTargetTracker:
                 received_monotonic=now,
                 identity_unsafe=False,
             )
-        candidates = sorted(
+        raw_candidates_parsed = sorted(
             (candidate for candidate in parsed_candidates if candidate is not None),
             key=lambda candidate: candidate.image_x,
         )
-        if not candidates:
+        if not raw_candidates_parsed:
             return self._reject("no valid mouth candidates are visible", received_monotonic=now, identity_unsafe=False)
         center = self._optional_finite(payload.get("image_center_x"))
         if center is None:
-            center = 0.5 * (candidates[0].image_x + candidates[-1].image_x)
+            center = 0.5 * (
+                raw_candidates_parsed[0].image_x
+                + raw_candidates_parsed[-1].image_x
+            )
+        candidates, duplicate_candidates_suppressed = self._deduplicate_candidates(
+            raw_candidates_parsed,
+            image_center_x=center,
+        )
 
         identity_unsafe = False
         if self._reference_position is None:
@@ -220,20 +370,86 @@ class RealMouthTargetTracker:
                     f"selected target moved {nearest_distance:.4f} m, above the {self.max_identity_jump_m:.4f} m identity limit",
                     received_monotonic=now,
                     identity_unsafe=True,
+                    diagnostics={
+                        "classification": "IDENTITY_JUMP",
+                        "reference_position_m": list(self._reference_position),
+                        "nearest_candidate_distance_m": nearest_distance,
+                        "maximum_identity_jump_m": self.max_identity_jump_m,
+                        "raw_candidate_count": len(raw_candidates_parsed),
+                        "candidate_count_after_deduplication": len(candidates),
+                        "duplicate_candidates_suppressed": (
+                            duplicate_candidates_suppressed
+                        ),
+                        "visible_candidates": [
+                            candidate.report() for candidate in candidates
+                        ],
+                    },
                 )
             if (
                 len(distances) > 1
                 and distances[1][0] <= self.max_identity_jump_m
                 and distances[1][0] - nearest_distance < self.ambiguity_margin_m
             ):
-                identity_unsafe = True
+                if (
+                    self._last_ambiguity_monotonic is None
+                    or now - self._last_ambiguity_monotonic
+                    > self.ambiguity_confirmation_max_gap_sec
+                ):
+                    self._consecutive_ambiguity_updates = 1
+                else:
+                    self._consecutive_ambiguity_updates += 1
+                self._last_ambiguity_monotonic = now
+                identity_unsafe = (
+                    self._consecutive_ambiguity_updates
+                    >= self.ambiguity_confirmation_samples
+                )
+                if identity_unsafe:
+                    reason = (
+                        "selected target match is persistently ambiguous between "
+                        "multiple visible people"
+                    )
+                    classification = "AMBIGUOUS_IDENTITY_MATCH"
+                else:
+                    reason = (
+                        "selected target match is temporarily ambiguous; waiting "
+                        "for repeated observations"
+                    )
+                    classification = "AMBIGUOUS_IDENTITY_MATCH_PENDING"
                 return self._reject(
-                    "selected target match is ambiguous between multiple visible people",
+                    reason,
                     received_monotonic=now,
                     identity_unsafe=identity_unsafe,
+                    diagnostics={
+                        "classification": classification,
+                        "confirmation_count": self._consecutive_ambiguity_updates,
+                        "required_confirmation_samples": (
+                            self.ambiguity_confirmation_samples
+                        ),
+                        "maximum_confirmation_gap_sec": (
+                            self.ambiguity_confirmation_max_gap_sec
+                        ),
+                        "reference_position_m": list(self._reference_position),
+                        "nearest_candidate_index": selected_index,
+                        "nearest_candidate_distance_m": nearest_distance,
+                        "second_candidate_index": distances[1][1],
+                        "second_candidate_distance_m": distances[1][0],
+                        "distance_gap_m": distances[1][0] - nearest_distance,
+                        "maximum_identity_jump_m": self.max_identity_jump_m,
+                        "ambiguity_margin_m": self.ambiguity_margin_m,
+                        "raw_candidate_count": len(raw_candidates_parsed),
+                        "candidate_count_after_deduplication": len(candidates),
+                        "duplicate_candidates_suppressed": (
+                            duplicate_candidates_suppressed
+                        ),
+                        "visible_candidates": [
+                            candidate.report() for candidate in candidates
+                        ],
+                    },
                 )
             selection_method = "locked_3d_nearest"
 
+        self._consecutive_ambiguity_updates = 0
+        self._last_ambiguity_monotonic = None
         selected = candidates[selected_index]
         self._reference_position = selected.position_m
         source_stamp = self._optional_finite(payload.get("stamp_sec"))
@@ -244,6 +460,10 @@ class RealMouthTargetTracker:
                 selected_candidate_index=selected_index,
                 received_monotonic=now,
                 source_stamp_sec=source_stamp,
+                raw_candidate_count=len(raw_candidates_parsed),
+                duplicate_candidates_suppressed=tuple(
+                    duplicate_candidates_suppressed
+                ),
             )
         )
         self._last_update = {
@@ -252,6 +472,9 @@ class RealMouthTargetTracker:
             "target_selection": self.target_selection,
             "selection_method": selection_method,
             "candidate_count": len(candidates),
+            "raw_candidate_count": len(raw_candidates_parsed),
+            "duplicate_candidate_count": len(duplicate_candidates_suppressed),
+            "duplicate_candidates_suppressed": duplicate_candidates_suppressed,
             "selected_candidate_index": selected_index,
             "selected_position_m": list(selected.position_m),
             "identity_unsafe": identity_unsafe,
@@ -290,18 +513,21 @@ class RealMouthTargetTracker:
     ) -> dict[str, Any]:
         now = time.monotonic() if now_monotonic is None else float(now_monotonic)
         unsafe = [
-            reason
-            for received, reason, identity_unsafe in self._rejections
-            if received >= started_monotonic and identity_unsafe
+            rejection
+            for rejection in self._rejections
+            if rejection.received_monotonic >= started_monotonic
+            and rejection.identity_unsafe
         ]
         if unsafe:
+            latest_unsafe = unsafe[-1]
             return {
                 "available": False,
                 "stable": False,
-                "reason": unsafe[-1],
+                "reason": latest_unsafe.reason,
                 "target_selection": self.target_selection,
                 "identity_locked": self._reference_position is not None,
                 "identity_unsafe": True,
+                "rejection_diagnostics": latest_unsafe.diagnostics,
             }
         recent = [
             sample
@@ -311,18 +537,21 @@ class RealMouthTargetTracker:
         ]
         latest_sample_time = recent[-1].received_monotonic if recent else float("-inf")
         unresolved_rejections = [
-            reason
-            for received, reason, _ in self._rejections
-            if received >= started_monotonic and received >= latest_sample_time
+            rejection
+            for rejection in self._rejections
+            if rejection.received_monotonic >= started_monotonic
+            and rejection.received_monotonic >= latest_sample_time
         ]
         if unresolved_rejections:
+            latest_rejection = unresolved_rejections[-1]
             return {
                 "available": False,
                 "stable": False,
-                "reason": unresolved_rejections[-1],
+                "reason": latest_rejection.reason,
                 "target_selection": self.target_selection,
                 "identity_locked": self._reference_position is not None,
                 "identity_unsafe": False,
+                "rejection_diagnostics": latest_rejection.diagnostics,
             }
         if not recent:
             return {
@@ -356,6 +585,13 @@ class RealMouthTargetTracker:
             "latest_received_age_sec": max(0.0, now - latest.received_monotonic),
             "latest_source_stamp_sec": latest.source_stamp_sec,
             "candidate_count": len(latest.candidates),
+            "raw_candidate_count": latest.raw_candidate_count,
+            "duplicate_candidate_count": len(
+                latest.duplicate_candidates_suppressed
+            ),
+            "duplicate_candidates_suppressed": list(
+                latest.duplicate_candidates_suppressed
+            ),
             "selected_candidate_index": latest.selected_candidate_index,
             "visible_candidates": [candidate.report() for candidate in latest.candidates],
             "surface_normal": self._surface_normal(recent, frame_id=self.base_frame),
@@ -365,6 +601,18 @@ class RealMouthTargetTracker:
                 "maximum_age_sec": max_age_sec,
                 "maximum_identity_jump_m": self.max_identity_jump_m,
                 "ambiguity_margin_m": self.ambiguity_margin_m,
+                "ambiguity_confirmation_samples": (
+                    self.ambiguity_confirmation_samples
+                ),
+                "ambiguity_confirmation_max_gap_sec": (
+                    self.ambiguity_confirmation_max_gap_sec
+                ),
+                "duplicate_candidate_max_distance_m": (
+                    self.duplicate_candidate_max_distance_m
+                ),
+                "duplicate_candidate_max_image_distance_px": (
+                    self.duplicate_candidate_max_image_distance_px
+                ),
             },
         }
 
@@ -394,6 +642,13 @@ class RealMouthTargetTracker:
             "selected_position_m": list(latest.candidate.position_m),
             "selected_candidate_index": latest.selected_candidate_index,
             "candidate_count": len(latest.candidates),
+            "raw_candidate_count": latest.raw_candidate_count,
+            "duplicate_candidate_count": len(
+                latest.duplicate_candidates_suppressed
+            ),
+            "duplicate_candidates_suppressed": list(
+                latest.duplicate_candidates_suppressed
+            ),
             "visible_candidates": [candidate.report() for candidate in latest.candidates],
             "age_sec": max(0.0, age),
             "identity_unsafe": False,

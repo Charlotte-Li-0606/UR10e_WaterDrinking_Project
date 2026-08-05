@@ -2322,7 +2322,10 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 }
             )
             if not response["success"]:
-                response["reason"] = "visible mouth did not become a stable selected identity; search motion was withheld"
+                response["reason"] = str(
+                    stable.get("reason")
+                    or "visible mouth did not become a stable selected identity; search motion was withheld"
+                )
             return response
         if not self._explicit_no_face():
             response.update(
@@ -2371,6 +2374,11 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         "elapsed_sec": time.monotonic() - started,
                     }
                 )
+                if not response["success"]:
+                    response["reason"] = str(
+                        stable.get("reason")
+                        or "mouth candidate appeared but did not become a stable selected identity"
+                    )
                 return response
 
             stationary: dict[str, Any] | None = None
@@ -2666,7 +2674,10 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     }
                 )
                 if not response["success"]:
-                    response["reason"] = "mouth candidate appeared but did not become a stable selected identity"
+                    response["reason"] = str(
+                        stable.get("reason")
+                        or "mouth candidate appeared but did not become a stable selected identity"
+                    )
                 return response
 
             final = self._tool0_pose()
