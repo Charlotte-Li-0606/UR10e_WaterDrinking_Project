@@ -34,7 +34,7 @@ class CodexFeedWaterEntrypointTest(unittest.TestCase):
         self.assertIn("80 mm pre-mouth", skill)
         self.assertIn("codex_feed_water.sh", skill)
         self.assertIn("UR10E_ALLOW_REAL_EXECUTION=1", skill)
-        self.assertIn("--execute --confirm-real-motion --hold-duration 10", skill)
+        self.assertIn("--execute --confirm-real-motion --hold-duration 5", skill)
         self.assertIn("final_state: initial_position", skill)
         self.assertIn("guarded return", skill)
         self.assertIn("plan-only", skill)

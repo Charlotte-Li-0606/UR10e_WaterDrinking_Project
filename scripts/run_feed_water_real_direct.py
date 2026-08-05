@@ -38,10 +38,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--hold-duration",
         type=float,
-        default=10.0,
+        default=5.0,
         help=(
             "Motionless pre-mouth dwell before the guarded return "
-            "(2-10 seconds; default: 10)."
+            "(2-5 seconds; default: 5)."
         ),
     )
     return parser.parse_args()

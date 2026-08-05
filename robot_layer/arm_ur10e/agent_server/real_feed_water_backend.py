@@ -36,8 +36,8 @@ MOUTH_SAMPLE_SECONDS = 1.0
 TRAJECTORY_VELOCITY_SCALING = 0.60
 TRAJECTORY_ACCELERATION_SCALING = 0.60
 MIN_HOLD_SECONDS = 2.0
-MAX_HOLD_SECONDS = 10.0
-DEFAULT_HOLD_SECONDS = 10.0
+MAX_HOLD_SECONDS = 5.0
+DEFAULT_HOLD_SECONDS = 5.0
 PIPELINE_TIMEOUT_SECONDS = 240.0
 
 
@@ -48,10 +48,10 @@ def _timestamp() -> tuple[str, str]:
 
 def _finite_hold_duration(value: Any) -> float:
     if isinstance(value, bool):
-        raise ValueError("hold_duration_sec must be between 2 and 10 seconds")
+        raise ValueError("hold_duration_sec must be between 2 and 5 seconds")
     duration = float(value)
     if not math.isfinite(duration) or not MIN_HOLD_SECONDS <= duration <= MAX_HOLD_SECONDS:
-        raise ValueError("hold_duration_sec must be between 2 and 10 seconds")
+        raise ValueError("hold_duration_sec must be between 2 and 5 seconds")
     return duration
 
 

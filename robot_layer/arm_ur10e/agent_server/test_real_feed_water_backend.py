@@ -88,7 +88,7 @@ class RealFeedWaterBackendTest(unittest.TestCase):
             hold_argument = command.index("--hold-duration") + 1
             self.assertEqual("0.6", command[velocity_argument])
             self.assertEqual("0.6", command[acceleration_argument])
-            self.assertEqual("10.0", command[hold_argument])
+            self.assertEqual("5.0", command[hold_argument])
             return subprocess.CompletedProcess(command, 0, "", "")
 
         with tempfile.TemporaryDirectory() as directory, patch.object(
@@ -117,7 +117,7 @@ class RealFeedWaterBackendTest(unittest.TestCase):
             "execution_sent": True,
             "pre_mouth_hold": {
                 "completed": True,
-                "duration_sec": 10.0,
+                "duration_sec": 5.0,
                 "motion_command_sent": False,
             },
             "return_to_initial_position": {
@@ -142,7 +142,7 @@ class RealFeedWaterBackendTest(unittest.TestCase):
             result = backend.run_real_feed_water(
                 execute=True,
                 confirm_real_motion=True,
-                hold_duration_sec=10.0,
+                hold_duration_sec=5.0,
                 environ={
                     "UR10E_BACKEND": "real",
                     "UR10E_ALLOW_REAL_EXECUTION": "1",
@@ -166,7 +166,7 @@ class RealFeedWaterBackendTest(unittest.TestCase):
             "execution_sent": True,
             "pre_mouth_hold": {
                 "completed": True,
-                "duration_sec": 10.0,
+                "duration_sec": 5.0,
                 "motion_command_sent": False,
             },
             "return_to_initial_position": {
@@ -191,7 +191,7 @@ class RealFeedWaterBackendTest(unittest.TestCase):
             result = backend.run_real_feed_water(
                 execute=True,
                 confirm_real_motion=True,
-                hold_duration_sec=10.0,
+                hold_duration_sec=5.0,
                 environ={
                     "UR10E_BACKEND": "real",
                     "UR10E_ALLOW_REAL_EXECUTION": "1",

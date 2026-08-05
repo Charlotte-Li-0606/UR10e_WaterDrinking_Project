@@ -63,6 +63,14 @@ class SafeFeedingToolValidationTest(unittest.TestCase):
         self.assertEqual(3.0, call["args"]["hold_duration_sec"])
         self.assertFalse(call["args"]["execute"])
 
+    def test_feed_water_accepts_five_second_guarded_hold(self) -> None:
+        call = validate_safe_feeding_tool_call(
+            "feed_water",
+            {"hold_duration_sec": 5.0},
+            cli_execute=False,
+        )
+        self.assertEqual(5.0, call["args"]["hold_duration_sec"])
+
     def test_sequence_normalizes_each_safe_step(self) -> None:
         plan = validate_safe_feeding_tool_plan(
             {

@@ -823,7 +823,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertIn("--allow-validated-camera-ray-execute", command)
         self.assertIn("--hold-duration", command)
         hold_argument = command.index("--hold-duration") + 1
-        self.assertEqual("10.0", command[hold_argument])
+        self.assertEqual("5.0", command[hold_argument])
         self.assertNotIn("--no-execute", command)
 
     def test_integrated_plan_sequences_search_before_dynamic_target_plan(self) -> None:

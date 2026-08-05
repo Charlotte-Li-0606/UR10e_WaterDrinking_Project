@@ -64,7 +64,7 @@
 
   ```bash
   UR10E_ALLOW_REAL_EXECUTION=1 scripts/codex_feed_water.sh \
-    --execute --confirm-real-motion --hold-duration 10
+    --execute --confirm-real-motion --hold-duration 5
   ```
 
 - Use `scripts/codex_feed_water.sh --plan-only` only when the user explicitly
