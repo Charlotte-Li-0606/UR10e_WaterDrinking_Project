@@ -120,8 +120,12 @@ SEARCH_MAX_CUMULATIVE_JOINT_TRAVEL_RAD = 2.0
 SEARCH_MAX_TRAJECTORY_DURATION_SEC = 3.0
 SEARCH_WRIST_Z_TOTAL_SWEEP_DEG = 30.0
 SEARCH_WRIST_Z_ANGLE_DEG = SEARCH_WRIST_Z_TOTAL_SWEEP_DEG / 2.0
-TRACKING_MAX_REPLAN_ATTEMPTS = 2
+TRACKING_MAX_TARGET_DRIFT_REPLANS = 2
+TRACKING_MAX_APPROACH_SEGMENTS = 16
 TRACKING_POST_CANCEL_SETTLE_TIMEOUT_SEC = 3.0
+TRACKING_SEGMENT_MAX_TRANSLATION_M = 0.050
+TRACKING_SEGMENT_MAX_ROTATION_RAD = math.radians(15.0)
+TRACKING_MAX_APPROACH_DURATION_SEC = 45.0
 TRACKING_TARGET_MAX_AGE_SEC = 0.75
 TRACKING_MAX_DISPLACEMENT_M = 0.06
 TRACKING_MAX_LINEAR_SPEED_MPS = 0.02
@@ -256,6 +260,132 @@ def _select_consistent_cloud_frame_window(
             "fresh_unique_sequence": False,
         }
     return selected
+
+
+def _compare_final_state_validity(
+    before: dict[str, Any],
+    after: dict[str, Any],
+) -> dict[str, Any]:
+    """Compare only final-state checks that produced usable robot states."""
+    before_valid = before.get("valid") if before.get("available") else None
+    after_valid = after.get("valid") if after.get("available") else None
+    available = isinstance(before_valid, bool) and isinstance(after_valid, bool)
+    return {
+        "available": available,
+        "before_valid": before_valid,
+        "after_valid": after_valid,
+        "changed": (before_valid != after_valid) if available else None,
+        "reason": (
+            None
+            if available
+            else (
+                "the nominal candidate did not produce usable before/after "
+                "robot states; adaptive candidate IK and collision checks "
+                "must determine goal validity"
+            )
+        ),
+    }
+
+
+def _quaternion_slerp_xyzw(
+    start_xyzw: list[float],
+    end_xyzw: list[float],
+    fraction: float,
+) -> list[float]:
+    """Interpolate the shortest normalized quaternion arc in XYZW order."""
+    if len(start_xyzw) != 4 or len(end_xyzw) != 4:
+        raise ValueError("quaternions must contain four values")
+    if not math.isfinite(float(fraction)) or not 0.0 <= float(fraction) <= 1.0:
+        raise ValueError("quaternion interpolation fraction must be in [0, 1]")
+    start = [float(value) for value in start_xyzw]
+    end = [float(value) for value in end_xyzw]
+    start_norm = math.sqrt(sum(value * value for value in start))
+    end_norm = math.sqrt(sum(value * value for value in end))
+    if start_norm < 1e-9 or end_norm < 1e-9:
+        raise ValueError("quaternions must be nonzero")
+    start = [value / start_norm for value in start]
+    end = [value / end_norm for value in end]
+    dot = sum(left * right for left, right in zip(start, end))
+    if dot < 0.0:
+        end = [-value for value in end]
+        dot = -dot
+    dot = max(-1.0, min(1.0, dot))
+    if dot > 0.9995:
+        mixed = [
+            left + float(fraction) * (right - left)
+            for left, right in zip(start, end)
+        ]
+    else:
+        theta = math.acos(dot)
+        sin_theta = math.sin(theta)
+        start_weight = math.sin((1.0 - float(fraction)) * theta) / sin_theta
+        end_weight = math.sin(float(fraction) * theta) / sin_theta
+        mixed = [
+            start_weight * left + end_weight * right
+            for left, right in zip(start, end)
+        ]
+    magnitude = math.sqrt(sum(value * value for value in mixed))
+    return [value / magnitude for value in mixed]
+
+
+def _bounded_tracking_segment_target(
+    *,
+    current_pose: dict[str, Any],
+    final_pose: dict[str, Any],
+    maximum_translation_m: float = TRACKING_SEGMENT_MAX_TRANSLATION_M,
+    maximum_rotation_rad: float = TRACKING_SEGMENT_MAX_ROTATION_RAD,
+) -> dict[str, Any]:
+    """Return one bounded Cartesian pose step toward a validated final pose."""
+    if (
+        not math.isfinite(float(maximum_translation_m))
+        or float(maximum_translation_m) <= 0.0
+        or not math.isfinite(float(maximum_rotation_rad))
+        or float(maximum_rotation_rad) <= 0.0
+    ):
+        raise ValueError("tracking segment bounds must be finite and positive")
+    current_position = _finite_xyz(current_pose.get("position_m"))
+    final_position = _finite_xyz(final_pose.get("position_m"))
+    current_orientation = current_pose.get("orientation_quat_xyzw")
+    final_orientation = final_pose.get("orientation_quat_xyzw")
+    if current_position is None or final_position is None:
+        raise ValueError("tracking segment poses require finite positions")
+    if not isinstance(current_orientation, list) or not isinstance(
+        final_orientation, list
+    ):
+        raise ValueError("tracking segment poses require orientations")
+    translation = _subtract(final_position, current_position)
+    translation_distance = _norm(translation)
+    rotation_distance = _quaternion_distance_rad(
+        current_orientation,
+        final_orientation,
+    )
+    fractions = [1.0]
+    if translation_distance > 1e-9:
+        fractions.append(float(maximum_translation_m) / translation_distance)
+    if rotation_distance > 1e-9:
+        fractions.append(float(maximum_rotation_rad) / rotation_distance)
+    fraction = max(0.0, min(fractions))
+    position = [
+        start + fraction * delta
+        for start, delta in zip(current_position, translation)
+    ]
+    orientation = _quaternion_slerp_xyzw(
+        [float(value) for value in current_orientation],
+        [float(value) for value in final_orientation],
+        fraction,
+    )
+    return {
+        "frame_id": str(final_pose.get("frame_id", BASE_FRAME)),
+        "link_name": str(final_pose.get("link_name", TOOL_FRAME)),
+        "position_m": position,
+        "orientation_quat_xyzw": orientation,
+        "fraction_of_remaining_path": fraction,
+        "remaining_translation_m": translation_distance,
+        "remaining_rotation_rad": rotation_distance,
+        "segment_translation_m": translation_distance * fraction,
+        "segment_rotation_rad": rotation_distance * fraction,
+        "final_segment": fraction >= 1.0 - 1e-9,
+    }
 
 
 def _axis_angle_vector_to_quaternion_xyzw(
@@ -979,6 +1109,129 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         )
         self._initial_target_robot_state = target_state
         return result
+
+    def _current_initial_position_status(self) -> dict[str, Any]:
+        """Compare fresh live UR joints with the immutable initial target."""
+        base: dict[str, Any] = {
+            "available": False,
+            "at_initial_position": False,
+            "stage": "current_initial_position_check",
+        }
+        try:
+            config = _load_initial_position_config()
+        except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            return {**base, "reason": f"initial position configuration is invalid: {exc}"}
+        self._wait_for_joint_state()
+        self._spin_for(0.1)
+        state = self.latest_joint_state
+        if state is None:
+            return {**base, "reason": "live joint state is unavailable"}
+        positions = {
+            str(name): float(position)
+            for name, position in zip(state.name, state.position)
+        }
+        missing = [name for name in config["joint_names"] if name not in positions]
+        if missing:
+            return {
+                **base,
+                "reason": "live joint state is missing: " + ", ".join(missing),
+                "missing_joint_names": missing,
+            }
+        errors = {
+            name: abs(
+                math.atan2(
+                    math.sin(positions[name] - float(target)),
+                    math.cos(positions[name] - float(target)),
+                )
+            )
+            for name, target in zip(
+                config["joint_names"],
+                config["joint_positions_rad"],
+            )
+        }
+        maximum_error = max(errors.values(), default=float("inf"))
+        tolerance = math.radians(
+            config["verification"]["maximum_final_joint_error_deg"]
+        )
+        at_initial = maximum_error <= tolerance
+        return {
+            **base,
+            "available": True,
+            "at_initial_position": at_initial,
+            "joint_errors_rad": errors,
+            "maximum_joint_error_rad": maximum_error,
+            "maximum_joint_error_deg": math.degrees(maximum_error),
+            "maximum_allowed_joint_error_rad": tolerance,
+            "maximum_allowed_joint_error_deg": math.degrees(tolerance),
+            "reason": None if at_initial else "live joints are not at initial_position",
+        }
+
+    def _attempt_failure_recovery_return(
+        self,
+        *,
+        execute: bool,
+        confirm_real_motion: bool,
+        motion_sent: bool,
+    ) -> dict[str, Any]:
+        """Use the guarded return after a partially executed failed workflow."""
+        report: dict[str, Any] = {
+            "success": False,
+            "attempted": False,
+            "motion_was_sent_before_failure": bool(motion_sent),
+            "execution_sent": False,
+        }
+        if not execute or not motion_sent:
+            report.update(
+                {
+                    "reason": (
+                        "no real motion preceded the failure"
+                        if execute
+                        else "plan-only mode cannot execute recovery"
+                    ),
+                    "final_state": "unchanged",
+                }
+            )
+            return report
+        stationary = self._wait_for_tracking_replan_stationary()
+        report["stationary_wait"] = stationary
+        if not stationary.get("success"):
+            report.update(
+                {
+                    "reason": "UR10e did not become stationary before recovery return",
+                    "final_state": "stopped_after_failure",
+                }
+            )
+            return report
+        code, return_result = self.return_to_initial_position(
+            execute=True,
+            confirm_real_motion=confirm_real_motion,
+        )
+        verification = self._current_initial_position_status()
+        success = bool(
+            code == 0
+            and return_result.get("success")
+            and verification.get("at_initial_position")
+        )
+        report.update(
+            {
+                "success": success,
+                "attempted": True,
+                "return_result": return_result,
+                "post_return_initial_position": verification,
+                "execution_sent": bool(return_result.get("execution_sent")),
+                "reason": None
+                if success
+                else (
+                    return_result.get("reason")
+                    or verification.get("reason")
+                    or "guarded failure-recovery return was not verified"
+                ),
+                "final_state": (
+                    "initial_position" if success else "stopped_after_failure"
+                ),
+            }
+        )
+        return report
 
     def _validate_trajectory_collision_states(
         self,
@@ -2013,20 +2266,29 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             },
             "state_validity": after_validity,
         }
-        before_value = before_validity.get("valid")
-        after_value = after_validity.get("valid")
-        report["final_state_validity_changed_after_rebuild"] = (
-            isinstance(before_value, bool)
-            and isinstance(after_value, bool)
-            and before_value != after_value
+        comparison = _compare_final_state_validity(
+            before_validity,
+            after_validity,
         )
+        report["original_goal_validity_comparison"] = comparison
+        report["final_state_validity_changed_after_rebuild"] = comparison[
+            "changed"
+        ]
+        rebuilt_octomap_available = bool(
+            after_scene.get("available")
+            and after_scene.get("octomap", {}).get("present")
+        )
+        report["rebuilt_planning_scene_available"] = bool(
+            after_scene.get("available")
+        )
+        report["rebuilt_octomap_available"] = rebuilt_octomap_available
         report["success"] = bool(
             after_scene.get("available")
             and human_preserved
-            and after_validity.get("available")
+            and rebuilt_octomap_available
         )
         report["reason"] = None if report["success"] else (
-            "rebuilt scene or final-state diagnostic is unavailable"
+            "rebuilt planning scene or dynamic OctoMap is unavailable"
         )
         return report
 
@@ -2989,6 +3251,26 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         )
         return report
 
+    @staticmethod
+    def _pre_execution_target_drift_requires_replan(
+        result: dict[str, Any],
+    ) -> bool:
+        """Recognize only fresh-target drift guards, never other safety failures."""
+        if result.get("stage") != "pre_execution_state_guard":
+            return False
+        failures = result.get("failures")
+        if not isinstance(failures, list) or not failures:
+            return False
+        allowed_prefixes = (
+            "selected mouth target moved ",
+            "a visible person's collision geometry moved ",
+        )
+        return all(
+            isinstance(failure, str)
+            and failure.startswith(allowed_prefixes)
+            for failure in failures
+        )
+
     def _execute_direct_with_tracking_monitor(
         self,
         *,
@@ -3001,6 +3283,61 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         target motion cancels execution and asks the caller to plan again from
         the stopped state; Servo is never published concurrently.
         """
+        final_target = getattr(self, "_frozen_dynamic_target", None)
+        current_pose = self._tool0_pose()
+        if not isinstance(final_target, dict) or not current_pose.get("available"):
+            return {
+                "success": False,
+                "stage": "tracking_segment_target",
+                "reason": "current or final tool pose is unavailable",
+                "execution_attempted": False,
+            }
+        try:
+            tracking_segment = _bounded_tracking_segment_target(
+                current_pose=current_pose,
+                final_pose=final_target,
+            )
+        except (RuntimeError, TypeError, ValueError) as exc:
+            return {
+                "success": False,
+                "stage": "tracking_segment_target",
+                "reason": f"could not construct bounded tracking segment: {exc}",
+                "execution_attempted": False,
+            }
+
+        segment_plan: dict[str, Any] | None = None
+        if not tracking_segment["final_segment"]:
+            segment_plan = self._run_cartesian_plan(tracking_segment)
+            if not segment_plan.get("success") or self._validated_trajectory is None:
+                return {
+                    "success": False,
+                    "stage": "tracking_segment_plan",
+                    "reason": segment_plan.get("reason")
+                    or "bounded Cartesian tracking segment could not be planned",
+                    "tracking_segment": tracking_segment,
+                    "segment_plan": segment_plan,
+                    "execution_attempted": False,
+                }
+            vertical_axis_validation = segment_plan.get(
+                "vertical_axis_validation",
+                vertical_axis_validation,
+            )
+
+        collision_validation = self._validate_trajectory_collision_states(
+            self._validated_trajectory
+        )
+        if not collision_validation.get("success"):
+            return {
+                "success": False,
+                "stage": "tracking_segment_collision_validation",
+                "reason": collision_validation.get("reason")
+                or "bounded tracking segment became collision-invalid",
+                "tracking_segment": tracking_segment,
+                "segment_plan": segment_plan,
+                "segment_collision_validation": collision_validation,
+                "execution_attempted": False,
+            }
+
         goal = ExecuteTrajectory.Goal()
         goal.trajectory = self._validated_trajectory
         client = self._execution_action_client()
@@ -3079,7 +3416,15 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "tracking_replan_required": bool(
                     mouth_confirmation.get("confirmed")
                 ),
+                "tracking_replan_reason": (
+                    "target_drift"
+                    if mouth_confirmation.get("confirmed")
+                    else None
+                ),
                 "mouth_drift_confirmation": mouth_confirmation,
+                "tracking_segment": tracking_segment,
+                "segment_plan": segment_plan,
+                "segment_collision_validation": collision_validation,
                 "vertical_axis_validation": vertical_axis_validation,
                 "dynamic_octomap_readiness": readiness,
                 "route_strategy": DIRECT_ROUTE_STRATEGY,
@@ -3094,16 +3439,30 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "execution_attempted": True,
             }
         result = wrapped.result
+        execution_succeeded = int(result.error_code.val) == 1
+        segment_boundary = bool(
+            execution_succeeded and not tracking_segment["final_segment"]
+        )
         return {
-            "success": int(result.error_code.val) == 1,
-            "stage": "tracked_cartesian_execute_trajectory",
+            "success": execution_succeeded,
+            "stage": (
+                "tracked_cartesian_segment_complete"
+                if segment_boundary
+                else "tracked_cartesian_execute_trajectory"
+            ),
             "result_status": int(wrapped.status),
             "error_code": int(result.error_code.val),
             "error_message": result.error_code.message,
             "execution_attempted": True,
             "execution_sent": True,
-            "tracking_replan_required": False,
+            "tracking_replan_required": segment_boundary,
+            "tracking_replan_reason": (
+                "segment_boundary" if segment_boundary else None
+            ),
             "mouth_drift_confirmation": mouth_confirmation,
+            "tracking_segment": tracking_segment,
+            "segment_plan": segment_plan,
+            "segment_collision_validation": collision_validation,
             "vertical_axis_validation": vertical_axis_validation,
             "dynamic_octomap_readiness": readiness,
             "route_strategy": DIRECT_ROUTE_STRATEGY,
@@ -3467,6 +3826,11 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "tracking_replan_required": bool(
                     mouth_drift_confirmation.get("confirmed")
                 ),
+                "tracking_replan_reason": (
+                    "target_drift"
+                    if mouth_drift_confirmation.get("confirmed")
+                    else None
+                ),
                 "vertical_axis_validation": vertical_axis_validation,
                 "live_vertical_axis_guard": live_vertical_axis_guard,
             }
@@ -3600,6 +3964,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "same_target_replanning": True,
             "wait_for_clear": False,
             "automatic_return_to_initial_position": True,
+            "initial_position_required_before_workflow": True,
+            "failure_recovery_return_enabled": True,
             "return_target": "initial_position",
             "return_collision_checking": True,
             "return_vertical_axis_constraint": True,
@@ -3609,11 +3975,24 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 track_mouth_during_execution
             ),
             "tracking_policy": (
-                "cancel_and_replan_during_moveit_then_relative_servo_at_premouth"
+                "bounded_cartesian_segments_with_fresh_target_replanning_then_"
+                "relative_servo_at_premouth"
                 if track_mouth_during_execution
                 else "disabled_one_shot_frozen_target"
             ),
-            "tracking_maximum_replan_attempts": TRACKING_MAX_REPLAN_ATTEMPTS,
+            "tracking_maximum_target_drift_replans": (
+                TRACKING_MAX_TARGET_DRIFT_REPLANS
+            ),
+            "tracking_maximum_approach_segments": TRACKING_MAX_APPROACH_SEGMENTS,
+            "tracking_segment_maximum_translation_m": (
+                TRACKING_SEGMENT_MAX_TRANSLATION_M
+            ),
+            "tracking_segment_maximum_rotation_deg": math.degrees(
+                TRACKING_SEGMENT_MAX_ROTATION_RAD
+            ),
+            "tracking_maximum_approach_duration_sec": (
+                TRACKING_MAX_APPROACH_DURATION_SEC
+            ),
             "tracking_maximum_displacement_m": TRACKING_MAX_DISPLACEMENT_M,
             "tracking_maximum_linear_speed_mps": TRACKING_MAX_LINEAR_SPEED_MPS,
             "tracking_maximum_linear_acceleration_mps2": (
@@ -3696,39 +4075,163 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "execution_sent": False,
                 "integrated_real_feed_water": contract,
             }
+        initial_before = self._current_initial_position_status()
+        preflight_return: dict[str, Any] = {
+            "required": False,
+            "attempted": False,
+            "success": bool(initial_before.get("at_initial_position")),
+            "execution_sent": False,
+            "initial_position_before": initial_before,
+        }
+        if not initial_before.get("available"):
+            return 2, {
+                "success": False,
+                "mode": "execute" if execute else "plan",
+                "stage": "initial_position_entry_check",
+                "reason": initial_before.get("reason")
+                or "current initial-position status is unavailable",
+                "preflight_return_to_initial_position": preflight_return,
+                "dynamic_octomap_readiness": dynamic,
+                "combined_tool_collision_geometry": combined_tool_geometry,
+                "execution_attempted": False,
+                "execution_sent": False,
+                "integrated_real_feed_water": contract,
+            }
+        if not initial_before.get("at_initial_position"):
+            preflight_return["required"] = True
+            return_code, return_result = self.return_to_initial_position(
+                execute=execute,
+                confirm_real_motion=confirm_real_motion,
+            )
+            preflight_return.update(
+                {
+                    "attempted": bool(execute),
+                    "return_result": return_result,
+                    "execution_sent": bool(return_result.get("execution_sent")),
+                }
+            )
+            if not execute:
+                preflight_return.update(
+                    {
+                        "success": False,
+                        "reason": (
+                            "plan-only mode cannot move the UR10e to initial_position"
+                        ),
+                    }
+                )
+                return 2, {
+                    "success": False,
+                    "mode": "plan",
+                    "stage": "initial_position_required_plan_only",
+                    "reason": preflight_return["reason"],
+                    "preflight_return_to_initial_position": preflight_return,
+                    "dynamic_octomap_readiness": dynamic,
+                    "combined_tool_collision_geometry": combined_tool_geometry,
+                    "execution_attempted": False,
+                    "execution_sent": False,
+                    "integrated_real_feed_water": contract,
+                }
+            initial_after = self._current_initial_position_status()
+            preflight_return["initial_position_after"] = initial_after
+            preflight_return["success"] = bool(
+                return_code == 0
+                and return_result.get("success")
+                and initial_after.get("at_initial_position")
+            )
+            preflight_return["reason"] = (
+                None
+                if preflight_return["success"]
+                else (
+                    return_result.get("reason")
+                    or initial_after.get("reason")
+                    or "preflight return to initial_position was not verified"
+                )
+            )
+            if not preflight_return["success"]:
+                return 2, {
+                    "success": False,
+                    "mode": "execute",
+                    "stage": "preflight_return_to_initial_position_refused",
+                    "reason": preflight_return["reason"],
+                    "preflight_return_to_initial_position": preflight_return,
+                    "dynamic_octomap_readiness": dynamic,
+                    "combined_tool_collision_geometry": combined_tool_geometry,
+                    "execution_attempted": bool(
+                        return_result.get("execution_attempted")
+                    ),
+                    "execution_sent": bool(return_result.get("execution_sent")),
+                    "integrated_real_feed_water": contract,
+                }
+        else:
+            preflight_return["reason"] = None
+            preflight_return["initial_position_after"] = initial_before
         search = self.active_search(
             execute=execute,
             confirm_real_motion=confirm_real_motion,
         )
         if not search.get("success"):
+            search_motion_sent = bool(search.get("trajectory_sent"))
+            recovery = self._attempt_failure_recovery_return(
+                execute=execute,
+                confirm_real_motion=confirm_real_motion,
+                motion_sent=search_motion_sent,
+            )
             return 2, {
                 "success": False,
                 "mode": "execute" if execute else "plan",
                 "stage": "active_search",
                 "reason": search.get("reason") or "active search did not recover the selected mouth",
                 "active_search": search,
+                "preflight_return_to_initial_position": preflight_return,
+                "failure_recovery_return": recovery,
                 "dynamic_octomap_readiness": dynamic,
                 "combined_tool_collision_geometry": combined_tool_geometry,
                 "execution_attempted": bool(
-                    any(
+                    preflight_return.get("execution_sent")
+                    or recovery.get("execution_sent")
+                    or any(
                         isinstance(step, dict)
                         and isinstance(step.get("execution_result"), dict)
                         and step["execution_result"].get("execution_attempted")
                         for step in search.get("search_steps", [])
                     )
                 ),
-                "execution_sent": bool(search.get("trajectory_sent")),
+                "execution_sent": bool(
+                    preflight_return.get("execution_sent")
+                    or search_motion_sent
+                    or recovery.get("execution_sent")
+                ),
+                "return_execution_attempted": bool(recovery.get("attempted")),
+                "return_execution_sent": bool(recovery.get("execution_sent")),
+                "final_state": recovery.get("final_state"),
                 "integrated_real_feed_water": contract,
             }
         self._integrated_tracking_enabled = bool(track_mouth_during_execution)
         tracking_replans: list[dict[str, Any]] = []
         any_execution_attempted = False
         any_execution_sent = False
+        target_drift_replans = 0
+        approach_started = time.monotonic()
         if execute:
-            for attempt in range(TRACKING_MAX_REPLAN_ATTEMPTS + 1):
+            for attempt in range(TRACKING_MAX_APPROACH_SEGMENTS):
+                if (
+                    track_mouth_during_execution
+                    and time.monotonic() - approach_started
+                    > TRACKING_MAX_APPROACH_DURATION_SEC
+                ):
+                    code = 2
+                    result = {
+                        "success": False,
+                        "mode": "execute",
+                        "stage": "tracking_approach_duration",
+                        "reason": "segmented tracking approach exceeded its duration limit",
+                        "execution_attempted": any_execution_attempted,
+                        "execution_sent": any_execution_sent,
+                    }
+                    break
                 if attempt > 0:
                     stationary = self._wait_for_tracking_replan_stationary()
-                    tracking_replans[-1]["post_cancel_stationary_wait"] = stationary
+                    tracking_replans[-1]["pre_replan_stationary_wait"] = stationary
                     if not stationary.get("success"):
                         code = 2
                         result = {
@@ -3739,7 +4242,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                                 "UR10e did not become stationary after tracked "
                                 "trajectory cancellation"
                             ),
-                            "post_cancel_stationary_wait": stationary,
+                            "pre_replan_stationary_wait": stationary,
                             "execution_attempted": any_execution_attempted,
                             "execution_sent": any_execution_sent,
                         }
@@ -3761,6 +4264,31 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         any_execution_sent
                         or execution_result.get("execution_sent")
                     )
+                pre_execution_drift_replan = (
+                    track_mouth_during_execution
+                    and self._pre_execution_target_drift_requires_replan(result)
+                )
+                execution_replan = bool(
+                    isinstance(execution_result, dict)
+                    and execution_result.get("tracking_replan_required")
+                )
+                replan_required = bool(
+                    pre_execution_drift_replan or execution_replan
+                )
+                replan_reason = (
+                    "pre_execution_target_drift"
+                    if pre_execution_drift_replan
+                    else (
+                        execution_result.get("tracking_replan_reason")
+                        if isinstance(execution_result, dict)
+                        else None
+                    )
+                )
+                if replan_reason in (
+                    "target_drift",
+                    "pre_execution_target_drift",
+                ):
+                    target_drift_replans += 1
                 tracking_replans.append(
                     {
                         "attempt": attempt + 1,
@@ -3770,37 +4298,99 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         if isinstance(execution_result, dict)
                         else None,
                         "reason": result.get("reason"),
-                        "replan_required": bool(
-                            isinstance(execution_result, dict)
-                            and execution_result.get("tracking_replan_required")
+                        "replan_required": replan_required,
+                        "replan_reason": replan_reason,
+                        "tracking_segment": (
+                            execution_result.get("tracking_segment")
+                            if isinstance(execution_result, dict)
+                            else None
                         ),
                         "mouth_drift_confirmation": (
                             execution_result.get("mouth_drift_confirmation")
                             if isinstance(execution_result, dict)
                             else None
                         ),
+                        "pre_execution_target_drift_m": result.get(
+                            "pre_execution_target_drift_m"
+                        ),
                     }
                 )
                 if code == 0 and result.get("success"):
                     break
+                if (
+                    target_drift_replans > TRACKING_MAX_TARGET_DRIFT_REPLANS
+                ):
+                    code = 2
+                    result.update(
+                        {
+                            "success": False,
+                            "stage": "tracking_target_drift_replan_limit",
+                            "reason": (
+                                "tracked target exceeded the bounded drift-replan limit"
+                            ),
+                        }
+                    )
+                    break
                 if not (
                     track_mouth_during_execution
-                    and isinstance(execution_result, dict)
-                    and execution_result.get("tracking_replan_required")
-                    and attempt < TRACKING_MAX_REPLAN_ATTEMPTS
+                    and replan_required
+                    and attempt + 1 < TRACKING_MAX_APPROACH_SEGMENTS
                 ):
                     break
+            else:
+                code = 2
+                result = {
+                    "success": False,
+                    "mode": "execute",
+                    "stage": "tracking_approach_segment_limit",
+                    "reason": "segmented tracking approach exhausted its segment limit",
+                    "execution_attempted": any_execution_attempted,
+                    "execution_sent": any_execution_sent,
+                }
         else:
             code, result = self.plan()
+        workflow_motion_sent = bool(
+            search.get("trajectory_sent") or any_execution_sent
+        )
+        failure_recovery: dict[str, Any] | None = None
+        if code != 0 or not result.get("success"):
+            failure_recovery = self._attempt_failure_recovery_return(
+                execute=execute,
+                confirm_real_motion=confirm_real_motion,
+                motion_sent=workflow_motion_sent,
+            )
         if execute:
             result["execution_attempted"] = bool(
-                result.get("execution_attempted") or any_execution_attempted
+                result.get("execution_attempted")
+                or preflight_return.get("execution_sent")
+                or search.get("trajectory_sent")
+                or any_execution_attempted
+                or (
+                    failure_recovery is not None
+                    and failure_recovery.get("execution_sent")
+                )
             )
             result["execution_sent"] = bool(
-                result.get("execution_sent") or any_execution_sent
+                result.get("execution_sent")
+                or preflight_return.get("execution_sent")
+                or workflow_motion_sent
+                or (
+                    failure_recovery is not None
+                    and failure_recovery.get("execution_sent")
+                )
             )
         result["tracking_replan_attempts"] = tracking_replans
         result["active_search"] = search
+        result["preflight_return_to_initial_position"] = preflight_return
+        if failure_recovery is not None:
+            result["failure_recovery_return"] = failure_recovery
+            result["return_execution_attempted"] = bool(
+                failure_recovery.get("attempted")
+            )
+            result["return_execution_sent"] = bool(
+                failure_recovery.get("execution_sent")
+            )
+            result["final_state"] = failure_recovery.get("final_state")
         result["dynamic_octomap_readiness"] = dynamic
         result["combined_tool_collision_geometry"] = combined_tool_geometry
         result["integrated_real_feed_water"] = contract

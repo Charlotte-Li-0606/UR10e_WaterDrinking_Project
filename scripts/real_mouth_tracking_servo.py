@@ -31,6 +31,9 @@ from robot_layer.arm_ur10e.control.relative_tracking import RelativeTrackingSess
 from robot_layer.arm_ur10e.control.ros_servo_backend import RosServoCommandSink
 
 
+MAX_SPEED_SLIDER_PERCENT = 30.0
+
+
 class RealMouthTrackingServo(Node):
     """Lock a safe pre-mouth pose, then follow only small mouth displacement."""
 
@@ -124,7 +127,10 @@ class RealMouthTrackingServo(Node):
 
     def _speed_slider_cb(self, msg: Float64) -> None:
         self.speed_slider_percent = float(msg.data)
-        if self.session.locked and not 0.0 < self.speed_slider_percent <= 10.0:
+        if (
+            self.session.locked
+            and not 0.0 < self.speed_slider_percent <= MAX_SPEED_SLIDER_PERCENT
+        ):
             self._halt(f"speed_slider_percent:{self.speed_slider_percent}")
 
     def _program_running_cb(self, msg: Bool) -> None:
@@ -147,8 +153,11 @@ class RealMouthTrackingServo(Node):
             return "robot_not_running"
         if self.safety_mode not in {SafetyMode.NORMAL, SafetyMode.REDUCED}:
             return "safety_mode_not_ready"
-        if self.speed_slider_percent is None or not 0.0 < self.speed_slider_percent <= 10.0:
-            return "speed_slider_not_at_or_below_10_percent"
+        if (
+            self.speed_slider_percent is None
+            or not 0.0 < self.speed_slider_percent <= MAX_SPEED_SLIDER_PERCENT
+        ):
+            return "speed_slider_not_at_or_below_30_percent"
         if self.robot_program_running is not True:
             return "external_control_program_not_running"
         return None
@@ -168,7 +177,7 @@ class RealMouthTrackingServo(Node):
                 "controller_state_stale",
                 "robot_not_running",
                 "safety_mode_not_ready",
-                "speed_slider_not_at_or_below_10_percent",
+                "speed_slider_not_at_or_below_30_percent",
                 "external_control_program_not_running",
             }
             if self.session.locked or reason not in prelock_wait_reasons:

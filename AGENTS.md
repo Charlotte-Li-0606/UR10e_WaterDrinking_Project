@@ -28,6 +28,12 @@
 
 ## Guarded return to initial position
 
+- Before any real `feed_water` search or pre-mouth planning, compare all six
+  live joints with the versioned `initial_position` using the configured 1
+  degree final-joint tolerance. If the arm is outside that tolerance, invoke
+  the existing guarded return and continue only after a second live joint
+  check verifies `initial_position`. In plan-only mode, report that the return
+  is required and stop without motion.
 - The high-level real `feed_water` workflow may include one automatic return
   after a successful pre-mouth hold. The return is part of that same guarded
   operation; it is not exposed as a standalone real-motion tool and does not
@@ -54,6 +60,11 @@
   trajectory. If any gate, target verification, plan, or execution check
   fails, remain at pre-mouth and report the exact refusal; do not attempt an
   alternate unguarded retreat.
+- If active search or the tracked approach sent motion and then failed, first
+  wait up to three seconds for the stationary-joint requirement, then invoke
+  the same guarded return. Report whether recovery was attempted and verified.
+  If its scene, controller, collision, orientation, or target checks fail,
+  remain stopped at the failure pose; never substitute an unguarded recovery.
 - Plan-only mode may validate the return but must never send it. Real return
   execution retains `UR10E_ALLOW_REAL_EXECUTION=1` and
   `--confirm-real-motion`, and the structured report must distinguish outbound
@@ -98,8 +109,8 @@
   velocity, preserve the locked tool orientation, keep target displacement at
   or below 60 mm, Cartesian speed at or below 20 mm/s, acceleration at or
   below 0.10 m/s², and the tool within the 1.30 m workspace radius.
-- For the first physical test, require the pendant speed slider to be at or
-  below 10%, MoveIt Servo initialized, the scaled trajectory controller
+- For physical tracking, require the pendant speed slider to be at or below
+  30%, MoveIt Servo initialized, the scaled trajectory controller
   active, normal or reduced safety mode, the robot running under External
   Control, fresh `base_link` mouth and `tool0` TF data, and the operator's stop
   control immediately accessible.
@@ -127,11 +138,21 @@
 
 - The tracking flag is explicit opt-in; ordinary `feed_water` keeps the
   existing frozen-target one-shot behavior. During tracked execution, MoveIt
-  exclusively owns the controller for the collision-checked approach. Stable
-  significant mouth drift cancels that trajectory and triggers at most two
-  fresh plans from the stopped state. Servo may publish only after MoveGroup
-  finishes and releases the controller, and only for bounded relative
-  translation during the pre-mouth hold.
+  exclusively owns the controller for the collision-checked approach. Split a
+  direct Cartesian approach into at most 16 MoveIt-planned segments, each no
+  longer than 50 mm translation or 15 degrees rotation. Recheck every segment
+  waypoint against the current PlanningScene, stop at each segment boundary,
+  refresh the stable selected mouth and fixed human scene, and plan the next
+  segment from the stationary state. Keep the complete tracked approach within
+  45 seconds. Do not split an OMPL detour; OMPL remains an exceptional full
+  collision-checked route.
+- Stable mouth drift above 50 mm during a segment cancels that segment and may
+  trigger at most two target-drift replans. After a cancellation or segment
+  boundary, wait up to three seconds for two joint-state samples at or below
+  0.010 rad/s before rebuilding the OctoMap; never raise that threshold or
+  rebuild occupancy from a moving wrist camera. Servo may publish only after
+  MoveGroup finishes and releases the controller, and only for bounded
+  relative translation during the pre-mouth hold.
 - Never publish MoveIt execution and Servo commands concurrently. Preserve the
   validated pre-mouth offset, locked tool orientation, human collision scene,
   OctoMap, 60 mm relative target limit, 20 mm/s Servo limit, 0.10 m/s²

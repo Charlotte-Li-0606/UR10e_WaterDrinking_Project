@@ -219,7 +219,7 @@ python3 scripts/real_ur10e_smoke_test.py --mode plan
 Execution is intentionally not the default and requires all three gates: a
 successful check and plan, `--mode execute --confirm-real-motion`, and the
 exact process environment `UR10E_ALLOW_REAL_EXECUTION=1`. The first physical
-motion requires a clear test area, the pendant speed slider at 5–10%, a
+motion requires a clear test area, the pendant speed slider at 5–30%, a
 manually verified payload, and an operator with immediate E-stop access.
 
 ## Feeding geometry and frames

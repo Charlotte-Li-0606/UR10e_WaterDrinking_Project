@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from moveit_msgs.msg import RobotState, RobotTrajectory
+from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectoryPoint
 
 from robot_layer.arm_ur10e.agent_server import real_feed_water_backend as backend
@@ -25,7 +26,11 @@ from scripts.real_feed_water_integrated import (
     SEARCH_PLANNING_PIPELINE,
     SEARCH_WRIST_Z_ANGLE_DEG,
     TRACKING_POST_CANCEL_SETTLE_TIMEOUT_SEC,
+    TRACKING_SEGMENT_MAX_ROTATION_RAD,
+    TRACKING_SEGMENT_MAX_TRANSLATION_M,
     RealIntegratedFeedWater,
+    _bounded_tracking_segment_target,
+    _compare_final_state_validity,
     _load_initial_position_config,
     _orientation_after_local_tool_z_rotation,
     _recorded_tool_pose_in_base_link,
@@ -80,6 +85,82 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
 
         self.assertFalse(selected["consistent"])
 
+    def test_octomap_rebuild_does_not_fail_when_nominal_candidate_has_no_ik(self) -> None:
+        comparison = _compare_final_state_validity(
+            {
+                "available": False,
+                "valid": False,
+                "reason": "robot state is unavailable",
+            },
+            {
+                "available": False,
+                "valid": False,
+                "reason": "robot state is unavailable",
+            },
+        )
+
+        self.assertFalse(comparison["available"])
+        self.assertIsNone(comparison["changed"])
+        self.assertIn("adaptive candidate", comparison["reason"])
+
+    def test_octomap_rebuild_reports_actual_final_state_validity_change(self) -> None:
+        comparison = _compare_final_state_validity(
+            {"available": True, "valid": False},
+            {"available": True, "valid": True},
+        )
+
+        self.assertTrue(comparison["available"])
+        self.assertTrue(comparison["changed"])
+        self.assertIsNone(comparison["reason"])
+
+    def test_tracking_segment_bounds_translation_and_rotation(self) -> None:
+        target = _bounded_tracking_segment_target(
+            current_pose={
+                "position_m": [0.0, 0.0, 0.0],
+                "orientation_quat_xyzw": [0.0, 0.0, 0.0, 1.0],
+            },
+            final_pose={
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "position_m": [0.12, 0.0, 0.0],
+                "orientation_quat_xyzw": [
+                    0.0,
+                    0.0,
+                    math.sin(math.radians(30.0) / 2.0),
+                    math.cos(math.radians(30.0) / 2.0),
+                ],
+            },
+        )
+
+        self.assertFalse(target["final_segment"])
+        self.assertLessEqual(
+            target["segment_translation_m"],
+            TRACKING_SEGMENT_MAX_TRANSLATION_M,
+        )
+        self.assertLessEqual(
+            target["segment_rotation_rad"],
+            TRACKING_SEGMENT_MAX_ROTATION_RAD,
+        )
+
+    def test_tracking_segment_uses_complete_final_pose_when_already_bounded(self) -> None:
+        final_pose = {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "position_m": [0.02, -0.01, 0.0],
+            "orientation_quat_xyzw": [0.0, 0.0, 0.0, 1.0],
+        }
+
+        target = _bounded_tracking_segment_target(
+            current_pose={
+                "position_m": [0.0, 0.0, 0.0],
+                "orientation_quat_xyzw": [0.0, 0.0, 0.0, 1.0],
+            },
+            final_pose=final_pose,
+        )
+
+        self.assertTrue(target["final_segment"])
+        self.assertEqual(final_pose["position_m"], target["position_m"])
+
     def test_initial_position_config_preserves_operator_joint_target(self) -> None:
         config = _load_initial_position_config()
 
@@ -94,6 +175,23 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             "unverified_polyscope_active_feature",
             config["operator_displayed_tool_pose"]["frame_id"],
         )
+
+    def test_live_initial_position_check_wraps_revolute_joint_angles(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        config = _load_initial_position_config()
+        state = JointState()
+        state.name = list(config["joint_names"])
+        state.position = list(config["joint_positions_rad"])
+        state.position[0] += 2.0 * math.pi
+        node.latest_joint_state = state
+        node._wait_for_joint_state = Mock()
+        node._spin_for = Mock()
+
+        result = node._current_initial_position_status()
+
+        self.assertTrue(result["available"])
+        self.assertTrue(result["at_initial_position"])
+        self.assertLess(result["maximum_joint_error_rad"], 1e-9)
         self.assertEqual(
             "polyscope_axis_angle_vector",
             config["operator_displayed_tool_pose"]["rotation_convention"],
@@ -900,6 +998,9 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             }
         )
         node.dynamic_readiness = Mock(return_value={"success": True, "failures": []})
+        node._current_initial_position_status = Mock(
+            return_value={"available": True, "at_initial_position": True}
+        )
         node.active_search = Mock(
             return_value={
                 "success": True,
@@ -1009,6 +1110,268 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         node.dynamic_readiness.assert_not_called()
         node.active_search.assert_not_called()
 
+    def test_preflight_return_must_be_verified_before_active_search(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.target_selection = "center"
+        node._apply_combined_tool_collision_geometry = Mock(
+            return_value={"success": True}
+        )
+        node.dynamic_readiness = Mock(return_value={"success": True, "failures": []})
+        node._current_initial_position_status = Mock(
+            side_effect=[
+                {
+                    "available": True,
+                    "at_initial_position": False,
+                    "reason": "live joints are not at initial_position",
+                },
+                {
+                    "available": True,
+                    "at_initial_position": False,
+                    "reason": "live joints are not at initial_position",
+                },
+            ]
+        )
+        node.return_to_initial_position = Mock(
+            return_value=(
+                2,
+                {
+                    "success": False,
+                    "reason": "return verification failed",
+                    "execution_attempted": True,
+                    "execution_sent": True,
+                },
+            )
+        )
+        node.active_search = Mock()
+
+        code, result = node.run_integrated(
+            execute=True,
+            confirm_real_motion=True,
+            allow_validated_camera_ray_execute=True,
+            no_execute=False,
+        )
+
+        self.assertEqual(2, code)
+        self.assertEqual("preflight_return_to_initial_position_refused", result["stage"])
+        node.return_to_initial_position.assert_called_once_with(
+            execute=True,
+            confirm_real_motion=True,
+        )
+        node.active_search.assert_not_called()
+
+    def test_plan_only_reports_required_initial_return_without_motion(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.target_selection = "center"
+        node._apply_combined_tool_collision_geometry = Mock(
+            return_value={"success": True}
+        )
+        node.dynamic_readiness = Mock(return_value={"success": True, "failures": []})
+        node._current_initial_position_status = Mock(
+            return_value={
+                "available": True,
+                "at_initial_position": False,
+                "reason": "live joints are not at initial_position",
+            }
+        )
+        node.return_to_initial_position = Mock(
+            return_value=(
+                0,
+                {
+                    "success": True,
+                    "stage": "return_target_validated",
+                    "execution_attempted": False,
+                    "execution_sent": False,
+                },
+            )
+        )
+        node.active_search = Mock()
+
+        code, result = node.run_integrated(
+            execute=False,
+            confirm_real_motion=False,
+            allow_validated_camera_ray_execute=False,
+            no_execute=True,
+        )
+
+        self.assertEqual(2, code)
+        self.assertEqual("initial_position_required_plan_only", result["stage"])
+        self.assertFalse(result["execution_sent"])
+        node.return_to_initial_position.assert_called_once_with(
+            execute=False,
+            confirm_real_motion=False,
+        )
+        node.active_search.assert_not_called()
+
+    def test_failure_recovery_reuses_guarded_return_after_motion(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._wait_for_tracking_replan_stationary = Mock(
+            return_value={"success": True}
+        )
+        node.return_to_initial_position = Mock(
+            return_value=(
+                0,
+                {
+                    "success": True,
+                    "execution_attempted": True,
+                    "execution_sent": True,
+                },
+            )
+        )
+        node._current_initial_position_status = Mock(
+            return_value={"available": True, "at_initial_position": True}
+        )
+
+        result = node._attempt_failure_recovery_return(
+            execute=True,
+            confirm_real_motion=True,
+            motion_sent=True,
+        )
+
+        self.assertTrue(result["success"])
+        self.assertTrue(result["attempted"])
+        self.assertEqual("initial_position", result["final_state"])
+        node.return_to_initial_position.assert_called_once_with(
+            execute=True,
+            confirm_real_motion=True,
+        )
+
+    def test_active_search_failure_requests_recovery_when_motion_was_sent(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.target_selection = "center"
+        node._apply_combined_tool_collision_geometry = Mock(
+            return_value={"success": True}
+        )
+        node.dynamic_readiness = Mock(return_value={"success": True, "failures": []})
+        node._current_initial_position_status = Mock(
+            return_value={"available": True, "at_initial_position": True}
+        )
+        node.active_search = Mock(
+            return_value={
+                "success": False,
+                "reason": "bounded search segment failed",
+                "trajectory_sent": True,
+                "search_steps": [],
+            }
+        )
+        node._attempt_failure_recovery_return = Mock(
+            return_value={
+                "success": True,
+                "attempted": True,
+                "execution_sent": True,
+                "final_state": "initial_position",
+            }
+        )
+
+        code, result = node.run_integrated(
+            execute=True,
+            confirm_real_motion=True,
+            allow_validated_camera_ray_execute=True,
+            no_execute=False,
+        )
+
+        self.assertEqual(2, code)
+        self.assertEqual("active_search", result["stage"])
+        self.assertEqual("initial_position", result["final_state"])
+        node._attempt_failure_recovery_return.assert_called_once_with(
+            execute=True,
+            confirm_real_motion=True,
+            motion_sent=True,
+        )
+
+    def test_tracked_integrated_execution_refreshes_after_segment_boundary(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.target_selection = "center"
+        node._apply_combined_tool_collision_geometry = Mock(
+            return_value={"success": True}
+        )
+        node.dynamic_readiness = Mock(return_value={"success": True, "failures": []})
+        node._current_initial_position_status = Mock(
+            return_value={"available": True, "at_initial_position": True}
+        )
+        node.active_search = Mock(
+            return_value={
+                "success": True,
+                "stage": "mouth_found_without_search_motion",
+                "trajectory_sent": False,
+            }
+        )
+        node._wait_for_tracking_replan_stationary = Mock(
+            return_value={
+                "success": True,
+                "maximum_joint_speed_rad_sec": 0.0,
+                "maximum_allowed_joint_speed_rad_sec": 0.01,
+            }
+        )
+        node._servo_track_during_premouth_hold = Mock(
+            return_value={
+                "success": True,
+                "servo_command_count": 0,
+                "stop_reason": "hold_duration_complete",
+            }
+        )
+        node.return_to_initial_position = Mock(
+            return_value=(
+                0,
+                {
+                    "success": True,
+                    "execution_attempted": True,
+                    "execution_sent": True,
+                    "automatic_retreat_sent": True,
+                },
+            )
+        )
+        first_segment = {
+            "success": False,
+            "stage": "execution_verification",
+            "reason": "the straw missed the final pre-mouth target",
+            "execution_result": {
+                "success": True,
+                "stage": "tracked_cartesian_segment_complete",
+                "execution_attempted": True,
+                "execution_sent": True,
+                "tracking_replan_required": True,
+                "tracking_replan_reason": "segment_boundary",
+                "tracking_segment": {
+                    "segment_translation_m": 0.05,
+                    "final_segment": False,
+                },
+            },
+        }
+        final_segment = {
+            "success": True,
+            "stage": "execute",
+            "execution_result": {
+                "success": True,
+                "stage": "tracked_cartesian_execute_trajectory",
+                "execution_attempted": True,
+                "execution_sent": True,
+                "tracking_replan_required": False,
+            },
+        }
+
+        with patch.object(
+            RealDynamicObstacleAvoidancePlan,
+            "execute",
+            side_effect=[(2, first_segment), (0, final_segment)],
+        ) as parent_execute:
+            code, result = node.run_integrated(
+                execute=True,
+                confirm_real_motion=True,
+                allow_validated_camera_ray_execute=True,
+                no_execute=False,
+                track_mouth_during_execution=True,
+                hold_duration_sec=5.0,
+            )
+
+        self.assertEqual(0, code)
+        self.assertEqual(2, parent_execute.call_count)
+        node._wait_for_tracking_replan_stationary.assert_called_once_with()
+        self.assertEqual(
+            "segment_boundary",
+            result["tracking_replan_attempts"][0]["replan_reason"],
+        )
+        self.assertEqual("initial_position", result["final_state"])
+
     def test_dynamic_plan_failure_reports_collision_free_route_stage(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
         parent_result = {
@@ -1101,6 +1464,35 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             timeout_sec=3.0,
         )
         self.assertEqual(0.010, result["maximum_allowed_joint_speed_rad_sec"])
+
+    def test_tracking_replans_pre_execution_target_drift_only(self) -> None:
+        self.assertTrue(
+            RealIntegratedFeedWater._pre_execution_target_drift_requires_replan(
+                {
+                    "stage": "pre_execution_state_guard",
+                    "failures": [
+                        "selected mouth target moved 0.0400 m after planning, "
+                        "above the 0.0300 m limit",
+                        "a visible person's collision geometry moved 0.0600 m "
+                        "after planning, above the 0.0500 m limit",
+                    ],
+                }
+            )
+        )
+
+    def test_tracking_does_not_replan_past_controller_safety_failure(self) -> None:
+        self.assertFalse(
+            RealIntegratedFeedWater._pre_execution_target_drift_requires_replan(
+                {
+                    "stage": "pre_execution_state_guard",
+                    "failures": [
+                        "selected mouth target moved 0.0400 m after planning, "
+                        "above the 0.0300 m limit",
+                        "scaled_joint_trajectory_controller is no longer active",
+                    ],
+                }
+            )
+        )
 
     def test_unstable_single_frame_drift_is_not_confirmed(self) -> None:
         result = RealIntegratedFeedWater._execution_mouth_drift_confirmation(
