@@ -18,7 +18,7 @@ enabled, `/joint_states` is complete, `base_link -> tool0` is available, the
 expected scaled controller is active, and its `FollowJointTrajectory` action
 server is available. Real planning-only requests do not require the execution
 variable. The real backend defaults and caps MoveIt velocity and acceleration
-scaling at `0.60`.
+scaling at `0.30`.
 
 Codex is the preferred operator-facing agent and uses the canonical
 `feed_water` interface through `scripts/codex_feed_water.sh`. The older
@@ -29,7 +29,7 @@ accepts only one high-level `feed_water` call and delegates it to the same
 integrated real state machine. That state machine locks the center-selected
 person among the visible mouth candidates, performs the bounded
 translation-only active search when that target is absent, freezes the
-corrected camera-ray 80 mm pre-mouth target, and uses the wrist OctoMap for
+corrected camera-ray 50 mm pre-mouth target, and uses the wrist OctoMap for
 same-target alternate-path replanning. The real branch exposes no arbitrary
 joint, pose, trajectory, controller, gripper, direct-mouth, tilt, pour, or
 retreat action. It plans by default. Execution requires `--execute`,
@@ -76,10 +76,12 @@ UR10E_ALLOW_REAL_EXECUTION=1 scripts/codex_feed_water.sh \
 The guarded pre-mouth planner accepts a pendant speed-slider setting from 5%
 through a 60% ceiling. Its per-invocation tool0 displacement ceiling is the
 UR10e's nominal 1.30 m reach; target radius, inverse-kinematics, joint-limit,
-and collision checks still apply independently. The mature adapter uses 0.60
+and collision checks still apply independently. The mature adapter uses 0.30
 MoveIt velocity and acceleration scaling for its generated trajectory.
-The real camera-ray pre-mouth stand-off is 80 mm, which is 30 mm farther from
-the detected mouth than the saved 50 mm successful-execution snapshot.
+The real camera-ray nominal pre-mouth stand-off is 50 mm. Adaptive goal
+selection evaluates 50, 70, 90, 120, and 150 mm candidates, each 30 mm closer
+than the preceding 80, 100, 120, 150, and 180 mm policy, while retaining all
+IK, collision, clearance, and human-safety checks.
 Short-lived execution requests subscribe to the UR driver's latched robot,
 safety, and program state with matching transient-local QoS, and use a
 one-second stable-mouth sampling window to avoid a separate preflight delay.

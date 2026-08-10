@@ -80,7 +80,7 @@ ur10e:
 
   # MoveIt/controller defaults for visible, gentle simulation motion. The
   # real backend replaces these shared simulation defaults with its reviewed
-  # 0.60 scaling profile and clamps explicit overrides to 0.60 or lower.
+  # 0.30 scaling profile and clamps explicit overrides to 0.30 or lower.
   max_velocity: 0.2
   max_acceleration: 0.2
   default_duration: 7.0

@@ -44,6 +44,14 @@ def _parse_args() -> argparse.Namespace:
             "(2-5 seconds; default: 5)."
         ),
     )
+    parser.add_argument(
+        "--track-mouth-during-execution",
+        action="store_true",
+        help=(
+            "Opt in to tracked MoveIt cancel/replan and bounded Servo "
+            "corrections during the pre-mouth hold."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -73,6 +81,9 @@ def main() -> int:
         "execute": bool(args.execute),
         "allow_vertical_adjust": False,
         "hold_duration_sec": args.hold_duration,
+        "track_mouth_during_execution": bool(
+            args.track_mouth_during_execution
+        ),
     }
     command = [
         sys.executable,

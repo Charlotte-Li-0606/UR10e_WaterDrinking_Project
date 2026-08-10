@@ -109,16 +109,16 @@ STRAW_TIP_OFFSET_TOOL0_M = (0.110, 0.0, 0.0)
 PRE_MOUTH_APPROACH_AXIS_BASE_LINK = (1.0, 0.0, 0.0)
 DEFAULT_PREMOUTH_POLICY = "camera-ray"
 PREMOUTH_POLICIES = ("tcp-forward", "base-x", "camera-ray", "feeding-vector")
-DEFAULT_SAFE_DISTANCE_M = 0.080
+DEFAULT_SAFE_DISTANCE_M = 0.050
 MIN_SAFE_DISTANCE_M = 0.030
-MAX_SAFE_DISTANCE_M = 0.080
+MAX_SAFE_DISTANCE_M = 0.050
 DEFAULT_FEEDING_VECTOR = (0.0, -1.0, 0.0)
 FEEDING_VECTOR_SIGNS = ("plus", "minus")
 MAX_ABS_FEEDING_VECTOR_Z = 0.30
 MIN_FACE_CLEARANCE_M = 0.050
 # This start-state check only prevents crossing through the mouth plane.  It
 # must not demand the final stand-off before a move that is itself increasing
-# the separation to the final 80 mm pre-mouth point.
+# the separation to the final 50 mm pre-mouth point.
 MIN_CURRENT_SIDE_MARGIN_M = 0.005
 MOUNT_CALIBRATION_CONFIG = PROJECT_ROOT / "config/ur10e_real/d435i_mount_calibration.json"
 
@@ -134,10 +134,10 @@ MAX_EXECUTION_SPEED_PERCENT = 60.0
 DEFAULT_MOUTH_SAMPLE_SECONDS = 2.0
 MIN_MOUTH_SAMPLE_SECONDS = 0.5
 MAX_MOUTH_SAMPLE_SECONDS = 8.0
-DEFAULT_TRAJECTORY_VELOCITY_SCALING = 0.60
-DEFAULT_TRAJECTORY_ACCELERATION_SCALING = 0.60
+DEFAULT_TRAJECTORY_VELOCITY_SCALING = 0.30
+DEFAULT_TRAJECTORY_ACCELERATION_SCALING = 0.30
 MIN_TRAJECTORY_SCALING = 0.01
-MAX_TRAJECTORY_SCALING = 0.60
+MAX_TRAJECTORY_SCALING = 0.30
 MAX_MOUTH_POSE_AGE_SEC = 1.0
 MIN_STABLE_SAMPLES = 3
 MAX_POSE_SPREAD_M = 0.025
@@ -164,7 +164,7 @@ RETURN_START_MATCH_TOLERANCE_M = 0.02
 RETURN_START_MATCH_ORIENTATION_TOLERANCE_RAD = 0.02
 PILZ_PIPELINE = "pilz_industrial_motion_planner"
 PILZ_PLANNER = "LIN"
-ADAPTIVE_PREMOUTH_STANDOFFS_M = (0.080, 0.100, 0.120, 0.150, 0.180)
+ADAPTIVE_PREMOUTH_STANDOFFS_M = (0.050, 0.070, 0.090, 0.120, 0.150, 0.180)
 ADAPTIVE_PREMOUTH_YAWS_DEG = (0.0, 15.0, -15.0, 30.0, -30.0, 45.0, -45.0, 60.0, -60.0)
 IK_SERVICE = "/compute_ik"
 STATE_VALIDITY_SERVICE = "/check_state_validity"
@@ -3045,7 +3045,7 @@ class RealPreMouthFromPerceptionPlan(Node):
                     "frame_id": BASE_FRAME,
                     "position_m": mouth,
                 },
-                "original_80mm_pre_mouth_pose": {
+                "original_50mm_pre_mouth_pose": {
                     "frame_id": BASE_FRAME,
                     "position_m": pre_mouth,
                 },
@@ -3128,6 +3128,22 @@ class RealPreMouthFromPerceptionPlan(Node):
             "position_m": target_tool0_position,
             "orientation_quat_xyzw": orientation,
         }
+        # Keep every collision-free adaptive goal available to the dynamic
+        # backend.  A highest-clearance endpoint can still have a blocked
+        # intermediate route, while another validated yaw/standoff may be
+        # reachable without relaxing any safety constraint.
+        self._route_candidate_targets = [
+            {
+                "frame_id": BASE_FRAME,
+                "link_name": TOOL_FRAME,
+                "position_m": list(item["tool0_pose"]["position_m"]),
+                "orientation_quat_xyzw": list(item["tool0_pose"]["orientation_quat_xyzw"]),
+                "standoff_m": item.get("standoff_m"),
+                "yaw_deg": item.get("yaw_deg"),
+            }
+            for item in adaptive_goal_selection.get("candidates", [])
+            if item.get("valid") is True and isinstance(item.get("tool0_pose"), dict)
+        ]
         plan_result = self._run_plan(target)
         response = {
             "success": bool(plan_result.get("success")),
@@ -3587,7 +3603,7 @@ def _parse_args() -> argparse.Namespace:
         "--safe-distance",
         type=float,
         default=DEFAULT_SAFE_DISTANCE_M,
-        help="Pre-mouth stand-off distance in metres (default: 0.080).",
+        help="Pre-mouth stand-off distance in metres (default: 0.050).",
     )
     parser.add_argument(
         "--target-selection",
@@ -3672,13 +3688,13 @@ def _parse_args() -> argparse.Namespace:
         "--trajectory-velocity-scaling",
         type=float,
         default=DEFAULT_TRAJECTORY_VELOCITY_SCALING,
-        help="MoveIt velocity scaling for the validated plan (default: 0.60; allowed: 0.01–0.60).",
+        help="MoveIt velocity scaling for the validated plan (default: 0.30; allowed: 0.01–0.30).",
     )
     parser.add_argument(
         "--trajectory-acceleration-scaling",
         type=float,
         default=DEFAULT_TRAJECTORY_ACCELERATION_SCALING,
-        help="MoveIt acceleration scaling for the validated plan (default: 0.60; allowed: 0.01–0.60).",
+        help="MoveIt acceleration scaling for the validated plan (default: 0.30; allowed: 0.01–0.30).",
     )
     parser.add_argument(
         "--return-report",

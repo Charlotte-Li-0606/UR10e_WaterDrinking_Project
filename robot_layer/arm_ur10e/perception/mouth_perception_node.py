@@ -192,6 +192,8 @@ class MouthPerceptionNode(Node):
         self._last_base_position: np.ndarray | None = None
         self._last_base_normal: np.ndarray | None = None
         self._outlier_count = 0
+        self._last_face_seen_monotonic: float | None = None
+        self._last_tf_mode: str | None = None
         self._last_warning_times: dict[str, float] = {}
         self.get_logger().info(
             "Mouth perception: %s + %s + %s -> %s in %s"
@@ -269,37 +271,28 @@ class MouthPerceptionNode(Node):
         the bounded age configured for this static/slowly-moving setup.
         """
         try:
+            # The mounted camera and robot are stationary during perception;
+            # latest TF avoids interpolation jumps from mismatched timestamps.
             transform = self._tf_buffer.lookup_transform(
-                self._options.base_frame,
-                camera_frame,
-                Time.from_msg(stamp),
-                timeout=Duration(seconds=0.20),
+                self._options.base_frame, camera_frame, Time(), timeout=Duration(seconds=0.20)
             )
-            mode = "image_stamp"
-        except Exception as stamped_error:
+            image_time = stamp.sec + stamp.nanosec * 1e-9
+            transform_time = transform.header.stamp.sec + transform.header.stamp.nanosec * 1e-9
+            age = abs(image_time - transform_time)
+            if transform_time > 0.0 and age > self._options.max_tf_age_sec:
+                raise RuntimeError(f"latest TF age {age:.3f}s exceeds limit")
+            mode = "latest_stable"
+        except Exception as latest_error:
             try:
                 transform = self._tf_buffer.lookup_transform(
-                    self._options.base_frame,
-                    camera_frame,
-                    Time(),
-                    timeout=Duration(seconds=0.20),
+                    self._options.base_frame, camera_frame, Time.from_msg(stamp), timeout=Duration(seconds=0.20)
                 )
-                image_time = stamp.sec + stamp.nanosec * 1e-9
-                transform_time = transform.header.stamp.sec + transform.header.stamp.nanosec * 1e-9
-                age = abs(image_time - transform_time)
-                if transform_time > 0.0 and age > self._options.max_tf_age_sec:
-                    self._warn_throttled(
-                        "tf_age",
-                        "Latest TF is %.3f s from image time (limit %.3f s)"
-                        % (age, self._options.max_tf_age_sec),
-                    )
-                    return None
-                mode = "latest_fallback"
-            except Exception as latest_error:
+                mode = "image_stamp_fallback"
+            except Exception as stamped_error:
                 self._warn_throttled(
                     "tf",
-                    "Mouth pose TF lookup failed at image stamp (%s); latest TF also failed (%s)"
-                    % (stamped_error, latest_error),
+                    "Mouth pose latest TF failed (%s); stamped TF also failed (%s)"
+                    % (latest_error, stamped_error),
                 )
                 return None
         translation = transform.transform.translation
@@ -323,6 +316,12 @@ class MouthPerceptionNode(Node):
         alpha = self._options.smoothing_alpha
         self._last_base_position = alpha * candidate + (1.0 - alpha) * self._last_base_position
         return self._last_base_position
+
+    def _reset_filter_state(self) -> None:
+        """Drop stale pose smoothing after a genuine face-loss interval."""
+        self._last_base_position = None
+        self._last_base_normal = None
+        self._outlier_count = 0
 
     def _filter_normal(self, candidate: np.ndarray) -> np.ndarray | None:
         magnitude = float(np.linalg.norm(candidate))
@@ -366,9 +365,22 @@ class MouthPerceptionNode(Node):
             mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_rgb), timestamp_ms
         )
         if not result.face_landmarks:
+            if (
+                self._last_face_seen_monotonic is not None
+                and now - self._last_face_seen_monotonic >= 0.75
+            ):
+                self._reset_filter_state()
             self._status(False, "no_face")
             self._publish_debug(rgb_bgr, rgb, "No face")
             return
+
+        # Reacquisition after a loss starts a new camera/perception reference.
+        if (
+            self._last_face_seen_monotonic is not None
+            and now - self._last_face_seen_monotonic >= 0.75
+        ):
+            self._reset_filter_state()
+        self._last_face_seen_monotonic = now
 
         depth_m = self._depth_image_meters(depth)
         if depth_m is None:
@@ -426,6 +438,10 @@ class MouthPerceptionNode(Node):
             if transform_result is None:
                 continue
             point_base, tf_mode, rotation = transform_result
+            # A timestamped/latest TF switch can create an artificial jump.
+            if self._last_tf_mode is not None and tf_mode != self._last_tf_mode:
+                self._reset_filter_state()
+            self._last_tf_mode = tf_mode
             normal_base = None if normal_camera is None else rotation @ normal_camera
             candidates.append(
                 {

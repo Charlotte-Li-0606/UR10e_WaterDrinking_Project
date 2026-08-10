@@ -61,8 +61,8 @@ class RealActiveSearchPlan(RealPreMouthFromPerceptionPlan):
         super().__init__(
             maximum_plan_translation_m=SEARCH_BACK_DISTANCE_M,
             mouth_sample_seconds=MOUTH_SAMPLE_SECONDS,
-            trajectory_velocity_scaling=0.60,
-            trajectory_acceleration_scaling=0.60,
+            trajectory_velocity_scaling=0.30,
+            trajectory_acceleration_scaling=0.30,
         )
         self._move_group_parameters = self.create_client(
             GetParameters,

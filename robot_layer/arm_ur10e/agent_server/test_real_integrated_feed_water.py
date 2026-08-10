@@ -24,10 +24,12 @@ from scripts.real_feed_water_integrated import (
     SEARCH_PLANNER,
     SEARCH_PLANNING_PIPELINE,
     SEARCH_WRIST_Z_ANGLE_DEG,
+    TRACKING_POST_CANCEL_SETTLE_TIMEOUT_SEC,
     RealIntegratedFeedWater,
     _load_initial_position_config,
     _orientation_after_local_tool_z_rotation,
     _recorded_tool_pose_in_base_link,
+    _select_consistent_cloud_frame_window,
     _trajectory_final_joint_error,
 )
 from scripts.real_premouth_from_perception_plan import (
@@ -41,6 +43,43 @@ from scripts.real_premouth_from_perception_plan import (
 
 
 class RealIntegratedFeedWaterTest(unittest.TestCase):
+    @staticmethod
+    def _cloud_frame(sequence: int, point_count: int) -> dict[str, object]:
+        return {
+            "frame_id": "d435i_color_optical_frame",
+            "point_count": point_count,
+            "received_monotonic": 100.0 + sequence,
+            "stamp_sec": 200 + sequence,
+            "stamp_nanosec": 0,
+        }
+
+    def test_octomap_rebuild_waits_past_unstable_initial_clouds(self) -> None:
+        frames = [
+            self._cloud_frame(0, 3803),
+            self._cloud_frame(1, 3428),
+            self._cloud_frame(2, 3063),
+            self._cloud_frame(3, 3040),
+            self._cloud_frame(4, 3025),
+        ]
+
+        selected = _select_consistent_cloud_frame_window(frames)
+
+        self.assertTrue(selected["consistent"])
+        self.assertEqual([3063, 3040, 3025], selected["point_counts"])
+        self.assertLessEqual(selected["relative_point_count_spread"], 0.15)
+
+    def test_octomap_rebuild_rejects_unstable_clouds_after_full_window(self) -> None:
+        frames = [
+            self._cloud_frame(0, 4000),
+            self._cloud_frame(1, 3000),
+            self._cloud_frame(2, 2200),
+            self._cloud_frame(3, 1600),
+        ]
+
+        selected = _select_consistent_cloud_frame_window(frames)
+
+        self.assertFalse(selected["consistent"])
+
     def test_initial_position_config_preserves_operator_joint_target(self) -> None:
         config = _load_initial_position_config()
 
@@ -97,8 +136,8 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
 
     def test_fixed_initial_joint_goal_keeps_vertical_path_constraint(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
-        node.trajectory_velocity_scaling = 0.6
-        node.trajectory_acceleration_scaling = 0.6
+        node.trajectory_velocity_scaling = 0.3
+        node.trajectory_acceleration_scaling = 0.3
         node.latest_joint_state = None
         config = _load_initial_position_config()
 
@@ -313,9 +352,12 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             * len(ADAPTIVE_PREMOUTH_YAWS_DEG),
             len(candidates),
         )
-        self.assertEqual(0.080, candidates[0]["standoff_m"])
+        self.assertEqual(0.050, candidates[0]["standoff_m"])
         self.assertEqual(0.0, candidates[0]["yaw_deg"])
-        self.assertEqual(0.180, candidates[-1]["standoff_m"])
+        self.assertEqual(
+            ADAPTIVE_PREMOUTH_STANDOFFS_M[-1],
+            candidates[-1]["standoff_m"],
+        )
         self.assertEqual(-60.0, candidates[-1]["yaw_deg"])
 
     def test_candidate_yaw_moves_tool0_but_keeps_straw_tip_on_approach_line(self) -> None:
@@ -365,8 +407,8 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         node = RealPreMouthFromPerceptionPlan.__new__(
             RealPreMouthFromPerceptionPlan
         )
-        node.trajectory_velocity_scaling = 0.6
-        node.trajectory_acceleration_scaling = 0.6
+        node.trajectory_velocity_scaling = 0.3
+        node.trajectory_acceleration_scaling = 0.3
         node._validated_trajectory = None
         node._current_robot_state = Mock(return_value=RobotState())
         node._validate_trajectory_vertical_axis = Mock(
@@ -402,8 +444,8 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         request = node.compute_cartesian_path.call_async.call_args.args[0]
         self.assertTrue(result["success"])
         self.assertTrue(request.avoid_collisions)
-        self.assertAlmostEqual(0.6, request.max_velocity_scaling_factor)
-        self.assertAlmostEqual(0.6, request.max_acceleration_scaling_factor)
+        self.assertAlmostEqual(0.3, request.max_velocity_scaling_factor)
+        self.assertAlmostEqual(0.3, request.max_acceleration_scaling_factor)
         self.assertAlmostEqual(
             result["maximum_revolute_joint_jump_rad"],
             request.revolute_jump_threshold,
@@ -498,8 +540,8 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
 
     def test_translation_search_goal_constrains_vertical_axis_with_free_spin(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
-        node.trajectory_velocity_scaling = 0.60
-        node.trajectory_acceleration_scaling = 0.60
+        node.trajectory_velocity_scaling = 0.30
+        node.trajectory_acceleration_scaling = 0.30
         node.latest_joint_state = None
         target = {
             "position_m": [-0.20, 0.10, 0.55],
@@ -529,8 +571,8 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
 
     def test_left_right_search_uses_pose_goal_about_tool_local_z(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
-        node.trajectory_velocity_scaling = 0.60
-        node.trajectory_acceleration_scaling = 0.60
+        node.trajectory_velocity_scaling = 0.30
+        node.trajectory_acceleration_scaling = 0.30
         node.latest_joint_state = None
         initial = [0.60, 0.80, 0.0, 0.0]
         target = {
@@ -555,8 +597,8 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
 
     def test_independent_search_plan_uses_the_same_vertical_profile(self) -> None:
         node = RealActiveSearchPlan.__new__(RealActiveSearchPlan)
-        node.trajectory_velocity_scaling = 0.60
-        node.trajectory_acceleration_scaling = 0.60
+        node.trajectory_velocity_scaling = 0.30
+        node.trajectory_acceleration_scaling = 0.30
         node.latest_joint_state = None
         target = {
             "position_m": [-0.20, 0.10, 0.55],
@@ -826,6 +868,24 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertEqual("5.0", command[hold_argument])
         self.assertNotIn("--no-execute", command)
 
+    def test_tracked_execute_command_is_explicit_opt_in(self) -> None:
+        default_command = backend._pipeline_command(
+            execute=True,
+            report_path=backend.REPORT_DIR / "default.json",
+            target_selection="center",
+            hold_duration_sec=DEFAULT_PREMOUTH_HOLD_SEC,
+        )
+        tracked_command = backend._pipeline_command(
+            execute=True,
+            report_path=backend.REPORT_DIR / "tracked.json",
+            target_selection="center",
+            hold_duration_sec=DEFAULT_PREMOUTH_HOLD_SEC,
+            track_mouth_during_execution=True,
+        )
+
+        self.assertNotIn("--track-mouth-during-execution", default_command)
+        self.assertIn("--track-mouth-during-execution", tracked_command)
+
     def test_integrated_plan_sequences_search_before_dynamic_target_plan(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
         node.target_selection = "center"
@@ -890,6 +950,15 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             ]
         )
         self.assertTrue(result["integrated_real_feed_water"]["dynamic_obstacle_avoidance"])
+        self.assertFalse(
+            result["integrated_real_feed_water"][
+                "mouth_tracking_during_execution"
+            ]
+        )
+        self.assertEqual(
+            "disabled_one_shot_frozen_target",
+            result["integrated_real_feed_water"]["tracking_policy"],
+        )
         self.assertFalse(result["integrated_real_feed_water"]["translation_only_search"])
         self.assertFalse(
             result["integrated_real_feed_water"][
@@ -1008,6 +1077,30 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
 
         self.assertAlmostEqual(0.060, result["drift_m"])
         self.assertTrue(result["confirmed"])
+
+    def test_tracking_replan_waits_longer_without_raising_stationary_limit(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._wait_for_search_stationary = Mock(
+            return_value={
+                "success": True,
+                "maximum_joint_speed_rad_sec": 0.009,
+                "maximum_allowed_joint_speed_rad_sec": 0.010,
+            }
+        )
+
+        with patch(
+            "scripts.real_feed_water_integrated.time.monotonic",
+            return_value=100.0,
+        ):
+            result = node._wait_for_tracking_replan_stationary()
+
+        self.assertTrue(result["success"])
+        self.assertEqual(3.0, TRACKING_POST_CANCEL_SETTLE_TIMEOUT_SEC)
+        node._wait_for_search_stationary.assert_called_once_with(
+            103.0,
+            timeout_sec=3.0,
+        )
+        self.assertEqual(0.010, result["maximum_allowed_joint_speed_rad_sec"])
 
     def test_unstable_single_frame_drift_is_not_confirmed(self) -> None:
         result = RealIntegratedFeedWater._execution_mouth_drift_confirmation(

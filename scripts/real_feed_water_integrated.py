@@ -3,9 +3,12 @@
 
 The workflow remains one high-level operation.  It uses the physical D435i
 multi-mouth stream to retain the selected person's 3D identity, performs a
-bounded search only when that target is absent, freezes the
-recovered 80 mm pre-mouth target, and asks MoveGroup/OctoMap to find and
-monitor an alternate route to that same coordinate. Backward/up/down search
+bounded search only when that target is absent, and asks MoveGroup/OctoMap to
+find a route to a validated pre-mouth target. The default remains the frozen
+one-shot workflow. An explicit tracking mode monitors stable mouth drift,
+cancels and replans MoveIt motion when needed, then uses bounded relative Servo
+translation during the pre-mouth hold after MoveGroup releases the controller.
+Backward/up/down search
 steps are bounded Cartesian translations and left/right steps are bounded pose
 rotations about tool0 local Z. Throughout search and obstacle routes, tool0 +Z
 must remain aligned with base_link -Z within five degrees; MoveIt may choose
@@ -42,11 +45,15 @@ if str(PROJECT_ROOT) not in sys.path:
 import rclpy  # noqa: E402
 from geometry_msgs.msg import Pose  # noqa: E402
 from moveit_msgs.action import ExecuteTrajectory, MoveGroup  # noqa: E402
-from moveit_msgs.msg import Constraints, JointConstraint, RobotState  # noqa: E402
+from moveit_msgs.msg import Constraints, JointConstraint, RobotState, ServoStatus  # noqa: E402
 from moveit_msgs.srv import GetStateValidity  # noqa: E402
 from sensor_msgs.msg import JointState  # noqa: E402
 from std_srvs.srv import Empty  # noqa: E402
 from ur_dashboard_msgs.msg import RobotMode, SafetyMode  # noqa: E402
+
+from robot_layer.arm_ur10e.control.motion_backend import MotionRequest  # noqa: E402
+from robot_layer.arm_ur10e.control.relative_tracking import RelativeTrackingSession  # noqa: E402
+from robot_layer.arm_ur10e.control.ros_servo_backend import RosServoCommandSink  # noqa: E402
 
 from scripts.real_dynamic_obstacle_avoidance_plan import (  # noqa: E402
     DETOUR_ROUTE_STRATEGY,
@@ -113,6 +120,12 @@ SEARCH_MAX_CUMULATIVE_JOINT_TRAVEL_RAD = 2.0
 SEARCH_MAX_TRAJECTORY_DURATION_SEC = 3.0
 SEARCH_WRIST_Z_TOTAL_SWEEP_DEG = 30.0
 SEARCH_WRIST_Z_ANGLE_DEG = SEARCH_WRIST_Z_TOTAL_SWEEP_DEG / 2.0
+TRACKING_MAX_REPLAN_ATTEMPTS = 2
+TRACKING_POST_CANCEL_SETTLE_TIMEOUT_SEC = 3.0
+TRACKING_TARGET_MAX_AGE_SEC = 0.75
+TRACKING_MAX_DISPLACEMENT_M = 0.06
+TRACKING_MAX_LINEAR_SPEED_MPS = 0.02
+TRACKING_MAX_LINEAR_ACCELERATION_MPS2 = 0.10
 SEARCH_WRIST_Z_CANDIDATE_ANGLES_RAD = tuple(
     math.radians(value) for value in (SEARCH_WRIST_Z_ANGLE_DEG, 10.0, 5.0)
 )
@@ -120,6 +133,10 @@ SEARCH_MAX_STATIONARY_JOINT_SPEED_RAD_SEC = 0.010
 SEARCH_STATIONARY_SAMPLE_COUNT = 2
 SEARCH_STATIONARY_TIMEOUT_SEC = 0.75
 SEARCH_OCTOMAP_REBUILD_TIMEOUT_SEC = 1.5
+GOAL_OCTOMAP_REBUILD_TIMEOUT_SEC = 4.0
+OCTOMAP_REBUILD_REQUIRED_FRAMES = 3
+OCTOMAP_REBUILD_MAX_POINT_COUNT_SPREAD = 0.15
+OCTOMAP_REBUILD_HISTORY_LIMIT = 16
 SEARCH_BACK_CANDIDATE_DISTANCES_M = (0.040, 0.030, 0.020)
 SEARCH_DIRECTIONAL_CANDIDATE_DISTANCES_M = (0.050, 0.040, 0.030, 0.020)
 EXECUTION_MOUTH_DRIFT_CONFIRMATION_WINDOW_SEC = 1.0
@@ -165,6 +182,80 @@ def _quaternion_multiply_xyzw(
     if not math.isfinite(magnitude) or magnitude < 1e-9:
         raise ValueError("quaternion product is not finite and nonzero")
     return [value / magnitude for value in result]
+
+
+def _select_consistent_cloud_frame_window(
+    items: list[dict[str, Any]],
+    *,
+    required_frames: int = OCTOMAP_REBUILD_REQUIRED_FRAMES,
+    maximum_relative_point_count_spread: float = (
+        OCTOMAP_REBUILD_MAX_POINT_COUNT_SPREAD
+    ),
+) -> dict[str, Any]:
+    """Select the newest consecutive stationary cloud window that is stable."""
+    if required_frames < 1:
+        raise ValueError("required_frames must be positive")
+    if not 0.0 <= maximum_relative_point_count_spread < 1.0:
+        raise ValueError("maximum_relative_point_count_spread must be in [0, 1)")
+
+    best_diagnostic: dict[str, Any] | None = None
+    latest_consistent: dict[str, Any] | None = None
+    for start in range(max(0, len(items) - required_frames + 1)):
+        window = [dict(item) for item in items[start : start + required_frames]]
+        if len(window) != required_frames:
+            continue
+        counts = [int(item.get("point_count", 0)) for item in window]
+        frame_ids = [str(item.get("frame_id", "")) for item in window]
+        receive_times = [float(item.get("received_monotonic", 0.0)) for item in window]
+        source_stamps = [
+            (int(item.get("stamp_sec", 0)), int(item.get("stamp_nanosec", 0)))
+            for item in window
+        ]
+        positive_counts = min(counts, default=0) > 0
+        same_nonempty_frame = bool(frame_ids[0]) and len(set(frame_ids)) == 1
+        fresh_sequence = all(
+            later > earlier
+            for earlier, later in zip(receive_times, receive_times[1:])
+        ) and len(set(source_stamps)) == required_frames
+        spread = (
+            (max(counts) - min(counts)) / max(counts)
+            if positive_counts
+            else math.inf
+        )
+        candidate = {
+            "consistent": bool(
+                positive_counts
+                and same_nonempty_frame
+                and fresh_sequence
+                and spread <= maximum_relative_point_count_spread
+            ),
+            "frames": window,
+            "point_counts": counts,
+            "relative_point_count_spread": spread,
+            "same_nonempty_frame_id": same_nonempty_frame,
+            "fresh_unique_sequence": fresh_sequence,
+        }
+        if best_diagnostic is None or candidate[
+            "relative_point_count_spread"
+        ] <= best_diagnostic[
+            "relative_point_count_spread"
+        ]:
+            best_diagnostic = candidate
+        if candidate["consistent"]:
+            # Iteration is oldest-to-newest, so the last accepted candidate wins.
+            latest_consistent = candidate
+
+    selected = latest_consistent or best_diagnostic
+    if selected is None:
+        selected = {
+            "consistent": False,
+            "frames": [],
+            "point_counts": [],
+            "relative_point_count_spread": None,
+            "same_nonempty_frame_id": False,
+            "fresh_unique_sequence": False,
+        }
+    return selected
 
 
 def _axis_angle_vector_to_quaternion_xyzw(
@@ -393,6 +484,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             trajectory_acceleration_scaling=trajectory_acceleration_scaling,
         )
         self._frozen_execution_mouth_position: list[float] | None = None
+        self._integrated_tracking_enabled = False
+        self._latest_servo_status: ServoStatus | None = None
         self._state_validity_client = self.create_client(
             GetStateValidity,
             "/check_state_validity",
@@ -401,6 +494,15 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             Empty,
             "/clear_octomap",
         )
+        self.create_subscription(
+            ServoStatus,
+            "/servo_node/status",
+            self._servo_status_callback,
+            10,
+        )
+
+    def _servo_status_callback(self, message: ServoStatus) -> None:
+        self._latest_servo_status = message
 
     @staticmethod
     def _search_waypoints_from_offsets(
@@ -1749,7 +1851,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "octomap_clear_scope": "dynamic_octomap_only",
             "fixed_human_collision_objects_removed": False,
             "allowed_collision_exceptions_added": False,
-            "required_consistent_frames_per_topic": 3,
+            "required_consistent_frames_per_topic": OCTOMAP_REBUILD_REQUIRED_FRAMES,
+            "post_clear_settling_timeout_sec": GOAL_OCTOMAP_REBUILD_TIMEOUT_SEC,
             "dynamic_point_cloud_filtering": {
                 "moveit_filtered_cloud_topic": FILTERED_CLOUD_TOPIC,
                 "ur_chain_self_filtering_available": True,
@@ -1791,7 +1894,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             verified_flange_down_orientation_xyzw=list(
                 snapshot["tool0_pose"]["orientation_quat_xyzw"]
             ),
-            standoffs_m=(0.080,),
+            standoffs_m=(0.050,),
             yaws_deg=(0.0,),
         )[0]
 
@@ -1799,7 +1902,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         before_robot_state = before_ik.get("robot_state")
         before_validity = self._state_validity(
             before_robot_state if isinstance(before_robot_state, RobotState) else None,
-            label="original_80mm_yaw_0_before_octomap_rebuild",
+            label="original_50mm_yaw_0_before_octomap_rebuild",
         )
         report["original_goal_before_rebuild"] = {
             "candidate": original_candidate,
@@ -1827,14 +1930,19 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             return report
 
         cleared_at = time.monotonic()
+        rebuild_deadline = cleared_at + GOAL_OCTOMAP_REBUILD_TIMEOUT_SEC
         frames: dict[str, list[dict[str, Any]]] = {
             RAW_CLOUD_TOPIC: [],
             FILTERED_CLOUD_TOPIC: [],
         }
-        while rclpy.ok() and time.monotonic() < deadline:
+        selected_windows: dict[str, dict[str, Any]] = {}
+        while rclpy.ok() and time.monotonic() < rebuild_deadline:
             rclpy.spin_once(
                 self,
-                timeout_sec=min(0.05, max(0.0, deadline - time.monotonic())),
+                timeout_sec=min(
+                    0.05,
+                    max(0.0, rebuild_deadline - time.monotonic()),
+                ),
             )
             for topic in frames:
                 history = getattr(self, "_cloud_history", {}).get(topic, [])
@@ -1842,30 +1950,45 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     dict(item)
                     for item in history
                     if float(item["received_monotonic"]) > cleared_at
-                ][-3:]
-            if all(len(items) >= 3 for items in frames.values()):
+                ][-OCTOMAP_REBUILD_HISTORY_LIMIT:]
+                selected_windows[topic] = _select_consistent_cloud_frame_window(
+                    frames[topic]
+                )
+            if all(
+                selected_windows.get(topic, {}).get("consistent", False)
+                for topic in frames
+            ):
                 break
         consistency: dict[str, Any] = {}
         consistent = True
         for topic, items in frames.items():
-            counts = [int(item["point_count"]) for item in items]
-            frames_consistent = bool(
-                len(items) >= 3
-                and min(counts, default=0) > 0
-                and (max(counts) - min(counts)) / max(counts) <= 0.15
-                and len({str(item["frame_id"]) for item in items}) == 1
+            window = selected_windows.get(topic) or (
+                _select_consistent_cloud_frame_window(items)
             )
+            frames_consistent = bool(window["consistent"])
             consistency[topic] = {
-                "consistent": frames_consistent,
-                "frames": items,
-                "point_counts": counts,
-                "maximum_relative_point_count_spread": 0.15,
+                **window,
+                "sampled_frame_count": len(items),
+                "sampled_point_counts": [
+                    int(item.get("point_count", 0)) for item in items
+                ],
+                "maximum_relative_point_count_spread": (
+                    OCTOMAP_REBUILD_MAX_POINT_COUNT_SPREAD
+                ),
             }
             consistent = consistent and frames_consistent
         report["stationary_rebuild_frames"] = consistency
         report["octomap_rebuilt_from_consistent_stationary_frames"] = consistent
         if not consistent:
-            report["reason"] = "three consistent raw and filtered RGB-D frames were not received"
+            failed_topics = [
+                topic
+                for topic, details in consistency.items()
+                if not details["consistent"]
+            ]
+            report["reason"] = (
+                "three consecutive consistent RGB-D frames were not received for: "
+                + ", ".join(failed_topics)
+            )
             return report
 
         after_scene, _ = self._planning_scene_geometry()
@@ -1881,7 +2004,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         after_robot_state = after_ik.get("robot_state")
         after_validity = self._state_validity(
             after_robot_state if isinstance(after_robot_state, RobotState) else None,
-            label="original_80mm_yaw_0_after_octomap_rebuild",
+            label="original_50mm_yaw_0_after_octomap_rebuild",
         )
         report["original_goal_after_rebuild"] = {
             "candidate": original_candidate,
@@ -1907,7 +2030,12 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         )
         return report
 
-    def _wait_for_search_stationary(self, deadline: float) -> dict[str, Any]:
+    def _wait_for_search_stationary(
+        self,
+        deadline: float,
+        *,
+        timeout_sec: float = SEARCH_STATIONARY_TIMEOUT_SEC,
+    ) -> dict[str, Any]:
         """Require fresh stationary joint samples before each OMPL search plan.
 
         The UR controller can report one final nonzero velocity sample after a
@@ -1915,9 +2043,11 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         before representing the verified start state with exact zero
         velocities in the planning goal.
         """
+        if not math.isfinite(float(timeout_sec)) or float(timeout_sec) <= 0.0:
+            raise ValueError("stationary wait timeout must be finite and positive")
         settle_deadline = min(
             deadline,
-            time.monotonic() + SEARCH_STATIONARY_TIMEOUT_SEC,
+            time.monotonic() + float(timeout_sec),
         )
         consecutive = 0
         last_state: Any | None = None
@@ -1961,6 +2091,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                             if consecutive >= SEARCH_STATIONARY_SAMPLE_COUNT:
                                 return {
                                     "success": True,
+                                    "timeout_sec": float(timeout_sec),
                                     "maximum_joint_speed_rad_sec": latest_max_speed,
                                     "maximum_allowed_joint_speed_rad_sec": (
                                         SEARCH_MAX_STATIONARY_JOINT_SPEED_RAD_SEC
@@ -1977,12 +2108,20 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         return {
             "success": False,
             "reason": latest_reason,
+            "timeout_sec": float(timeout_sec),
             "maximum_joint_speed_rad_sec": latest_max_speed,
             "maximum_allowed_joint_speed_rad_sec": (
                 SEARCH_MAX_STATIONARY_JOINT_SPEED_RAD_SEC
             ),
             "stationary_sample_count": consecutive,
         }
+
+    def _wait_for_tracking_replan_stationary(self) -> dict[str, Any]:
+        """Wait for controlled post-cancel deceleration before scene rebuild."""
+        return self._wait_for_search_stationary(
+            time.monotonic() + TRACKING_POST_CANCEL_SETTLE_TIMEOUT_SEC,
+            timeout_sec=TRACKING_POST_CANCEL_SETTLE_TIMEOUT_SEC,
+        )
 
     def _cancel_goal(self, handle: Any) -> None:
         cancel = handle.cancel_goal_async()
@@ -2850,6 +2989,256 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         )
         return report
 
+    def _execute_direct_with_tracking_monitor(
+        self,
+        *,
+        vertical_axis_validation: dict[str, Any],
+        readiness: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Execute the cached Cartesian trajectory while watching mouth drift.
+
+        MoveGroup owns the controller during this phase.  Significant stable
+        target motion cancels execution and asks the caller to plan again from
+        the stopped state; Servo is never published concurrently.
+        """
+        goal = ExecuteTrajectory.Goal()
+        goal.trajectory = self._validated_trajectory
+        client = self._execution_action_client()
+        if not client.wait_for_server(timeout_sec=2.0):
+            return {
+                "success": False,
+                "stage": "tracked_execute_trajectory_server",
+                "reason": "/execute_trajectory is unavailable",
+                "execution_attempted": False,
+            }
+        future = client.send_goal_async(goal)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=8.0)
+        handle = future.result()
+        if handle is None or not handle.accepted:
+            return {
+                "success": False,
+                "stage": "tracked_execute_trajectory_goal",
+                "reason": "MoveIt rejected the tracked Cartesian trajectory",
+                "execution_attempted": False,
+            }
+        result_future = handle.get_result_async()
+        watch_started = time.monotonic()
+        deadline = watch_started + ACTION_TIMEOUT_SEC
+        cancellation_reason = None
+        mouth_confirmation: dict[str, Any] = {
+            "available": False,
+            "confirmed": False,
+            "reason": "waiting for stable in-motion mouth samples",
+        }
+        while rclpy.ok() and not result_future.done() and time.monotonic() < deadline:
+            rclpy.spin_once(self, timeout_sec=0.05)
+            live_failure = self._live_ur_execution_state_failure()
+            if live_failure is not None:
+                cancellation_reason = live_failure
+                break
+            perception = self.target_tracker.current_state(
+                max_age_sec=TRACKING_TARGET_MAX_AGE_SEC
+            )
+            if perception.get("identity_unsafe"):
+                cancellation_reason = "selected mouth identity became unsafe during execution"
+                break
+            if not perception.get("available"):
+                cancellation_reason = str(
+                    perception.get("reason") or "selected mouth became stale during execution"
+                )
+                break
+            now = time.monotonic()
+            observation = self.target_tracker.observation(
+                started_monotonic=max(
+                    watch_started,
+                    now - EXECUTION_MOUTH_DRIFT_CONFIRMATION_WINDOW_SEC,
+                ),
+                now_monotonic=now,
+                max_age_sec=TRACKING_TARGET_MAX_AGE_SEC,
+                minimum_samples=EXECUTION_MOUTH_DRIFT_CONFIRMATION_MIN_SAMPLES,
+                max_spread_m=MAX_POSE_SPREAD_M,
+            )
+            mouth_confirmation = self._execution_mouth_drift_confirmation(
+                observation,
+                self._frozen_execution_mouth_position,
+            )
+            if mouth_confirmation.get("confirmed"):
+                cancellation_reason = (
+                    "stable mouth displacement requires a fresh pre-mouth plan"
+                )
+                break
+        if cancellation_reason is not None or not result_future.done():
+            self._cancel_goal(handle)
+            return {
+                "success": False,
+                "stage": "tracked_cartesian_execution_cancelled",
+                "reason": cancellation_reason or "tracked Cartesian execution timed out",
+                "execution_attempted": True,
+                "execution_sent": True,
+                "cancel_requested": True,
+                "tracking_replan_required": bool(
+                    mouth_confirmation.get("confirmed")
+                ),
+                "mouth_drift_confirmation": mouth_confirmation,
+                "vertical_axis_validation": vertical_axis_validation,
+                "dynamic_octomap_readiness": readiness,
+                "route_strategy": DIRECT_ROUTE_STRATEGY,
+                "planner": "moveit_compute_cartesian_path",
+            }
+        wrapped = result_future.result()
+        if wrapped is None:
+            return {
+                "success": False,
+                "stage": "tracked_cartesian_execution_result",
+                "reason": "MoveIt returned no execution result",
+                "execution_attempted": True,
+            }
+        result = wrapped.result
+        return {
+            "success": int(result.error_code.val) == 1,
+            "stage": "tracked_cartesian_execute_trajectory",
+            "result_status": int(wrapped.status),
+            "error_code": int(result.error_code.val),
+            "error_message": result.error_code.message,
+            "execution_attempted": True,
+            "execution_sent": True,
+            "tracking_replan_required": False,
+            "mouth_drift_confirmation": mouth_confirmation,
+            "vertical_axis_validation": vertical_axis_validation,
+            "dynamic_octomap_readiness": readiness,
+            "route_strategy": DIRECT_ROUTE_STRATEGY,
+            "planner": "moveit_compute_cartesian_path",
+        }
+
+    def _servo_track_during_premouth_hold(self, duration_sec: float) -> dict[str, Any]:
+        """Track small relative mouth motion after MoveGroup releases control."""
+        report: dict[str, Any] = {
+            "success": False,
+            "stage": "premouth_servo_tracking",
+            "duration_sec": float(duration_sec),
+            "reference_locked": False,
+            "servo_command_count": 0,
+            "maximum_command_speed_mps": 0.0,
+            "maximum_mouth_displacement_m": 0.0,
+            "maximum_actual_tool_displacement_m": 0.0,
+            "maximum_orientation_error_rad": 0.0,
+            "stop_reason": None,
+        }
+        perception = self.target_tracker.current_state(
+            max_age_sec=TRACKING_TARGET_MAX_AGE_SEC
+        )
+        mouth = _finite_xyz(perception.get("selected_position_m"))
+        tool = self._tool0_pose()
+        if not perception.get("available") or mouth is None:
+            report["stop_reason"] = str(
+                perception.get("reason") or "fresh selected mouth is unavailable"
+            )
+            return report
+        if not tool.get("available"):
+            report["stop_reason"] = "live tool0 pose is unavailable"
+            return report
+        session = RelativeTrackingSession(
+            max_target_displacement_m=TRACKING_MAX_DISPLACEMENT_M,
+            max_tool_radius_m=MAX_TOOL0_RADIUS_FROM_UR_BASE_M,
+            max_linear_speed_mps=TRACKING_MAX_LINEAR_SPEED_MPS,
+            max_linear_acceleration_mps2=TRACKING_MAX_LINEAR_ACCELERATION_MPS2,
+        )
+        session.lock(mouth, tool["position_m"])
+        reference_tool_position = list(tool["position_m"])
+        reference_tool_orientation = list(tool["orientation_quat_xyzw"])
+        report["reference_locked"] = True
+        self._latest_servo_status = None
+        sink = RosServoCommandSink(
+            self,
+            max_linear_mps=TRACKING_MAX_LINEAR_SPEED_MPS,
+            max_angular_rps=0.0,
+            armed=True,
+        )
+        started = time.monotonic()
+        last_update = started
+        try:
+            while rclpy.ok() and time.monotonic() - started < float(duration_sec):
+                rclpy.spin_once(self, timeout_sec=0.05)
+                live_failure = self._live_ur_execution_state_failure()
+                if live_failure is not None:
+                    report["stop_reason"] = live_failure
+                    break
+                if (
+                    self._latest_servo_status is not None
+                    and int(self._latest_servo_status.code) != ServoStatus.NO_WARNING
+                ):
+                    report["stop_reason"] = (
+                        f"servo_status:{int(self._latest_servo_status.code)}:"
+                        f"{self._latest_servo_status.message}"
+                    )
+                    break
+                perception = self.target_tracker.current_state(
+                    max_age_sec=TRACKING_TARGET_MAX_AGE_SEC
+                )
+                mouth = _finite_xyz(perception.get("selected_position_m"))
+                if not perception.get("available") or mouth is None:
+                    report["stop_reason"] = str(
+                        perception.get("reason") or "tracked mouth became stale"
+                    )
+                    break
+                if perception.get("identity_unsafe"):
+                    report["stop_reason"] = "selected mouth identity became unsafe"
+                    break
+                tool = self._tool0_pose()
+                if not tool.get("available"):
+                    report["stop_reason"] = "live tool0 pose became unavailable"
+                    break
+                report["maximum_actual_tool_displacement_m"] = max(
+                    float(report["maximum_actual_tool_displacement_m"]),
+                    _norm(_subtract(tool["position_m"], reference_tool_position)),
+                )
+                report["maximum_orientation_error_rad"] = max(
+                    float(report["maximum_orientation_error_rad"]),
+                    _quaternion_distance_rad(
+                        tool["orientation_quat_xyzw"],
+                        reference_tool_orientation,
+                    ),
+                )
+                now = time.monotonic()
+                command = session.update(
+                    mouth,
+                    tool["position_m"],
+                    dt_sec=now - last_update,
+                )
+                last_update = now
+                if not command.allowed:
+                    report["stop_reason"] = command.reason
+                    break
+                request = MotionRequest(
+                    target_position=command.desired_tool_position_m,
+                    target_orientation_xyzw=tuple(
+                        float(value) for value in tool["orientation_quat_xyzw"]
+                    ),
+                    plan_only=False,
+                    reason="integrated_premouth_tracking",
+                    linear_velocity_mps=command.linear_velocity_mps,
+                    angular_velocity_rps=(0.0, 0.0, 0.0),
+                    preserve_orientation=True,
+                )
+                sink(request)
+                report["servo_command_count"] += 1
+                report["maximum_command_speed_mps"] = max(
+                    float(report["maximum_command_speed_mps"]),
+                    _norm(list(command.linear_velocity_mps)),
+                )
+                report["maximum_mouth_displacement_m"] = max(
+                    float(report["maximum_mouth_displacement_m"]),
+                    float(command.mouth_displacement_m),
+                )
+            if report["stop_reason"] is None:
+                report["success"] = True
+                report["stop_reason"] = "hold_duration_complete"
+        finally:
+            sink.halt()
+        final_tool = self._tool0_pose()
+        report["final_tool0_pose"] = final_tool
+        return report
+
     def _execute_validated_trajectory(self) -> dict[str, Any]:
         """MoveGroup plan-and-execute with same-target scene-change replanning."""
         target = getattr(self, "_frozen_dynamic_target", None)
@@ -2932,9 +3321,15 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     "planner": "moveit_compute_cartesian_path",
                     "execution_attempted": False,
                 }
-            result = RealPreMouthFromPerceptionPlan._execute_validated_trajectory(
-                self
-            )
+            if self._integrated_tracking_enabled:
+                result = self._execute_direct_with_tracking_monitor(
+                    vertical_axis_validation=vertical_axis_validation,
+                    readiness=readiness,
+                )
+            else:
+                result = RealPreMouthFromPerceptionPlan._execute_validated_trajectory(
+                    self
+                )
             result.update(
                 {
                     "route_strategy": route_strategy,
@@ -3063,11 +3458,15 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "stage": "dynamic_execution_cancelled",
                 "reason": cancel_reason or "MoveGroup execution exceeded the bounded timeout",
                 "execution_attempted": True,
+                "execution_sent": True,
                 "cancel_requested": True,
                 "same_target_replanning": True,
                 "route_strategy": route_strategy,
                 "planner": planner,
                 "mouth_drift_confirmation": mouth_drift_confirmation,
+                "tracking_replan_required": bool(
+                    mouth_drift_confirmation.get("confirmed")
+                ),
                 "vertical_axis_validation": vertical_axis_validation,
                 "live_vertical_axis_guard": live_vertical_axis_guard,
             }
@@ -3080,6 +3479,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "route_strategy": route_strategy,
                 "planner": planner,
                 "execution_attempted": True,
+                "execution_sent": True,
             }
         result = wrapped.result
         success = int(result.error_code.val) == 1
@@ -3092,6 +3492,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "planning_time_sec": float(result.planning_time),
             "planned_trajectory": _trajectory_summary(result.planned_trajectory),
             "execution_attempted": True,
+            "execution_sent": True,
             "controller_goal_type": "MoveGroup plan-and-execute with scene monitoring",
             "route_strategy": route_strategy,
             "planner": planner,
@@ -3135,6 +3536,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         confirm_real_motion: bool,
         allow_validated_camera_ray_execute: bool,
         no_execute: bool,
+        track_mouth_during_execution: bool = False,
         hold_duration_sec: float = DEFAULT_PREMOUTH_HOLD_SEC,
     ) -> tuple[int, dict[str, Any]]:
         contract = {
@@ -3203,6 +3605,20 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "return_vertical_axis_constraint": True,
             "return_wrist_3_direct_command": False,
             "pre_mouth_hold_duration_sec": float(hold_duration_sec),
+            "mouth_tracking_during_execution": bool(
+                track_mouth_during_execution
+            ),
+            "tracking_policy": (
+                "cancel_and_replan_during_moveit_then_relative_servo_at_premouth"
+                if track_mouth_during_execution
+                else "disabled_one_shot_frozen_target"
+            ),
+            "tracking_maximum_replan_attempts": TRACKING_MAX_REPLAN_ATTEMPTS,
+            "tracking_maximum_displacement_m": TRACKING_MAX_DISPLACEMENT_M,
+            "tracking_maximum_linear_speed_mps": TRACKING_MAX_LINEAR_SPEED_MPS,
+            "tracking_maximum_linear_acceleration_mps2": (
+                TRACKING_MAX_LINEAR_ACCELERATION_MPS2
+            ),
         }
         if (
             isinstance(hold_duration_sec, bool)
@@ -3304,16 +3720,86 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "execution_sent": bool(search.get("trajectory_sent")),
                 "integrated_real_feed_water": contract,
             }
+        self._integrated_tracking_enabled = bool(track_mouth_during_execution)
+        tracking_replans: list[dict[str, Any]] = []
+        any_execution_attempted = False
+        any_execution_sent = False
         if execute:
-            code, result = super().execute(
-                confirm_real_motion=confirm_real_motion,
-                allow_validated_camera_ray_execute=allow_validated_camera_ray_execute,
-                allow_validated_feeding_vector_execute=False,
-                allow_validated_tcp_forward_execute=False,
-                no_execute=False,
-            )
+            for attempt in range(TRACKING_MAX_REPLAN_ATTEMPTS + 1):
+                if attempt > 0:
+                    stationary = self._wait_for_tracking_replan_stationary()
+                    tracking_replans[-1]["post_cancel_stationary_wait"] = stationary
+                    if not stationary.get("success"):
+                        code = 2
+                        result = {
+                            "success": False,
+                            "mode": "execute",
+                            "stage": "tracking_replan_stationary_wait",
+                            "reason": (
+                                "UR10e did not become stationary after tracked "
+                                "trajectory cancellation"
+                            ),
+                            "post_cancel_stationary_wait": stationary,
+                            "execution_attempted": any_execution_attempted,
+                            "execution_sent": any_execution_sent,
+                        }
+                        break
+                code, result = super().execute(
+                    confirm_real_motion=confirm_real_motion,
+                    allow_validated_camera_ray_execute=allow_validated_camera_ray_execute,
+                    allow_validated_feeding_vector_execute=False,
+                    allow_validated_tcp_forward_execute=False,
+                    no_execute=False,
+                )
+                execution_result = result.get("execution_result", {})
+                if isinstance(execution_result, dict):
+                    any_execution_attempted = bool(
+                        any_execution_attempted
+                        or execution_result.get("execution_attempted")
+                    )
+                    any_execution_sent = bool(
+                        any_execution_sent
+                        or execution_result.get("execution_sent")
+                    )
+                tracking_replans.append(
+                    {
+                        "attempt": attempt + 1,
+                        "success": bool(result.get("success")),
+                        "stage": result.get("stage"),
+                        "execution_stage": execution_result.get("stage")
+                        if isinstance(execution_result, dict)
+                        else None,
+                        "reason": result.get("reason"),
+                        "replan_required": bool(
+                            isinstance(execution_result, dict)
+                            and execution_result.get("tracking_replan_required")
+                        ),
+                        "mouth_drift_confirmation": (
+                            execution_result.get("mouth_drift_confirmation")
+                            if isinstance(execution_result, dict)
+                            else None
+                        ),
+                    }
+                )
+                if code == 0 and result.get("success"):
+                    break
+                if not (
+                    track_mouth_during_execution
+                    and isinstance(execution_result, dict)
+                    and execution_result.get("tracking_replan_required")
+                    and attempt < TRACKING_MAX_REPLAN_ATTEMPTS
+                ):
+                    break
         else:
             code, result = self.plan()
+        if execute:
+            result["execution_attempted"] = bool(
+                result.get("execution_attempted") or any_execution_attempted
+            )
+            result["execution_sent"] = bool(
+                result.get("execution_sent") or any_execution_sent
+            )
+        result["tracking_replan_attempts"] = tracking_replans
         result["active_search"] = search
         result["dynamic_octomap_readiness"] = dynamic
         result["combined_tool_collision_geometry"] = combined_tool_geometry
@@ -3328,10 +3814,24 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "completed": False,
         }
         if execute:
-            # Keep ROS state and the wrist RGB-D scene fresh during this
-            # deliberate no-command dwell at the validated pre-mouth pose.
-            self._spin_for(float(hold_duration_sec))
-            hold_report["completed"] = True
+            if track_mouth_during_execution:
+                tracking_hold = self._servo_track_during_premouth_hold(
+                    float(hold_duration_sec)
+                )
+                hold_report.update(
+                    {
+                        "completed": bool(tracking_hold.get("success")),
+                        "motion_command_sent": bool(
+                            tracking_hold.get("servo_command_count", 0)
+                        ),
+                        "tracking": tracking_hold,
+                    }
+                )
+            else:
+                # Keep ROS state and the wrist RGB-D scene fresh during this
+                # deliberate no-command dwell at the validated pre-mouth pose.
+                self._spin_for(float(hold_duration_sec))
+                hold_report["completed"] = True
         else:
             hold_report.update(
                 {
@@ -3355,6 +3855,11 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         result["return_execution_sent"] = bool(
             return_result.get("execution_sent")
         )
+        tracking_hold_failed = bool(
+            execute
+            and track_mouth_during_execution
+            and not hold_report.get("completed")
+        )
         if return_code != 0 or not return_result.get("success"):
             result.update(
                 {
@@ -3365,6 +3870,18 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         or "guarded return to initial_position was refused"
                     ),
                     "final_state": "holding_pre_mouth",
+                }
+            )
+            return 2, result
+        if tracking_hold_failed:
+            result.update(
+                {
+                    "success": False,
+                    "stage": "premouth_tracking_stopped",
+                    "reason": hold_report.get("tracking", {}).get(
+                        "stop_reason", "pre-mouth tracking stopped"
+                    ),
+                    "final_state": "initial_position" if execute else "validated",
                 }
             )
             return 2, result
@@ -3412,6 +3929,14 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--confirm-real-motion", action="store_true")
     parser.add_argument("--allow-validated-camera-ray-execute", action="store_true")
     parser.add_argument("--no-execute", action="store_true")
+    parser.add_argument(
+        "--track-mouth-during-execution",
+        action="store_true",
+        help=(
+            "Opt in to bounded mouth-drift cancel/replan during MoveIt motion "
+            "and relative Servo corrections during the pre-mouth hold."
+        ),
+    )
     parser.add_argument("--target-selection", choices=("left", "center", "right"), default="center")
     parser.add_argument("--mouth-sample-seconds", type=float, default=DEFAULT_MOUTH_SAMPLE_SECONDS)
     parser.add_argument(
@@ -3480,6 +4005,9 @@ def main() -> int:
                     args.allow_validated_camera_ray_execute
                 ),
                 no_execute=bool(args.no_execute),
+                track_mouth_during_execution=bool(
+                    args.track_mouth_during_execution
+                ),
                 hold_duration_sec=float(args.hold_duration),
             )
     finally:

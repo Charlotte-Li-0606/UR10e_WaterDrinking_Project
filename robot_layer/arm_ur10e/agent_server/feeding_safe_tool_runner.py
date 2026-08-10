@@ -180,6 +180,9 @@ def main() -> int:
             confirm_real_motion=bool(cli.confirm_real_motion),
             target_selection=str(call["args"]["target_selection"]),
             hold_duration_sec=float(call["args"]["hold_duration_sec"]),
+            track_mouth_during_execution=bool(
+                call["args"].get("track_mouth_during_execution", False)
+            ),
         )
         print(
             json.dumps(

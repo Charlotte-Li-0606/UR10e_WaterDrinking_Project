@@ -86,8 +86,8 @@ class RealFeedWaterBackendTest(unittest.TestCase):
             velocity_argument = command.index("--trajectory-velocity-scaling") + 1
             acceleration_argument = command.index("--trajectory-acceleration-scaling") + 1
             hold_argument = command.index("--hold-duration") + 1
-            self.assertEqual("0.6", command[velocity_argument])
-            self.assertEqual("0.6", command[acceleration_argument])
+            self.assertEqual("0.3", command[velocity_argument])
+            self.assertEqual("0.3", command[acceleration_argument])
             self.assertEqual("5.0", command[hold_argument])
             return subprocess.CompletedProcess(command, 0, "", "")
 

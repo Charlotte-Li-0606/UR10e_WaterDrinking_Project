@@ -76,4 +76,5 @@ trap cleanup EXIT INT TERM
   --mount-calibration-status "${MOUNT_STATUS}" \
   --debug-image-topic /mouth_detection/debug_image \
   --base-frame base_link \
+  --max-jump-m 0.35 \
   "$@"

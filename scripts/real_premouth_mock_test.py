@@ -81,7 +81,7 @@ EXPECTED_JOINTS = (
 # target is deliberately defined by the straw tip alone.
 STRAW_TIP_OFFSET_TOOL0_M = (0.110, 0.0, 0.0)
 CAMERA_OPTICAL_CENTER_OFFSET_TOOL0_M = (0.070, 0.0, 0.015)
-MOCK_PRE_MOUTH_STRAW_DISPLACEMENT_UR_BASE_M = (0.080, 0.0, 0.0)
+MOCK_PRE_MOUTH_STRAW_DISPLACEMENT_UR_BASE_M = (0.050, 0.0, 0.0)
 
 POSITION_TOLERANCE_M = 0.002
 ORIENTATION_TOLERANCE_RAD = 0.001
@@ -515,7 +515,7 @@ class RealPreMouthMockTest(Node):
                 "frame_id": BASE_FRAME,
                 "position_m": mock_target_position,
                 "orientation_quat_xyzw": orientation,
-                "defined_relative_to": "current straw tip + [0.080, 0.0, 0.0] m in UR base, transformed into base_link",
+                "defined_relative_to": "current straw tip + [0.050, 0.0, 0.0] m in UR base, transformed into base_link",
             },
             "target_tool0_pose": {
                 "frame_id": BASE_FRAME,

@@ -235,6 +235,14 @@ def _launch_setup(context):
     )
 
     servo_yaml = load_yaml("ur_moveit_config", "config/ur_servo.yaml")
+    # The physical UR driver keeps scaled_joint_trajectory_controller active.
+    # Route Servo's JointTrajectory output to that controller instead of the
+    # inactive forward_position_controller used by the upstream demo config.
+    if trajectory_controller == "scaled_joint_trajectory_controller":
+        servo_yaml["command_out_type"] = "trajectory_msgs/JointTrajectory"
+        servo_yaml["command_out_topic"] = (
+            "/scaled_joint_trajectory_controller/joint_trajectory"
+        )
     servo_params = {"moveit_servo": servo_yaml}
     servo_node = Node(
         package="moveit_servo",

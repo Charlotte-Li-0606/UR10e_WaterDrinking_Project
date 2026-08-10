@@ -10,7 +10,9 @@
   modify it unless the user explicitly asks to maintain or remove that version.
 - The physical workflow supports only the high-level, center-target
   `feed_water` operation. Its outbound segment ends at a validated pre-mouth
-  hold. Keep tool0 +Z
+  hold. The nominal camera-ray stand-off is 50 mm, adaptive candidates are
+  50/70/90/120/150 mm, and real MoveIt velocity/acceleration scaling is capped
+  at 0.30. Keep tool0 +Z
   aligned with base_link -Z within 5 degrees throughout active-search and
   obstacle-detour trajectories, while allowing spin around tool0 Z. Validate
   every trajectory waypoint with MoveIt FK before execution and refuse if the
@@ -75,3 +77,64 @@
   completed safe outcome. Never fall back to another motion path.
 - Summarize the structured result accurately, including whether planning or
   execution was attempted and whether a trajectory was sent.
+
+## Guarded real mouth-tracking test
+
+- A standalone user request to start or continue the real mouth-tracking test
+  authorizes one bounded tracking session through
+  `scripts/real_mouth_tracking_servo.py`. This is separate from the one-shot
+  `feed_water` workflow and must not modify or replace that workflow.
+- Invoke exactly one fresh tracking session with the existing real-motion
+  environment and confirmation gates:
+
+  ```bash
+  UR10E_ALLOW_REAL_EXECUTION=1 PYTHONPATH=.:${PYTHONPATH} \
+    /usr/bin/python3 scripts/real_mouth_tracking_servo.py \
+    --execute --confirm-real-motion --max-duration 15
+  ```
+
+- The runner may only lock the current collision-free tool pose and follow the
+  same selected mouth by relative translation. It must command zero angular
+  velocity, preserve the locked tool orientation, keep target displacement at
+  or below 60 mm, Cartesian speed at or below 20 mm/s, acceleration at or
+  below 0.10 m/s², and the tool within the 1.30 m workspace radius.
+- For the first physical test, require the pendant speed slider to be at or
+  below 10%, MoveIt Servo initialized, the scaled trajectory controller
+  active, normal or reduced safety mode, the robot running under External
+  Control, fresh `base_link` mouth and `tool0` TF data, and the operator's stop
+  control immediately accessible.
+- Immediately publish bounded zero twists and disarm on target loss/staleness,
+  target `ABORTED`, TF failure, controller-state loss, collision, singularity,
+  joint limit, workspace/displacement violation, robot or safety-mode change,
+  duration timeout, operator stop, or process shutdown. Never switch
+  controllers, command direct mouth contact, alter the locked orientation, or
+  fall back to an arbitrary trajectory.
+- Quoted examples, planning, implementation, status inspection, and disarmed
+  tests do not authorize tracking motion. Report whether the reference locked,
+  whether any Servo command was published, the maximum displacement/speed,
+  and the final stop reason.
+
+## Tracked feed-water execution
+
+- A standalone request for “feed me water with tracking” authorizes one
+  integrated guarded execution through the canonical Codex entrypoint:
+
+  ```bash
+  UR10E_ALLOW_REAL_EXECUTION=1 scripts/codex_feed_water.sh \
+    --execute --confirm-real-motion --hold-duration 5 \
+    --track-mouth-during-execution
+  ```
+
+- The tracking flag is explicit opt-in; ordinary `feed_water` keeps the
+  existing frozen-target one-shot behavior. During tracked execution, MoveIt
+  exclusively owns the controller for the collision-checked approach. Stable
+  significant mouth drift cancels that trajectory and triggers at most two
+  fresh plans from the stopped state. Servo may publish only after MoveGroup
+  finishes and releases the controller, and only for bounded relative
+  translation during the pre-mouth hold.
+- Never publish MoveIt execution and Servo commands concurrently. Preserve the
+  validated pre-mouth offset, locked tool orientation, human collision scene,
+  OctoMap, 60 mm relative target limit, 20 mm/s Servo limit, 0.10 m/s²
+  acceleration limit, target-loss halt, and guarded return. Report all replan
+  attempts, Servo command count, measured tool displacement/orientation error,
+  and the final stop reason.

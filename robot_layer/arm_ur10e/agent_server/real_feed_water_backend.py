@@ -6,7 +6,7 @@ MoveIt planning, trajectory, joint, controller, cup-tilt, or pour logic.  It
 invokes ``scripts/real_feed_water_integrated.py``.  That real-only state
 machine retains selected-person identity, performs bounded active search with
 vertical tool-axis alignment and free tool-axis spin when needed,
-freezes the camera-ray 80 mm pre-mouth target, and uses the wrist OctoMap for
+freezes the camera-ray 50 mm pre-mouth target, and uses the wrist OctoMap for
 same-target alternate-path replanning.  The integrated process performs the
 motionless pre-mouth dwell and the guarded return to its fixed configured
 initial position so all ROS state and MoveIt checks remain in one process.
@@ -30,11 +30,11 @@ REAL_FEED_WATER_SCRIPT = PROJECT_ROOT / "scripts/real_feed_water_integrated.py"
 REPORT_DIR = PROJECT_ROOT / "reports"
 
 REAL_BACKEND = "real"
-SAFE_DISTANCE_M = 0.080
+SAFE_DISTANCE_M = 0.050
 MAXIMUM_PLAN_TRANSLATION_M = 1.30
 MOUTH_SAMPLE_SECONDS = 1.0
-TRAJECTORY_VELOCITY_SCALING = 0.60
-TRAJECTORY_ACCELERATION_SCALING = 0.60
+TRAJECTORY_VELOCITY_SCALING = 0.30
+TRAJECTORY_ACCELERATION_SCALING = 0.30
 MIN_HOLD_SECONDS = 2.0
 MAX_HOLD_SECONDS = 5.0
 DEFAULT_HOLD_SECONDS = 5.0
@@ -66,6 +66,7 @@ def _pipeline_command(
     report_path: Path,
     target_selection: str,
     hold_duration_sec: float,
+    track_mouth_during_execution: bool = False,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -88,6 +89,8 @@ def _pipeline_command(
         command.extend(["--confirm-real-motion", "--allow-validated-camera-ray-execute"])
     else:
         command.append("--no-execute")
+    if track_mouth_during_execution:
+        command.append("--track-mouth-during-execution")
     return command
 
 
@@ -270,6 +273,13 @@ def _tool_report(
         "hold_duration_sec": hold_duration_sec,
         "hold_completed": bool(hold_result.get("completed")),
         "pre_mouth_hold": hold_result,
+        "mouth_tracking_during_execution": bool(
+            integrated.get("mouth_tracking_during_execution")
+        ),
+        "tracking_replan_attempts": pipeline.get("tracking_replan_attempts"),
+        "premouth_tracking": hold_result.get("tracking")
+        if isinstance(hold_result, Mapping)
+        else None,
         "safety_gates": {
             **dict(gates),
             "stable_mouth_pose": bool(checks.get("mouth_pose", {}).get("stable")),
@@ -329,6 +339,7 @@ def run_real_feed_water(
     confirm_real_motion: bool = False,
     target_selection: str = "center",
     hold_duration_sec: float = DEFAULT_HOLD_SECONDS,
+    track_mouth_during_execution: bool = False,
     environ: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Run or plan the real safe pre-mouth-only ``feed_water`` operation."""
@@ -360,6 +371,7 @@ def run_real_feed_water(
         "no_direct_mouth_contact": True,
         "no_tilt_or_pour": True,
         "hold_duration_in_range": True,
+        "tracked_feed_requested": bool(track_mouth_during_execution),
     }
     if not gates["backend_real"]:
         return _failure_report(
@@ -414,6 +426,7 @@ def run_real_feed_water(
                 report_path=pipeline_report_path,
                 target_selection=target_selection,
                 hold_duration_sec=duration,
+                track_mouth_during_execution=track_mouth_during_execution,
             ),
             cwd=PROJECT_ROOT,
             env=child_environment,

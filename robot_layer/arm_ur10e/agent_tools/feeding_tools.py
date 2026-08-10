@@ -239,6 +239,7 @@ def validate_safe_feeding_tool_call(
             "max_search_time_sec",
             "allow_vertical_adjust",
             "hold_duration_sec",
+            "track_mouth_during_execution",
         },
     }
     extra = set(raw_args) - allowed[tool]
@@ -320,6 +321,11 @@ def validate_safe_feeding_tool_call(
     vertical_adjust = raw_args.get("allow_vertical_adjust", False)
     if not isinstance(vertical_adjust, bool):
         raise FeedingToolValidationError("allow_vertical_adjust must be a boolean")
+    tracked_execution = raw_args.get("track_mouth_during_execution", False)
+    if not isinstance(tracked_execution, bool):
+        raise FeedingToolValidationError(
+            "track_mouth_during_execution must be a boolean"
+        )
     return {
         "tool": tool,
         "args": {
@@ -328,6 +334,7 @@ def validate_safe_feeding_tool_call(
             "max_search_time_sec": _validate_safe_search_time(raw_args.get("max_search_time_sec", 15.0)),
             "allow_vertical_adjust": vertical_adjust,
             "hold_duration_sec": _validate_feed_water_hold_duration(raw_args.get("hold_duration_sec", 3.0)),
+            "track_mouth_during_execution": tracked_execution,
         },
     }
 

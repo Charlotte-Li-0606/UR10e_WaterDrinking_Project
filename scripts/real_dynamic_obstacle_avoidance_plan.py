@@ -283,19 +283,38 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
         }
 
     def _run_plan(self, target: dict[str, Any]) -> dict[str, Any]:
-        self._frozen_dynamic_target = {
-            "frame_id": str(target["frame_id"]),
-            "link_name": str(target["link_name"]),
-            "position_m": [float(value) for value in target["position_m"]],
-            "orientation_quat_xyzw": [
-                float(value) for value in target["orientation_quat_xyzw"]
-            ],
-        }
-        direct_result = self._run_cartesian_plan(target)
-        if direct_result.get("success"):
-            self._selected_dynamic_route_strategy = DIRECT_ROUTE_STRATEGY
-            direct_result.update(
-                {
+        candidates = list(getattr(self, "_route_candidate_targets", []) or [])
+        if not candidates:
+            candidates = [target]
+        candidates.sort(key=lambda item: (
+            0 if item.get("position_m") == target.get("position_m") else 1,
+            -float(item.get("standoff_m") or 0.0),
+            -abs(float(item.get("yaw_deg") or 0.0)),
+        ))
+        candidates = candidates[:12]
+        route_attempts: list[dict[str, Any]] = []
+        last_direct: dict[str, Any] = {}
+        last_result: dict[str, Any] = {}
+        def summary(value: dict[str, Any]) -> dict[str, Any]:
+            return {
+                key: value.get(key)
+                for key in ("success", "stage", "error_code", "error_message", "fraction", "points", "reason")
+                if key in value
+            }
+        for candidate in candidates:
+            frozen = {
+                "frame_id": str(candidate["frame_id"]),
+                "link_name": str(candidate["link_name"]),
+                "position_m": [float(value) for value in candidate["position_m"]],
+                "orientation_quat_xyzw": [float(value) for value in candidate["orientation_quat_xyzw"]],
+            }
+            self._frozen_dynamic_target = frozen
+            direct_result = self._run_cartesian_plan(frozen)
+            last_direct = direct_result
+            attempt = {"standoff_m": candidate.get("standoff_m"), "yaw_deg": candidate.get("yaw_deg"), "direct": summary(direct_result)}
+            if direct_result.get("success"):
+                self._selected_dynamic_route_strategy = DIRECT_ROUTE_STRATEGY
+                direct_result.update({
                     "route_strategy": DIRECT_ROUTE_STRATEGY,
                     "planner": "moveit_compute_cartesian_path",
                     "combined_planning_scene_checked": True,
@@ -305,32 +324,42 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
                     "cartesian_path_complete": True,
                     "cartesian_collision_checking": True,
                     "same_target_replanning": True,
-                    "maximum_replan_attempts": REPLAN_ATTEMPTS,
-                    "replan_delay_sec": REPLAN_DELAY_SEC,
-                    "wait_for_clear": False,
                     "orientation_path_constraint": True,
                     "maximum_tool_vertical_tilt_rad": MAX_TOOL_VERTICAL_TILT_RAD,
                     "tool_axis_spin_free": True,
-                    "final_goal_orientation_constraint": True,
-                    "final_goal_orientation_tolerance_rad": ORIENTATION_TOLERANCE_RAD,
-                    "intermediate_flange_orientation_unconstrained": False,
                     "execution_sent": False,
-                }
-            )
-            return direct_result
+                    "route_attempts": route_attempts + [attempt],
+                })
+                return direct_result
+            result = self._run_goal(self._goal_for_target(frozen))
+            attempt["ompl"] = summary(result)
+            route_attempts.append(attempt)
+            last_result = result
+            if result.get("success"):
+                result.update({
+                    "route_strategy": DETOUR_ROUTE_STRATEGY,
+                    "planner": f"{OMPL_PIPELINE}/{OMPL_PLANNER}",
+                    "combined_planning_scene_checked": True,
+                    "planning_scene": COMBINED_SCENE_DESCRIPTION,
+                    "direct_path_accepted": False,
+                    "detour_attempted": True,
+                    "cartesian_path_complete": False,
+                    "cartesian_collision_checking": True,
+                    "same_target_replanning": True,
+                    "execution_sent": False,
+                    "route_attempts": route_attempts,
+                })
+                return result
 
-        result = self._run_goal(self._goal_for_target(target))
-        self._selected_dynamic_route_strategy = (
-            DETOUR_ROUTE_STRATEGY if result.get("success") else None
-        )
+        result = dict(last_result or last_direct)
         result.update(
             {
-                "route_strategy": self._selected_dynamic_route_strategy,
+                "route_strategy": None,
                 "planner": f"{OMPL_PIPELINE}/{OMPL_PLANNER}",
                 "combined_planning_scene_checked": True,
                 "planning_scene": COMBINED_SCENE_DESCRIPTION,
                 "direct_path_accepted": False,
-                "direct_path_plan_result": direct_result,
+                "direct_path_plan_result": last_direct,
                 "detour_attempted": True,
                 "cartesian_path_complete": False,
                 "cartesian_collision_checking": True,
@@ -338,6 +367,7 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
                 "maximum_replan_attempts": REPLAN_ATTEMPTS,
                 "replan_delay_sec": REPLAN_DELAY_SEC,
                 "wait_for_clear": False,
+                "route_attempts": route_attempts,
                 "orientation_path_constraint": True,
                 "maximum_tool_vertical_tilt_rad": MAX_TOOL_VERTICAL_TILT_RAD,
                 "tool_axis_spin_free": True,
@@ -355,8 +385,8 @@ class RealDynamicObstacleAvoidancePlan(RealPreMouthFromPerceptionPlan):
                     "could not plan either the direct route or the OMPL detour "
                     "while enforcing the vertical-tool axis constraint"
                 ),
-                "direct_error_code": direct_result.get("error_code"),
-                "direct_error_message": direct_result.get("error_message"),
+                "direct_error_code": last_direct.get("error_code"),
+                "direct_error_message": last_direct.get("error_message"),
                 "detour_error_code": result.get("error_code"),
                 "detour_error_message": result.get("error_message"),
                 "obstacle_layer_attribution": "combined_scene_only",

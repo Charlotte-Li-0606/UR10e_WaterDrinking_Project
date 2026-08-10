@@ -40,8 +40,8 @@ class UR10eBackendSafetyTest(unittest.TestCase):
 
         self.assertEqual("real", settings.name)
         self.assertFalse(settings.real_execution_allowed)
-        self.assertEqual(0.60, settings.max_velocity_limit)
-        self.assertEqual(0.60, settings.max_acceleration_limit)
+        self.assertEqual(0.30, settings.max_velocity_limit)
+        self.assertEqual(0.30, settings.max_acceleration_limit)
         with self.assertRaises(RealExecutionBlockedError):
             require_real_execution_authorized(settings)
 

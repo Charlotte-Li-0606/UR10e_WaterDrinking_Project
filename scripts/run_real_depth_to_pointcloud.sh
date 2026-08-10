@@ -14,4 +14,10 @@ exec "${PROJECT_DIR}/scripts/run_depth_to_pointcloud.sh" \
   --min-depth "${D435I_POINTCLOUD_MIN_DEPTH_M:-0.20}" \
   --max-depth "${D435I_POINTCLOUD_MAX_DEPTH_M:-2.00}" \
   --max-publish-rate "${D435I_POINTCLOUD_MAX_RATE_HZ:-5.0}" \
+  --exclude-tool-box \
+  --tool-frame "${D435I_TOOL_FRAME:-tool0}" \
+  --tool-box-center-z-m "${D435I_TOOL_BOX_CENTER_Z_M:-0.15}" \
+  --tool-box-size-xy-m "${D435I_TOOL_BOX_SIZE_XY_M:-0.10}" \
+  --tool-box-size-z-m "${D435I_TOOL_BOX_SIZE_Z_M:-0.30}" \
+  --tool-box-padding-m "${D435I_TOOL_BOX_PADDING_M:-0.02}" \
   "$@"
