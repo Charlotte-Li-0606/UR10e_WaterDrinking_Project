@@ -2170,6 +2170,7 @@ class RealPreMouthFromPerceptionPlan(Node):
             "required_axis_base_link": list(REQUIRED_VERTICAL_AXIS_BASE_LINK),
             "maximum_tilt_rad": MAX_TOOL_VERTICAL_TILT_RAD,
             "maximum_tilt_deg": math.degrees(MAX_TOOL_VERTICAL_TILT_RAD),
+            "maximum_tool0_excursion_from_start_m": None,
             "sampled_waypoints": 0,
             "trajectory_waypoints": len(points),
         }
@@ -2187,6 +2188,10 @@ class RealPreMouthFromPerceptionPlan(Node):
 
         maximum_tilt = -1.0
         maximum_index: int | None = None
+        first_tool_position: list[float] | None = None
+        final_tool_position: list[float] | None = None
+        maximum_tool_excursion = 0.0
+        maximum_tool_excursion_index: int | None = None
         for index, point in enumerate(points):
             positions = [float(value) for value in point.positions]
             if len(positions) != len(names) or not all(math.isfinite(value) for value in positions):
@@ -2232,15 +2237,35 @@ class RealPreMouthFromPerceptionPlan(Node):
                 }
             try:
                 pose_index = list(response.fk_link_names).index(TOOL_FRAME)
-                orientation = response.pose_stamped[pose_index].pose.orientation
+                tool_pose = response.pose_stamped[pose_index].pose
+                orientation = tool_pose.orientation
                 quaternion = [orientation.x, orientation.y, orientation.z, orientation.w]
                 tilt = _tool_vertical_tilt_rad(quaternion)
+                tool_position = [
+                    float(tool_pose.position.x),
+                    float(tool_pose.position.y),
+                    float(tool_pose.position.z),
+                ]
+                if not all(math.isfinite(value) for value in tool_position):
+                    raise ValueError("tool0 FK position is not finite")
             except (IndexError, RuntimeError, TypeError, ValueError) as exc:
                 return {
                     **base,
                     "sampled_waypoints": index,
                     "reason": f"invalid FK result at trajectory waypoint {index}: {exc}",
                 }
+            if first_tool_position is None:
+                first_tool_position = list(tool_position)
+            final_tool_position = list(tool_position)
+            excursion = math.sqrt(
+                sum(
+                    (value - start) ** 2
+                    for value, start in zip(tool_position, first_tool_position)
+                )
+            )
+            if excursion > maximum_tool_excursion:
+                maximum_tool_excursion = excursion
+                maximum_tool_excursion_index = index
             if tilt > maximum_tilt:
                 maximum_tilt = tilt
                 maximum_index = index
@@ -2251,6 +2276,8 @@ class RealPreMouthFromPerceptionPlan(Node):
                     "maximum_observed_tilt_rad": tilt,
                     "maximum_observed_tilt_deg": math.degrees(tilt),
                     "maximum_tilt_waypoint_index": index,
+                    "maximum_tool0_excursion_from_start_m": maximum_tool_excursion,
+                    "maximum_tool0_excursion_waypoint_index": maximum_tool_excursion_index,
                     "reason": (
                         f"trajectory waypoint {index} tilts tool0 +Z by "
                         f"{math.degrees(tilt):.2f} deg from base_link -Z, above the "
@@ -2264,6 +2291,10 @@ class RealPreMouthFromPerceptionPlan(Node):
             "maximum_observed_tilt_rad": maximum_tilt,
             "maximum_observed_tilt_deg": math.degrees(maximum_tilt),
             "maximum_tilt_waypoint_index": maximum_index,
+            "first_tool0_position_m": first_tool_position,
+            "final_tool0_position_m": final_tool_position,
+            "maximum_tool0_excursion_from_start_m": maximum_tool_excursion,
+            "maximum_tool0_excursion_waypoint_index": maximum_tool_excursion_index,
             "wrist_3_joint_directly_commanded": False,
             "tool_axis_spin_free": True,
         }

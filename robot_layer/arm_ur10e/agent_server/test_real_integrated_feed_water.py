@@ -7,6 +7,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import (
     AttachedCollisionObject,
     CollisionObject,
@@ -42,6 +43,7 @@ from scripts.real_feed_water_integrated import (
     _orientation_after_local_tool_z_rotation,
     _recorded_tool_pose_in_base_link,
     _select_consistent_cloud_frame_window,
+    _validate_continuous_recovery_trajectory,
     _trajectory_final_joint_error,
 )
 from scripts.real_premouth_from_perception_plan import (
@@ -263,6 +265,108 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
 
         self.assertTrue(result["available"])
         self.assertAlmostEqual(0.02, result["maximum_joint_error_rad"], places=6)
+
+    def test_continuous_recovery_rejects_remote_ompl_ik_branch(self) -> None:
+        trajectory = RobotTrajectory()
+        trajectory.joint_trajectory.joint_names = [
+            "shoulder_pan_joint",
+            "shoulder_lift_joint",
+            "elbow_joint",
+            "wrist_1_joint",
+            "wrist_2_joint",
+            "wrist_3_joint",
+        ]
+        trajectory.joint_trajectory.points = [
+            JointTrajectoryPoint(positions=[0.05, -1.0, -1.7, -1.9, 1.58, 0.1]),
+            JointTrajectoryPoint(
+                positions=[2.34, -2.76, -0.13, -1.80, 1.58, 0.94]
+            ),
+        ]
+        trajectory.joint_trajectory.points[-1].time_from_start.sec = 15
+
+        result = _validate_continuous_recovery_trajectory(
+            trajectory,
+            requested_tool0_translation_m=0.244,
+            tool_path_validation={
+                "maximum_tool0_excursion_from_start_m": 1.91,
+            },
+        )
+
+        self.assertFalse(result["success"])
+        self.assertIn("shoulder_pan_joint excursion", result["reason"])
+        self.assertIn("tool0 path excursion", result["reason"])
+        self.assertGreater(result["joint_excursions_deg"]["shoulder_pan_joint"], 100.0)
+
+    def test_continuous_recovery_accepts_bounded_local_detour(self) -> None:
+        trajectory = RobotTrajectory()
+        trajectory.joint_trajectory.joint_names = [
+            "shoulder_pan_joint",
+            "shoulder_lift_joint",
+            "elbow_joint",
+            "wrist_1_joint",
+            "wrist_2_joint",
+            "wrist_3_joint",
+        ]
+        trajectory.joint_trajectory.points = [
+            JointTrajectoryPoint(positions=[0.05, -1.0, -1.7, -1.9, 1.58, 0.1]),
+            JointTrajectoryPoint(positions=[0.20, -1.1, -1.5, -2.0, 1.50, 0.2]),
+        ]
+        trajectory.joint_trajectory.points[-1].time_from_start.sec = 4
+
+        result = _validate_continuous_recovery_trajectory(
+            trajectory,
+            requested_tool0_translation_m=0.244,
+            tool_path_validation={
+                "maximum_tool0_excursion_from_start_m": 0.31,
+            },
+        )
+
+        self.assertTrue(result["success"])
+        self.assertIsNone(result["reason"])
+        self.assertAlmostEqual(0.394, result["maximum_allowed_tool0_excursion_m"])
+
+    @patch.object(RealDynamicObstacleAvoidancePlan, "_goal_for_target")
+    def test_continuous_ompl_goal_constrains_current_ik_branch(
+        self,
+        goal_for_target: Mock,
+    ) -> None:
+        goal_for_target.return_value = MoveGroup.Goal()
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.latest_joint_state = JointState(
+            name=[
+                "shoulder_pan_joint",
+                "shoulder_lift_joint",
+                "elbow_joint",
+                "wrist_1_joint",
+                "wrist_2_joint",
+                "wrist_3_joint",
+            ],
+            position=[0.05, -1.0, -1.7, -1.9, 1.58, 0.1],
+        )
+
+        goal = node._continuous_ompl_goal_for_target(
+            {
+                "frame_id": "base_link",
+                "position_m": [-0.9, 0.1, 0.7],
+                "orientation_quat_xyzw": [1.0, 0.0, 0.0, 0.0],
+            }
+        )
+
+        constraints = goal.request.path_constraints.joint_constraints
+        self.assertEqual(6, len(constraints))
+        by_name = {constraint.joint_name: constraint for constraint in constraints}
+        self.assertAlmostEqual(
+            math.radians(45.0),
+            by_name["shoulder_pan_joint"].tolerance_above,
+        )
+        self.assertAlmostEqual(
+            math.radians(90.0),
+            by_name["wrist_3_joint"].tolerance_below,
+        )
+        self.assertEqual(
+            "continuous_local_ik_branch_with_vertical_tool_axis",
+            goal.request.path_constraints.name,
+        )
 
     def test_fixed_initial_joint_goal_keeps_vertical_path_constraint(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)

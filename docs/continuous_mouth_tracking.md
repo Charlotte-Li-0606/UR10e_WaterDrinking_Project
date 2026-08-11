@@ -77,6 +77,14 @@ over-range fallback, target loss, Servo halts, vertical-axis correction,
 exclusive command ownership, and OctoMap degraded states. Neither command sends
 ROS motion.
 
+Continuous recovery remains local even when OMPL is the final fallback. OMPL
+receives path constraints around the current joint branch, and every resulting
+trajectory is rejected before execution unless waypoint FK proves that tool0
+stays inside an envelope derived from the requested correction. Per-joint
+excursion, cumulative joint travel, duration, collision, and vertical-axis
+checks all remain mandatory. A collision-free route that reaches a remote IK
+branch is therefore not considered executable.
+
 ## Explicit mode selection
 
 A plan-only invocation is:

@@ -158,5 +158,10 @@
   validated pre-mouth offset, locked tool orientation, human collision scene,
   optional OctoMap policy, 100 mm Servo recovery threshold, 20 mm/s Servo
   limit, 0.10 m/s² acceleration limit, target-loss halt, and guarded return.
+  Treat continuous recovery as a local correction: constrain OMPL around the
+  live joint branch and reject any candidate whose complete waypoint-FK tool
+  excursion, per-joint excursion, cumulative travel, or duration exceeds the
+  configured local-recovery envelope. Collision-free remote IK branches are
+  not executable fallbacks.
   Report all recovery attempts, Servo command count, measured tool
   displacement/orientation error, and the final stop reason.

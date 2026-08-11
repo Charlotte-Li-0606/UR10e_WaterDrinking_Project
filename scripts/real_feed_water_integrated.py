@@ -160,6 +160,22 @@ TRACKING_TARGET_MAX_AGE_SEC = 0.75
 TRACKING_MAX_DISPLACEMENT_M = 0.06
 TRACKING_MAX_LINEAR_SPEED_MPS = 0.02
 TRACKING_MAX_LINEAR_ACCELERATION_MPS2 = 0.10
+# Continuous recovery is a local mouth-following correction, not permission
+# for OMPL to choose a remote IK branch.  These limits are checked against the
+# complete planned trajectory before it can be cached or executed.
+CONTINUOUS_RECOVERY_JOINT_EXCURSION_LIMITS_RAD = {
+    "shoulder_pan_joint": math.radians(45.0),
+    "shoulder_lift_joint": math.radians(45.0),
+    "elbow_joint": math.radians(60.0),
+    "wrist_1_joint": math.radians(60.0),
+    "wrist_2_joint": math.radians(60.0),
+    "wrist_3_joint": math.radians(90.0),
+}
+CONTINUOUS_RECOVERY_MAX_CUMULATIVE_JOINT_TRAVEL_RAD = 4.0
+CONTINUOUS_RECOVERY_MAX_TRAJECTORY_DURATION_SEC = 20.0
+CONTINUOUS_RECOVERY_TOOL_PATH_DETOUR_MARGIN_M = 0.15
+CONTINUOUS_RECOVERY_MIN_TOOL_PATH_ENVELOPE_M = 0.15
+CONTINUOUS_RECOVERY_MAX_TOOL_PATH_ENVELOPE_M = 0.50
 SEARCH_WRIST_Z_CANDIDATE_ANGLES_RAD = tuple(
     math.radians(value) for value in (SEARCH_WRIST_Z_ANGLE_DEG, 10.0, 5.0)
 )
@@ -641,6 +657,122 @@ def _trajectory_final_joint_error(
         "maximum_joint_error_deg": math.degrees(max(errors.values(), default=0.0)),
         "final_joint_positions_rad": {name: final[name] for name in target_positions_rad},
     }
+
+
+def _validate_continuous_recovery_trajectory(
+    trajectory: Any,
+    *,
+    requested_tool0_translation_m: float,
+    tool_path_validation: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Reject a collision-free recovery that leaves the local IK branch."""
+    requested_translation = float(requested_tool0_translation_m)
+    allowed_tool_excursion = min(
+        CONTINUOUS_RECOVERY_MAX_TOOL_PATH_ENVELOPE_M,
+        max(
+            CONTINUOUS_RECOVERY_MIN_TOOL_PATH_ENVELOPE_M,
+            requested_translation + CONTINUOUS_RECOVERY_TOOL_PATH_DETOUR_MARGIN_M,
+        ),
+    )
+    result: dict[str, Any] = {
+        "success": False,
+        "stage": "continuous_recovery_motion_validation",
+        "requested_tool0_translation_m": requested_translation,
+        "maximum_allowed_tool0_excursion_m": allowed_tool_excursion,
+        "maximum_tool0_excursion_from_start_m": None,
+        "maximum_cumulative_joint_travel_rad": (
+            CONTINUOUS_RECOVERY_MAX_CUMULATIVE_JOINT_TRAVEL_RAD
+        ),
+        "maximum_trajectory_duration_sec": (
+            CONTINUOUS_RECOVERY_MAX_TRAJECTORY_DURATION_SEC
+        ),
+        "joint_excursion_limits_rad": dict(
+            CONTINUOUS_RECOVERY_JOINT_EXCURSION_LIMITS_RAD
+        ),
+    }
+    if not math.isfinite(requested_translation) or requested_translation < 0.0:
+        return {**result, "reason": "requested recovery translation is invalid"}
+    joint_trajectory = getattr(trajectory, "joint_trajectory", None)
+    names = list(getattr(joint_trajectory, "joint_names", []))
+    points = list(getattr(joint_trajectory, "points", []))
+    if not names or not points:
+        return {**result, "reason": "recovery trajectory has no joint waypoints"}
+    missing = sorted(
+        set(CONTINUOUS_RECOVERY_JOINT_EXCURSION_LIMITS_RAD) - set(names)
+    )
+    if missing:
+        return {
+            **result,
+            "reason": "recovery trajectory is missing joints: " + ", ".join(missing),
+            "missing_joints": missing,
+        }
+    positions = [[float(value) for value in point.positions] for point in points]
+    if any(
+        len(values) != len(names)
+        or not all(math.isfinite(value) for value in values)
+        for values in positions
+    ):
+        return {**result, "reason": "recovery trajectory has invalid joint positions"}
+
+    def angular_distance(first: float, second: float) -> float:
+        return abs(math.atan2(math.sin(second - first), math.cos(second - first)))
+
+    start = positions[0]
+    excursions = {
+        name: max(
+            angular_distance(start[index], values[index]) for values in positions
+        )
+        for index, name in enumerate(names)
+    }
+    cumulative_travel = sum(
+        angular_distance(previous[index], current[index])
+        for previous, current in zip(positions, positions[1:])
+        for index in range(len(names))
+    )
+    final_time = points[-1].time_from_start
+    duration = float(final_time.sec) + float(final_time.nanosec) * 1.0e-9
+    maximum_tool_excursion = None
+    if isinstance(tool_path_validation, dict):
+        raw_excursion = tool_path_validation.get(
+            "maximum_tool0_excursion_from_start_m"
+        )
+        if raw_excursion is not None:
+            try:
+                maximum_tool_excursion = float(raw_excursion)
+            except (TypeError, ValueError):
+                maximum_tool_excursion = None
+    result.update(
+        {
+            "joint_excursions_rad": excursions,
+            "joint_excursions_deg": {
+                name: math.degrees(value) for name, value in excursions.items()
+            },
+            "cumulative_joint_travel_rad": cumulative_travel,
+            "trajectory_duration_sec": duration,
+            "maximum_tool0_excursion_from_start_m": maximum_tool_excursion,
+        }
+    )
+    failures: list[str] = []
+    for name, limit in CONTINUOUS_RECOVERY_JOINT_EXCURSION_LIMITS_RAD.items():
+        if excursions[name] > limit:
+            failures.append(
+                f"{name} excursion {math.degrees(excursions[name]):.1f} deg "
+                f"exceeds {math.degrees(limit):.1f} deg"
+            )
+    if cumulative_travel > CONTINUOUS_RECOVERY_MAX_CUMULATIVE_JOINT_TRAVEL_RAD:
+        failures.append("cumulative joint travel exceeds the local recovery limit")
+    if not math.isfinite(duration) or duration > CONTINUOUS_RECOVERY_MAX_TRAJECTORY_DURATION_SEC:
+        failures.append("trajectory duration exceeds the local recovery limit")
+    if maximum_tool_excursion is None or not math.isfinite(maximum_tool_excursion):
+        failures.append("tool0 path excursion was not verified by waypoint FK")
+    elif maximum_tool_excursion > allowed_tool_excursion:
+        failures.append(
+            f"tool0 path excursion {maximum_tool_excursion:.3f} m exceeds "
+            f"the local {allowed_tool_excursion:.3f} m envelope"
+        )
+    result["success"] = not failures
+    result["reason"] = "; ".join(failures) if failures else None
+    return result
 
 
 def _orientation_after_local_tool_z_rotation(
@@ -4548,11 +4680,60 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "flange_vertical_axis_error_rad": float(tilt),
         }
 
+    def _continuous_ompl_goal_for_target(
+        self,
+        pose_target: dict[str, Any],
+    ) -> MoveGroup.Goal:
+        """Keep an OMPL recovery on the current, locally reachable IK branch."""
+        goal = RealDynamicObstacleAvoidancePlan._goal_for_target(
+            self, pose_target
+        )
+        state = self.latest_joint_state
+        names = list(getattr(state, "name", [])) if state is not None else []
+        positions = list(getattr(state, "position", [])) if state is not None else []
+        if len(names) != len(positions):
+            raise RuntimeError("live joint state is incomplete for constrained OMPL recovery")
+        current = {
+            str(name): float(position) for name, position in zip(names, positions)
+        }
+        missing = sorted(
+            set(CONTINUOUS_RECOVERY_JOINT_EXCURSION_LIMITS_RAD) - set(current)
+        )
+        if missing or not all(math.isfinite(value) for value in current.values()):
+            raise RuntimeError(
+                "live joint state is invalid for constrained OMPL recovery"
+                + (": " + ", ".join(missing) if missing else "")
+            )
+        goal.request.path_constraints.name = (
+            "continuous_local_ik_branch_with_vertical_tool_axis"
+        )
+        for name, limit in CONTINUOUS_RECOVERY_JOINT_EXCURSION_LIMITS_RAD.items():
+            constraint = JointConstraint()
+            constraint.joint_name = name
+            constraint.position = current[name]
+            constraint.tolerance_above = limit
+            constraint.tolerance_below = limit
+            constraint.weight = 1.0
+            goal.request.path_constraints.joint_constraints.append(constraint)
+        return goal
+
     def _continuous_plan_with_fallback(
         self,
         pose_target: dict[str, Any],
+        *,
+        local_recovery: bool = False,
     ) -> dict[str, Any]:
-        """Plan Cartesian, Pilz, then OMPL; retain only a validated trajectory."""
+        """Plan in backend order; constrain only post-staging local recovery."""
+        current_tool = self._tool0_pose()
+        if not current_tool.get("available"):
+            return {
+                "success": False,
+                "reason": "live tool0 pose is unavailable for local recovery validation",
+                "attempts": [],
+            }
+        requested_translation = _norm(
+            _subtract(pose_target["position_m"], current_tool["position_m"])
+        )
         if not self._continuous_motion_arbiter.acquire(MotionCommandOwner.PLANNER):
             return {
                 "success": False,
@@ -4575,7 +4756,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 (
                     "ompl",
                     lambda: self._run_goal(
-                        RealDynamicObstacleAvoidancePlan._goal_for_target(
+                        self._continuous_ompl_goal_for_target(pose_target)
+                        if local_recovery
+                        else RealDynamicObstacleAvoidancePlan._goal_for_target(
                             self, pose_target
                         )
                     ),
@@ -4583,11 +4766,32 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             )
             for backend, planner in planners:
                 self._validated_trajectory = None
-                plan = planner()
+                try:
+                    plan = planner()
+                except (RuntimeError, TypeError, ValueError) as exc:
+                    plan = {
+                        "success": False,
+                        "stage": "continuous_recovery_planner_setup",
+                        "reason": f"{backend} recovery setup failed: {exc}",
+                        "execution_sent": False,
+                    }
                 trajectory = self._validated_trajectory
                 collision = (
                     self._validate_trajectory_collision_states(trajectory)
                     if plan.get("success") and trajectory is not None
+                    else None
+                )
+                recovery_motion = (
+                    _validate_continuous_recovery_trajectory(
+                        trajectory,
+                        requested_tool0_translation_m=requested_translation,
+                        tool_path_validation=plan.get(
+                            "vertical_axis_validation"
+                        ),
+                    )
+                    if local_recovery
+                    and plan.get("success")
+                    and trajectory is not None
                     else None
                 )
                 success = bool(
@@ -4595,6 +4799,13 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     and trajectory is not None
                     and isinstance(collision, dict)
                     and collision.get("success")
+                    and (
+                        not local_recovery
+                        or (
+                            isinstance(recovery_motion, dict)
+                            and recovery_motion.get("success")
+                        )
+                    )
                 )
                 attempts.append(
                     {
@@ -4602,6 +4813,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         "success": success,
                         "plan": plan,
                         "trajectory_collision_validation": collision,
+                        "recovery_motion_validation": recovery_motion,
                     }
                 )
                 if success:
@@ -4615,10 +4827,24 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "selected_backend": selected,
             "attempted_backends": [item["backend"] for item in attempts],
             "ompl_needed": selected == "ompl",
+            "requested_tool0_translation_m": requested_translation,
+            "local_recovery_constraints_active": bool(local_recovery),
             "attempts": attempts,
             "reason": None
             if selected is not None
-            else "Cartesian, Pilz, and OMPL could not produce a validated route",
+            else next(
+                (
+                    item["recovery_motion_validation"]["reason"]
+                    for item in reversed(attempts)
+                    if isinstance(item.get("recovery_motion_validation"), dict)
+                    and item["recovery_motion_validation"].get("reason")
+                ),
+                (
+                    "Cartesian, Pilz, and constrained OMPL could not produce a validated local route"
+                    if local_recovery
+                    else "Cartesian, Pilz, and OMPL could not produce a validated route"
+                ),
+            ),
         }
 
     def _execute_continuous_planned_trajectory(
@@ -4883,7 +5109,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         ),
                     }
                     recovery_plan = self._continuous_plan_with_fallback(
-                        recovery_target
+                        recovery_target,
+                        local_recovery=True,
                     )
                     recovery_execution = None
                     if recovery_plan.get("success"):
