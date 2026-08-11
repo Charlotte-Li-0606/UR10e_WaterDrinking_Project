@@ -183,6 +183,10 @@ def main() -> int:
             track_mouth_during_execution=bool(
                 call["args"].get("track_mouth_during_execution", False)
             ),
+            continuous_mouth_tracking=bool(
+                call["args"].get("continuous_mouth_tracking", False)
+            ),
+            use_octomap=bool(call["args"].get("use_octomap", False)),
         )
         print(
             json.dumps(

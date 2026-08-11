@@ -1,0 +1,36 @@
+continuous_mouth_tracking:
+  initial_target_acquisition_timeout_sec: 3.0
+  target_timeout_sec: 0.30
+  lost_target_timeout_sec: 0.50
+  minimum_confidence: 0.60
+  stable_sample_count: 3
+  stable_max_spread_m: 0.025
+  prediction_horizon_sec: 0.10
+  maximum_prediction_m: 0.020
+
+  final_pre_mouth_standoff_m: 0.080
+  coarse_staging_standoff_m: 0.170
+  provisional_standoff_m: 0.170
+  hold_entry_tolerance_m: 0.010
+  hold_duration_sec: 5.0
+
+  servo_tracking_max_error_m: 0.10
+  servo_startup_max_error_m: 0.12
+  servo_replan_enter_m: 0.10
+  servo_replan_exit_m: 0.06
+  maximum_tracking_duration_sec: 45.0
+  state_validity_check_period_sec: 0.10
+  maximum_linear_speed_mps: 0.020
+  provisional_linear_speed_mps: 0.010
+  maximum_linear_acceleration_mps2: 0.10
+  maximum_angular_speed_rps: 0.15
+  orientation_correction_gain: 1.0
+  control_gain: 0.8
+  maximum_tool_radius_m: 1.30
+  maximum_flange_tilt_deg: 5.0
+
+  use_octomap: false
+  servo_twist_topic: /servo_node/delta_twist_cmds
+  servo_status_topic: /servo_node/status
+  servo_command_frame: base_link
+  servo_ee_frame: tool0

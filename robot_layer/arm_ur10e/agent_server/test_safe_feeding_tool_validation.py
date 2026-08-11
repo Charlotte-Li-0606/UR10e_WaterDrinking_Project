@@ -71,6 +71,30 @@ class SafeFeedingToolValidationTest(unittest.TestCase):
         )
         self.assertEqual(5.0, call["args"]["hold_duration_sec"])
 
+    def test_continuous_tracking_is_explicit_and_octomap_defaults_off(self) -> None:
+        default = validate_safe_feeding_tool_call(
+            "feed_water", {}, cli_execute=False
+        )
+        continuous = validate_safe_feeding_tool_call(
+            "feed_water",
+            {"continuous_mouth_tracking": True},
+            cli_execute=False,
+        )
+        self.assertFalse(default["args"]["continuous_mouth_tracking"])
+        self.assertFalse(default["args"]["use_octomap"])
+        self.assertTrue(continuous["args"]["continuous_mouth_tracking"])
+
+    def test_continuous_and_segmented_tracking_are_mutually_exclusive(self) -> None:
+        with self.assertRaises(FeedingToolValidationError):
+            validate_safe_feeding_tool_call(
+                "feed_water",
+                {
+                    "track_mouth_during_execution": True,
+                    "continuous_mouth_tracking": True,
+                },
+                cli_execute=True,
+            )
+
     def test_sequence_normalizes_each_safe_step(self) -> None:
         plan = validate_safe_feeding_tool_plan(
             {

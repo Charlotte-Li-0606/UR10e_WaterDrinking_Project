@@ -37,23 +37,52 @@ import time
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import rclpy  # noqa: E402
-from geometry_msgs.msg import Pose  # noqa: E402
+from geometry_msgs.msg import Pose, PoseStamped  # noqa: E402
 from moveit_msgs.action import ExecuteTrajectory, MoveGroup  # noqa: E402
-from moveit_msgs.msg import Constraints, JointConstraint, RobotState, ServoStatus  # noqa: E402
-from moveit_msgs.srv import GetStateValidity  # noqa: E402
+from moveit_msgs.msg import (  # noqa: E402
+    Constraints,
+    JointConstraint,
+    PlanningScene,
+    PlanningSceneComponents,
+    RobotState,
+    ServoStatus,
+)
+from moveit_msgs.srv import GetPlanningScene, GetStateValidity, ServoCommandType  # noqa: E402
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy  # noqa: E402
 from sensor_msgs.msg import JointState  # noqa: E402
-from std_srvs.srv import Empty  # noqa: E402
+from std_msgs.msg import String  # noqa: E402
+from std_srvs.srv import Empty, SetBool  # noqa: E402
 from ur_dashboard_msgs.msg import RobotMode, SafetyMode  # noqa: E402
 
 from robot_layer.arm_ur10e.control.motion_backend import MotionRequest  # noqa: E402
 from robot_layer.arm_ur10e.control.relative_tracking import RelativeTrackingSession  # noqa: E402
 from robot_layer.arm_ur10e.control.ros_servo_backend import RosServoCommandSink  # noqa: E402
+from robot_layer.arm_ur10e.control.continuous_servo_tracking import (  # noqa: E402
+    ContinuousServoConfig,
+    ContinuousServoController,
+    MotionCommandArbiter,
+    MotionCommandOwner,
+    camera_ray_premouth_target,
+    octomap_layer_status,
+)
+from robot_layer.arm_ur10e.agent_tools.planning_scene_manager import (  # noqa: E402
+    PlanningSceneObstacleConfig,
+    PlanningSceneObstacleManager,
+)
+from robot_layer.arm_ur10e.perception.continuous_mouth_tracker import (  # noqa: E402
+    ContinuousMouthTarget,
+    ContinuousMouthTracker,
+    ContinuousTrackingState,
+    InitialTargetAcquirer,
+)
 
 from scripts.real_dynamic_obstacle_avoidance_plan import (  # noqa: E402
     DETOUR_ROUTE_STRATEGY,
@@ -83,6 +112,7 @@ from scripts.real_premouth_from_perception_plan import (  # noqa: E402
     MAX_TOOL0_RADIUS_FROM_UR_BASE_M,
     MAX_TOOL_VERTICAL_TILT_RAD,
     MAX_EXECUTION_SPEED_PERCENT,
+    MOUTH_STATUS_TOPIC,
     MIN_EXECUTION_SPEED_PERCENT,
     MIN_STABLE_SAMPLES,
     PILZ_PIPELINE,
@@ -149,6 +179,7 @@ MAX_EXECUTION_TARGET_DRIFT_M = 0.050
 INITIAL_POSITION_CONFIG = (
     PROJECT_ROOT / "config" / "ur10e_real" / "initial_position.json"
 )
+CONTINUOUS_TRACKING_CONFIG = PROJECT_ROOT / "config" / "continuous_mouth_tracking.yaml"
 DEFAULT_PREMOUTH_HOLD_SEC = 5.0
 MIN_PREMOUTH_HOLD_SEC = 2.0
 MAX_PREMOUTH_HOLD_SEC = 5.0
@@ -166,6 +197,36 @@ SEARCH_OFFSETS_CAMERA_OPTICAL = (
         (0.0, SEARCH_VERTICAL_DISTANCE_M, -SEARCH_BACK_DISTANCE_M),
     ),
 )
+
+
+def _load_continuous_tracking_config() -> dict[str, Any]:
+    """Load only the isolated continuous-mode parameters."""
+    try:
+        raw = yaml.safe_load(CONTINUOUS_TRACKING_CONFIG.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError) as exc:
+        raise RuntimeError(f"cannot load {CONTINUOUS_TRACKING_CONFIG}: {exc}") from exc
+    values = raw.get("continuous_mouth_tracking") if isinstance(raw, dict) else None
+    if not isinstance(values, dict):
+        raise RuntimeError("continuous_mouth_tracking configuration is missing")
+    validity_period = float(values.get("state_validity_check_period_sec", 0.0))
+    if not 0.05 <= validity_period <= 0.50:
+        raise RuntimeError(
+            "state_validity_check_period_sec must remain within [0.05, 0.50] seconds"
+        )
+    return dict(values)
+
+
+def _active_search_cloud_gate_failures(
+    *,
+    use_octomap: bool,
+    cloud_statuses: dict[str, dict[str, Any]],
+) -> list[str]:
+    """Require RGB-D clouds only when the dynamic OctoMap layer is enabled."""
+    if not use_octomap:
+        return []
+    if not all(status.get("active") for status in cloud_statuses.values()):
+        return ["raw or filtered wrist point cloud became stale before search motion"]
+    return []
 
 
 def _quaternion_multiply_xyzw(
@@ -616,6 +677,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         self._frozen_execution_mouth_position: list[float] | None = None
         self._integrated_tracking_enabled = False
         self._latest_servo_status: ServoStatus | None = None
+        self._latest_servo_status_monotonic: float | None = None
         self._state_validity_client = self.create_client(
             GetStateValidity,
             "/check_state_validity",
@@ -624,15 +686,341 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             Empty,
             "/clear_octomap",
         )
-        self.create_subscription(
+        self._servo_command_type_client = self.create_client(
+            ServoCommandType,
+            "/servo_node/switch_command_type",
+        )
+        self._servo_pause_client = self.create_client(
+            SetBool,
+            "/servo_node/pause_servo",
+        )
+        # MoveGroup and Servo use separate PlanningSceneMonitor instances on
+        # this installation.  Applying geometry through MoveGroup's service is
+        # therefore insufficient: mirror the verified deterministic scene on
+        # the standard topic so Servo receives the same human/tool objects.
+        self._planning_scene_publisher = self.create_publisher(
+            PlanningScene,
+            "/planning_scene",
+            QoSProfile(
+                depth=1,
+                reliability=ReliabilityPolicy.RELIABLE,
+                durability=DurabilityPolicy.VOLATILE,
+            ),
+        )
+        # MoveIt Servo publishes a latched/event-driven status rather than a
+        # periodic heartbeat.  Match its reliable + transient-local QoS so a
+        # newly created workflow receives the last known status immediately.
+        self._servo_status_subscription = self.create_subscription(
             ServoStatus,
             "/servo_node/status",
             self._servo_status_callback,
+            QoSProfile(
+                depth=1,
+                reliability=ReliabilityPolicy.RELIABLE,
+                durability=DurabilityPolicy.TRANSIENT_LOCAL,
+            ),
+        )
+        continuous = _load_continuous_tracking_config()
+        self._continuous_parameters = continuous
+        self._continuous_tracker = ContinuousMouthTracker(
+            target_timeout_sec=float(continuous["target_timeout_sec"]),
+            lost_target_timeout_sec=float(continuous["lost_target_timeout_sec"]),
+            minimum_confidence=float(continuous["minimum_confidence"]),
+            stable_sample_count=int(continuous["stable_sample_count"]),
+            stable_max_spread_m=float(continuous["stable_max_spread_m"]),
+            prediction_horizon_sec=float(continuous["prediction_horizon_sec"]),
+            maximum_prediction_m=float(continuous["maximum_prediction_m"]),
+        )
+        self._continuous_servo_controller = ContinuousServoController(
+            ContinuousServoConfig(
+                final_pre_mouth_standoff_m=float(
+                    continuous["final_pre_mouth_standoff_m"]
+                ),
+                provisional_standoff_m=float(continuous["provisional_standoff_m"]),
+                servo_tracking_max_error_m=float(
+                    continuous["servo_tracking_max_error_m"]
+                ),
+                servo_startup_max_error_m=float(
+                    continuous["servo_startup_max_error_m"]
+                ),
+                servo_replan_enter_m=float(continuous["servo_replan_enter_m"]),
+                servo_replan_exit_m=float(continuous["servo_replan_exit_m"]),
+                hold_entry_tolerance_m=float(continuous["hold_entry_tolerance_m"]),
+                maximum_linear_speed_mps=float(
+                    continuous["maximum_linear_speed_mps"]
+                ),
+                provisional_linear_speed_mps=float(
+                    continuous["provisional_linear_speed_mps"]
+                ),
+                maximum_linear_acceleration_mps2=float(
+                    continuous["maximum_linear_acceleration_mps2"]
+                ),
+                maximum_angular_speed_rps=float(
+                    continuous["maximum_angular_speed_rps"]
+                ),
+                orientation_correction_gain=float(
+                    continuous["orientation_correction_gain"]
+                ),
+                control_gain=float(continuous["control_gain"]),
+                maximum_tool_radius_m=float(continuous["maximum_tool_radius_m"]),
+                maximum_flange_tilt_deg=float(
+                    continuous["maximum_flange_tilt_deg"]
+                ),
+                maximum_tracking_duration_sec=float(
+                    continuous["maximum_tracking_duration_sec"]
+                ),
+            ),
+            straw_tip_offset_tool0_m=STRAW_TIP_OFFSET_TOOL0_M,
+        )
+        self._continuous_motion_arbiter = MotionCommandArbiter()
+        self._continuous_last_observation_update: dict[str, Any] = {
+            "accepted": False,
+            "reason": "no_observation_received",
+        }
+        self._continuous_status_publisher = self.create_publisher(
+            String,
+            "/continuous_mouth_tracking/status",
+            10,
+        )
+        self._continuous_target_publisher = self.create_publisher(
+            PoseStamped,
+            "/continuous_mouth_tracking/target_pose",
             10,
         )
 
     def _servo_status_callback(self, message: ServoStatus) -> None:
         self._latest_servo_status = message
+        self._latest_servo_status_monotonic = time.monotonic()
+
+    def _fresh_explicit_no_face_evidence(
+        self,
+        *,
+        maximum_age_sec: float = 0.50,
+    ) -> dict[str, Any]:
+        """Require a live, fresh detector result before accepting an empty scene."""
+        publisher_count = int(self.count_publishers(MOUTH_STATUS_TOPIC))
+        received = self.latest_mouth_status_received_monotonic
+        age = None if received is None else max(0.0, time.monotonic() - received)
+        status = self.latest_mouth_status
+        explicit_no_face = bool(
+            isinstance(status, dict)
+            and status.get("detected") is False
+            and status.get("reason") == "no_face"
+        )
+        success = bool(
+            publisher_count > 0
+            and explicit_no_face
+            and age is not None
+            and age <= float(maximum_age_sec)
+        )
+        return {
+            "success": success,
+            "topic": MOUTH_STATUS_TOPIC,
+            "publisher_count": publisher_count,
+            "status": status,
+            "status_age_sec": age,
+            "maximum_age_sec": float(maximum_age_sec),
+            "explicit_no_face": explicit_no_face,
+            "reason": None if success else "fresh explicit no_face evidence is unavailable",
+        }
+
+    def _retire_stale_human_scene_for_empty_view(self) -> dict[str, Any]:
+        """Remove only prior-session human objects after fresh no-face evidence."""
+        # Fast DDS graph discovery on the real stack can take just over two
+        # seconds for a fresh short-lived workflow node.
+        deadline = time.monotonic() + 4.0
+        evidence = self._fresh_explicit_no_face_evidence()
+        while (
+            rclpy.ok()
+            and not evidence.get("success")
+            and time.monotonic() < deadline
+        ):
+            rclpy.spin_once(self, timeout_sec=0.05)
+            evidence = self._fresh_explicit_no_face_evidence()
+        if not evidence.get("success"):
+            return {
+                "success": True,
+                "retired": False,
+                "reason": "current view is not a verified empty scene; preserving human objects",
+                "empty_view_evidence": evidence,
+                "execution_sent": False,
+            }
+        manager: PlanningSceneObstacleManager | None = None
+        try:
+            manager = PlanningSceneObstacleManager(
+                PlanningSceneObstacleConfig(
+                    base_frame=BASE_FRAME,
+                    mouth_topic="/detected_mouth_pose",
+                    include_table=False,
+                    service_timeout_sec=5.0,
+                    mouth_wait_timeout_sec=1.0,
+                )
+            )
+            removal = manager.remove(verify=True)
+        except Exception as exc:
+            removal = {
+                "success": False,
+                "reason": f"stale human-scene retirement raised {exc.__class__.__name__}: {exc}",
+            }
+        finally:
+            if manager is not None:
+                manager.destroy_node()
+        evidence_after = self._fresh_explicit_no_face_evidence()
+        success = bool(removal.get("success") and evidence_after.get("success"))
+        return {
+            "success": success,
+            "retired": bool(removal.get("success")),
+            "reason": (
+                removal.get("reason")
+                if not removal.get("success")
+                else None
+                if evidence_after.get("success")
+                else "empty-view evidence changed while stale objects were retired"
+            ),
+            "empty_view_evidence": evidence,
+            "empty_view_evidence_after": evidence_after,
+            "removal": removal,
+            "execution_sent": False,
+            "collision_bypassed": False,
+        }
+
+    def _synchronize_servo_planning_scene(self) -> dict[str, Any]:
+        """Publish MoveGroup's verified fixed scene to Servo's scene monitor."""
+        base: dict[str, Any] = {
+            "success": False,
+            "topic": "/planning_scene",
+            "required_subscribers": 2,
+            "execution_sent": False,
+        }
+        deadline = time.monotonic() + 2.0
+        subscriber_count = int(self.count_subscribers("/planning_scene"))
+        while rclpy.ok() and subscriber_count < 2 and time.monotonic() < deadline:
+            rclpy.spin_once(self, timeout_sec=0.05)
+            subscriber_count = int(self.count_subscribers("/planning_scene"))
+        base["subscriber_count"] = subscriber_count
+        if subscriber_count < 2:
+            return {
+                **base,
+                "reason": (
+                    "MoveGroup and Servo PlanningScene subscribers are not both available"
+                ),
+            }
+        if not self.get_planning_scene.wait_for_service(timeout_sec=2.0):
+            return {**base, "reason": "/get_planning_scene is unavailable"}
+        request = GetPlanningScene.Request()
+        request.components.components = (
+            PlanningSceneComponents.WORLD_OBJECT_GEOMETRY
+            | PlanningSceneComponents.ROBOT_STATE_ATTACHED_OBJECTS
+        )
+        future = self.get_planning_scene.call_async(request)
+        rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+        response = future.result()
+        if response is None:
+            return {**base, "reason": "PlanningScene synchronization request timed out"}
+        scene = response.scene
+        scene.is_diff = True
+        scene.robot_state.is_diff = True
+        # Only attached bodies are synchronized.  Never overwrite either
+        # monitor's live joint state with the service response snapshot.
+        scene.robot_state.joint_state = JointState()
+        world_ids = sorted(item.id for item in scene.world.collision_objects)
+        attached_ids = sorted(
+            item.object.id for item in scene.robot_state.attached_collision_objects
+        )
+        required_human_present = any(
+            item.startswith("real_human_obstacle_") for item in world_ids
+        )
+        required_tool_present = (
+            "combined_camera_cup_holder_straw_collision" in attached_ids
+        )
+        if not required_human_present or not required_tool_present:
+            return {
+                **base,
+                "reason": "verified human/tool geometry is incomplete before Servo synchronization",
+                "world_object_ids": world_ids,
+                "attached_object_ids": attached_ids,
+            }
+        self._planning_scene_publisher.publish(scene)
+        rclpy.spin_once(self, timeout_sec=0.10)
+        return {
+            **base,
+            "success": True,
+            "reason": None,
+            "world_object_ids": world_ids,
+            "attached_object_ids": attached_ids,
+            "movegroup_and_servo_scene_shared": True,
+        }
+
+    def _continuous_servo_status_snapshot(self, *, now: float) -> dict[str, Any]:
+        """Read the event-driven Servo status and verify publisher liveness."""
+        publisher_count = int(self.count_publishers("/servo_node/status"))
+        if publisher_count < 1:
+            return {
+                "success": False,
+                "reason": "servo_status_publisher_unavailable",
+                "publisher_count": publisher_count,
+            }
+        if self._latest_servo_status is None:
+            return {
+                "success": False,
+                "reason": "servo_status_unavailable",
+                "publisher_count": publisher_count,
+            }
+        last_event_age = (
+            None
+            if self._latest_servo_status_monotonic is None
+            else max(0.0, float(now) - self._latest_servo_status_monotonic)
+        )
+        return {
+            "success": True,
+            "reason": None,
+            "publisher_count": publisher_count,
+            "code": int(self._latest_servo_status.code),
+            "message": str(self._latest_servo_status.message),
+            "last_event_age_sec": last_event_age,
+            "delivery_policy": "reliable_transient_local_event_driven",
+        }
+
+    def _mouth_candidates_callback(self, message: String) -> None:
+        """Feed the identity-locked candidate into the continuous filter."""
+        super()._mouth_candidates_callback(message)
+        now = time.monotonic()
+        state = self.target_tracker.current_state(max_age_sec=1.0, now_monotonic=now)
+        if not state.get("available"):
+            self._continuous_last_observation_update = {
+                "accepted": False,
+                "reason": str(state.get("reason") or "selected_target_unavailable"),
+            }
+            return
+        try:
+            payload = json.loads(message.data)
+            source_stamp = float(payload["stamp_sec"])
+            selected_index = int(state["selected_candidate_index"])
+            visible = state["visible_candidates"]
+            depth = float(visible[selected_index]["depth_m"])
+            position = [float(value) for value in state["selected_position_m"]]
+        except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            self._continuous_last_observation_update = {
+                "accepted": False,
+                "reason": f"continuous_observation_decode_failed:{exc}",
+            }
+            return
+        accepted, reason = self._continuous_tracker.add_observation(
+            position,
+            source_timestamp_sec=source_stamp,
+            received_monotonic_sec=now,
+            depth_m=depth,
+            confidence=1.0,
+            target_id=self.target_selection,
+        )
+        self._continuous_last_observation_update = {
+            "accepted": bool(accepted),
+            "reason": reason,
+            "source_timestamp_sec": source_stamp,
+            "depth_m": depth,
+            "confidence": 1.0,
+            "confidence_source": "accepted_mediapipe_rgbd_observation",
+        }
 
     @staticmethod
     def _search_waypoints_from_offsets(
@@ -963,7 +1351,11 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         goal.planning_options.replan = False
         return goal
 
-    def _prepare_initial_position_target(self) -> dict[str, Any]:
+    def _prepare_initial_position_target(
+        self,
+        *,
+        require_octomap: bool = True,
+    ) -> dict[str, Any]:
         """Verify the immutable joint target, FK reference, scene, and states."""
         result: dict[str, Any] = {
             "success": False,
@@ -1011,12 +1403,17 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             failures.append(scene.get("reason") or "MoveIt PlanningScene is unavailable")
         else:
             if not scene.get("human_collision_objects_preserved"):
-                failures.append("fixed human head/torso/face objects are absent")
+                empty_view = self._fresh_explicit_no_face_evidence()
+                result["empty_human_scene_evidence"] = empty_view
+                if not empty_view.get("success"):
+                    failures.append(
+                        "fixed human head/torso/face objects are absent without fresh no-face evidence"
+                    )
             if scene.get("human_allowed_collision_pairs"):
                 failures.append("human allowed-collision entries are present")
             if not scene.get("combined_tool_collision_geometry", {}).get("success"):
                 failures.append("combined camera/cup-holder/straw geometry is not verified")
-            if not scene.get("octomap", {}).get("present"):
+            if require_octomap and not scene.get("octomap", {}).get("present"):
                 failures.append("the current dynamic OctoMap is absent")
         if not current_validity.get("valid"):
             failures.append(
@@ -1172,6 +1569,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         execute: bool,
         confirm_real_motion: bool,
         motion_sent: bool,
+        use_octomap: bool = True,
     ) -> dict[str, Any]:
         """Use the guarded return after a partially executed failed workflow."""
         report: dict[str, Any] = {
@@ -1202,10 +1600,13 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 }
             )
             return report
-        code, return_result = self.return_to_initial_position(
-            execute=True,
-            confirm_real_motion=confirm_real_motion,
-        )
+        return_kwargs = {
+            "execute": True,
+            "confirm_real_motion": confirm_real_motion,
+        }
+        if not use_octomap:
+            return_kwargs["use_octomap"] = False
+        code, return_result = self.return_to_initial_position(**return_kwargs)
         verification = self._current_initial_position_status()
         success = bool(
             code == 0
@@ -1388,6 +1789,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         *,
         execute: bool,
         confirm_real_motion: bool,
+        use_octomap: bool = True,
     ) -> tuple[int, dict[str, Any]]:
         """Validate, plan, and optionally execute the one configured return."""
         response: dict[str, Any] = {
@@ -1401,9 +1803,41 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "vertical_axis_constraint_active": True,
             "wrist_3_direct_command": False,
         }
+        stale_scene = (
+            self._retire_stale_human_scene_for_empty_view()
+            if execute
+            else {
+                "success": True,
+                "retired": False,
+                "reason": "plan-only mode does not mutate stale scene objects",
+                "execution_sent": False,
+            }
+        )
+        response["stale_human_scene_lifecycle"] = stale_scene
+        if not stale_scene.get("success"):
+            response.update(
+                stage="stale_human_scene_retirement_refused",
+                reason=stale_scene.get("reason"),
+            )
+            return 2, response
         combined = self._apply_combined_tool_collision_geometry()
-        dynamic = self.dynamic_readiness(execution_mode=True if execute else None)
-        prepared = self._prepare_initial_position_target()
+        dynamic = (
+            self.dynamic_readiness(execution_mode=True if execute else None)
+            if use_octomap
+            else {
+                "success": True,
+                "use_octomap": False,
+                "dynamic_obstacle_layer_active": False,
+                "degraded": False,
+                "status": "dynamic_obstacle_layer_disabled",
+                "failures": [],
+            }
+        )
+        prepared = (
+            self._prepare_initial_position_target()
+            if use_octomap
+            else self._prepare_initial_position_target(require_octomap=False)
+        )
         response.update(
             {
                 "combined_tool_collision_geometry": combined,
@@ -1474,7 +1908,18 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         pre_execution_failures = self._execution_state_failures(
             confirm_real_motion=confirm_real_motion
         )
-        latest_dynamic = self.dynamic_readiness(execution_mode=True)
+        latest_dynamic = (
+            self.dynamic_readiness(execution_mode=True)
+            if use_octomap
+            else {
+                "success": True,
+                "use_octomap": False,
+                "dynamic_obstacle_layer_active": False,
+                "degraded": False,
+                "status": "dynamic_obstacle_layer_disabled",
+                "failures": [],
+            }
+        )
         latest_scene, _ = self._planning_scene_geometry()
         latest_start_validity = self._state_validity(
             self._current_robot_state(),
@@ -1503,9 +1948,14 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             )
         else:
             if not latest_scene.get("human_collision_objects_preserved"):
-                pre_execution_failures.append(
-                    "fixed human head/torso/face objects disappeared before return execution"
+                latest_empty_view = self._fresh_explicit_no_face_evidence()
+                response["pre_execution_empty_human_scene_evidence"] = (
+                    latest_empty_view
                 )
+                if not latest_empty_view.get("success"):
+                    pre_execution_failures.append(
+                        "human objects are absent and fresh no-face evidence disappeared before return execution"
+                    )
             if latest_scene.get("human_allowed_collision_pairs"):
                 pre_execution_failures.append(
                     "human allowed-collision entries appeared before return execution"
@@ -1516,7 +1966,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 pre_execution_failures.append(
                     "combined camera/cup-holder/straw geometry is invalid before return execution"
                 )
-            if not latest_scene.get("octomap", {}).get("present"):
+            if use_octomap and not latest_scene.get("octomap", {}).get("present"):
                 pre_execution_failures.append(
                     "the dynamic OctoMap is absent before return execution"
                 )
@@ -2623,6 +3073,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         *,
         execute: bool,
         confirm_real_motion: bool,
+        use_octomap: bool = True,
     ) -> dict[str, Any]:
         """Acquire the selected mouth with at most 15 seconds of fixed search."""
         started = time.monotonic()
@@ -2639,6 +3090,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "maximum_time_sec": SEARCH_MAX_TIME_SEC,
             "planner": f"{SEARCH_PLANNING_PIPELINE}/{SEARCH_PLANNER}",
             "ompl_active_search_enabled": False,
+            "dynamic_octomap_required": bool(use_octomap),
             "translation_only": False,
             "position_only_search_goals": False,
             "vertical_axis_constraint_active": True,
@@ -3005,12 +3457,22 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             late_failures = self._execution_state_failures(
                 confirm_real_motion=confirm_real_motion
             )
-            clouds = {
-                RAW_CLOUD_TOPIC: self._cloud_status(RAW_CLOUD_TOPIC),
-                FILTERED_CLOUD_TOPIC: self._cloud_status(FILTERED_CLOUD_TOPIC),
-            }
-            if not all(status.get("active") for status in clouds.values()):
-                late_failures.append("raw or filtered wrist point cloud became stale before search motion")
+            clouds = (
+                {
+                    RAW_CLOUD_TOPIC: self._cloud_status(RAW_CLOUD_TOPIC),
+                    FILTERED_CLOUD_TOPIC: self._cloud_status(FILTERED_CLOUD_TOPIC),
+                }
+                if use_octomap
+                else {}
+            )
+            late_failures.extend(
+                _active_search_cloud_gate_failures(
+                    use_octomap=use_octomap,
+                    cloud_statuses=clouds,
+                )
+            )
+            step["dynamic_octomap_required"] = bool(use_octomap)
+            step["point_cloud_status"] = clouds
             if late_failures:
                 step["pre_execution_failures"] = late_failures
                 response["search_steps"].append(step)
@@ -3893,6 +4355,955 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 response["failure_diagnostic"]["reason"] = response["reason"]
         return response
 
+    @staticmethod
+    def _continuous_target_report(target: ContinuousMouthTarget) -> dict[str, Any]:
+        """Convert the filter state to JSON-safe diagnostics."""
+        return {
+            "available": bool(target.available),
+            "frame_id": BASE_FRAME,
+            "position_m": [float(value) for value in target.position_m],
+            "predicted_position_m": [
+                float(value) for value in target.predicted_position_m
+            ],
+            "velocity_mps": [float(value) for value in target.velocity_mps],
+            "source_timestamp_sec": float(target.source_timestamp_sec),
+            "target_age_sec": float(target.age_sec),
+            "confidence": float(target.confidence),
+            "target_id": target.target_id,
+            "tracking_state": target.state.value,
+            "provisional": bool(target.provisional),
+            "stable": bool(target.stable),
+            "sample_count": int(target.sample_count),
+            "spread_m": float(target.spread_m),
+            "prediction_m": float(target.prediction_m),
+            "reason": target.reason,
+        }
+
+    def _publish_continuous_diagnostics(
+        self,
+        target: ContinuousMouthTarget,
+        *,
+        state: str | None = None,
+        servo_status: dict[str, Any] | None = None,
+        target_error_m: float | None = None,
+        target_displacement_m: float | None = None,
+        fallback_reason: str | None = None,
+        safety_stop_reason: str | None = None,
+        octomap: dict[str, Any] | None = None,
+    ) -> None:
+        """Publish the latest local tracking state without network calls."""
+        report = self._continuous_target_report(target)
+        report.update(
+            {
+                "state": state or target.state.value,
+                "servo_status": servo_status,
+                "target_error_m": target_error_m,
+                "target_displacement_m": target_displacement_m,
+                "fallback_reason": fallback_reason,
+                "safety_stop_reason": safety_stop_reason,
+                "octomap": octomap,
+            }
+        )
+        status = String()
+        status.data = json.dumps(_jsonable(report), sort_keys=True)
+        self._continuous_status_publisher.publish(status)
+        if target.available:
+            pose = PoseStamped()
+            pose.header.stamp = self.get_clock().now().to_msg()
+            pose.header.frame_id = BASE_FRAME
+            pose.pose.position.x = float(target.predicted_position_m[0])
+            pose.pose.position.y = float(target.predicted_position_m[1])
+            pose.pose.position.z = float(target.predicted_position_m[2])
+            pose.pose.orientation.w = 1.0
+            self._continuous_target_publisher.publish(pose)
+
+    def _acquire_continuous_target(self) -> dict[str, Any]:
+        """Acquire stable data for three seconds, or return a provisional target."""
+        self._continuous_tracker.reset(searching=True)
+        started = time.monotonic()
+        acquirer = InitialTargetAcquirer(
+            started_monotonic_sec=started,
+            timeout_sec=float(
+                self._continuous_parameters["initial_target_acquisition_timeout_sec"]
+            ),
+        )
+        decision = None
+        while rclpy.ok():
+            rclpy.spin_once(self, timeout_sec=0.05)
+            now = time.monotonic()
+            target = self._continuous_tracker.target(now_monotonic_sec=now)
+            decision = acquirer.evaluate(target, now_monotonic_sec=now)
+            self._publish_continuous_diagnostics(
+                target,
+                state=decision.state.value,
+            )
+            if decision.complete:
+                break
+        assert decision is not None
+        return {
+            "success": bool(decision.target.available),
+            "state": decision.state.value,
+            "reason": decision.reason,
+            "active_search_required": bool(decision.active_search_required),
+            "elapsed_sec": time.monotonic() - started,
+            "target": decision.target,
+            "target_report": self._continuous_target_report(decision.target),
+            "last_observation_update": dict(
+                self._continuous_last_observation_update
+            ),
+        }
+
+    def _continuous_scene_snapshot(
+        self,
+        target: ContinuousMouthTarget,
+        *,
+        execute: bool,
+    ) -> dict[str, Any]:
+        """Preserve all fixed scene objects around the filtered selected target."""
+        snapshot = self.snapshot(
+            mouth_sample_sec=min(0.25, self.mouth_sample_seconds),
+            inspect_controllers=execute,
+        )
+        identity = self.target_tracker.current_state(max_age_sec=1.0)
+        visible = identity.get("visible_candidates")
+        selected_index = identity.get("selected_candidate_index")
+        if not isinstance(visible, list) or not visible:
+            visible = [
+                {
+                    "position_m": [float(value) for value in target.position_m],
+                    "image_x": 0.0,
+                    "image_y": 0.0,
+                    "depth_m": None,
+                    "surface_normal": None,
+                }
+            ]
+            selected_index = 0
+        snapshot["mouth_pose"] = {
+            "available": True,
+            "stable": bool(target.stable),
+            "provisional": bool(target.provisional),
+            "frame_id": BASE_FRAME,
+            "target_selection": self.target_selection,
+            "identity_locked": True,
+            "identity_unsafe": False,
+            "sample_count": int(target.sample_count),
+            "mean_position_m": [float(value) for value in target.position_m],
+            "latest_position_m": [float(value) for value in target.position_m],
+            "selected_candidate_index": int(selected_index),
+            "visible_candidates": visible,
+        }
+        return snapshot
+
+    def _continuous_pose_target(
+        self,
+        target: ContinuousMouthTarget,
+        *,
+        standoff_m: float,
+    ) -> dict[str, Any]:
+        """Build tool0 from the validated camera ray and measured straw offset."""
+        tool = self._tool0_pose()
+        camera = self._frame_transform(BASE_FRAME, CAMERA_OPTICAL_FRAME)
+        if not tool.get("available") or not camera.get("available"):
+            return {
+                "success": False,
+                "reason": "live tool0 or D435i optical TF is unavailable",
+            }
+        try:
+            straw, tool0 = camera_ray_premouth_target(
+                mouth_position_m=target.predicted_position_m,
+                camera_position_m=camera["position_m"],
+                tool_orientation_xyzw=tool["orientation_quat_xyzw"],
+                straw_tip_offset_tool0_m=STRAW_TIP_OFFSET_TOOL0_M,
+                standoff_m=float(standoff_m),
+            )
+            tilt = _tool_vertical_tilt_rad(tool["orientation_quat_xyzw"])
+        except (TypeError, ValueError, RuntimeError) as exc:
+            return {"success": False, "reason": f"continuous target invalid: {exc}"}
+        if tilt > MAX_TOOL_VERTICAL_TILT_RAD:
+            return {
+                "success": False,
+                "reason": (
+                    f"live flange tilt {math.degrees(tilt):.2f} deg exceeds "
+                    f"{math.degrees(MAX_TOOL_VERTICAL_TILT_RAD):.1f} deg"
+                ),
+            }
+        target_in_ur_base = self._point_in_ur_base(
+            [float(value) for value in tool0],
+            self._frame_transform(UR_BASE_FRAME, BASE_FRAME),
+        )
+        if _norm(target_in_ur_base) > float(
+            self._continuous_parameters["maximum_tool_radius_m"]
+        ):
+            return {"success": False, "reason": "continuous target is outside workspace"}
+        return {
+            "success": True,
+            "frame_id": BASE_FRAME,
+            "position_m": [float(value) for value in tool0],
+            "orientation_quat_xyzw": [
+                float(value) for value in tool["orientation_quat_xyzw"]
+            ],
+            "straw_tip_position_m": [float(value) for value in straw],
+            "mouth_position_m": [float(value) for value in target.position_m],
+            "standoff_m": float(standoff_m),
+            "flange_vertical_axis_error_rad": float(tilt),
+        }
+
+    def _continuous_plan_with_fallback(
+        self,
+        pose_target: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Plan Cartesian, Pilz, then OMPL; retain only a validated trajectory."""
+        if not self._continuous_motion_arbiter.acquire(MotionCommandOwner.PLANNER):
+            return {
+                "success": False,
+                "reason": "motion_command_owner_conflict",
+                "attempts": [],
+            }
+        attempts: list[dict[str, Any]] = []
+        selected = None
+        try:
+            planners = (
+                ("cartesian", lambda: self._run_cartesian_plan(pose_target)),
+                (
+                    "pilz",
+                    lambda: self._run_goal(
+                        RealPreMouthFromPerceptionPlan._goal_for_target(
+                            self, pose_target
+                        )
+                    ),
+                ),
+                (
+                    "ompl",
+                    lambda: self._run_goal(
+                        RealDynamicObstacleAvoidancePlan._goal_for_target(
+                            self, pose_target
+                        )
+                    ),
+                ),
+            )
+            for backend, planner in planners:
+                self._validated_trajectory = None
+                plan = planner()
+                trajectory = self._validated_trajectory
+                collision = (
+                    self._validate_trajectory_collision_states(trajectory)
+                    if plan.get("success") and trajectory is not None
+                    else None
+                )
+                success = bool(
+                    plan.get("success")
+                    and trajectory is not None
+                    and isinstance(collision, dict)
+                    and collision.get("success")
+                )
+                attempts.append(
+                    {
+                        "backend": backend,
+                        "success": success,
+                        "plan": plan,
+                        "trajectory_collision_validation": collision,
+                    }
+                )
+                if success:
+                    selected = backend
+                    break
+                self._validated_trajectory = None
+        finally:
+            self._continuous_motion_arbiter.release(MotionCommandOwner.PLANNER)
+        return {
+            "success": selected is not None,
+            "selected_backend": selected,
+            "attempted_backends": [item["backend"] for item in attempts],
+            "ompl_needed": selected == "ompl",
+            "attempts": attempts,
+            "reason": None
+            if selected is not None
+            else "Cartesian, Pilz, and OMPL could not produce a validated route",
+        }
+
+    def _execute_continuous_planned_trajectory(
+        self,
+        *,
+        confirm_real_motion: bool,
+    ) -> dict[str, Any]:
+        """Dispatch one cached MoveIt trajectory while Servo is excluded."""
+        failures = self._execution_state_failures(
+            confirm_real_motion=confirm_real_motion
+        )
+        if failures:
+            return {
+                "success": False,
+                "execution_attempted": False,
+                "execution_sent": False,
+                "reason": "; ".join(failures),
+                "failures": failures,
+            }
+        if self._validated_trajectory is None:
+            return {
+                "success": False,
+                "execution_attempted": False,
+                "execution_sent": False,
+                "reason": "no validated recovery trajectory is cached",
+            }
+        collision = self._validate_trajectory_collision_states(
+            self._validated_trajectory
+        )
+        if not collision.get("success"):
+            return {
+                "success": False,
+                "execution_attempted": False,
+                "execution_sent": False,
+                "reason": collision.get("reason"),
+                "trajectory_collision_validation": collision,
+            }
+        if not self._continuous_motion_arbiter.acquire(MotionCommandOwner.PLANNER):
+            return {
+                "success": False,
+                "execution_attempted": False,
+                "execution_sent": False,
+                "reason": "Servo still owns motion during planned execution",
+            }
+        try:
+            result = RealPreMouthFromPerceptionPlan._execute_validated_trajectory(
+                self
+            )
+        finally:
+            self._continuous_motion_arbiter.release(MotionCommandOwner.PLANNER)
+        result["execution_sent"] = bool(result.get("execution_attempted"))
+        result["trajectory_collision_validation"] = collision
+        return result
+
+    def _set_continuous_servo_active(self, active: bool) -> dict[str, Any]:
+        """Select Twist commands and pause/unpause the configured Servo node."""
+        if not self._servo_pause_client.wait_for_service(timeout_sec=1.0):
+            return {"success": False, "reason": "/servo_node/pause_servo unavailable"}
+        if active:
+            if not self._servo_command_type_client.wait_for_service(timeout_sec=1.0):
+                return {
+                    "success": False,
+                    "reason": "/servo_node/switch_command_type unavailable",
+                }
+            command_request = ServoCommandType.Request()
+            command_request.command_type = ServoCommandType.Request.TWIST
+            command_future = self._servo_command_type_client.call_async(command_request)
+            rclpy.spin_until_future_complete(self, command_future, timeout_sec=2.0)
+            command_response = command_future.result()
+            if command_response is None or not command_response.success:
+                return {"success": False, "reason": "Servo rejected Twist command mode"}
+        pause_request = SetBool.Request()
+        pause_request.data = not active
+        pause_future = self._servo_pause_client.call_async(pause_request)
+        rclpy.spin_until_future_complete(self, pause_future, timeout_sec=2.0)
+        pause_response = pause_future.result()
+        return {
+            "success": bool(pause_response is not None and pause_response.success),
+            "active": bool(active),
+            "reason": None
+            if pause_response is not None and pause_response.success
+            else "Servo pause service rejected the requested state",
+        }
+
+    def _continuous_servo_approach_and_hold(
+        self,
+        *,
+        hold_duration_sec: float,
+        confirm_real_motion: bool,
+        octomap: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Continuously Servo toward the latest target, recovering only as needed."""
+        report: dict[str, Any] = {
+            "success": False,
+            "stage": "continuous_servo_approach_and_hold",
+            "servo_command_count": 0,
+            "recovery_attempts": [],
+            "maximum_target_error_m": 0.0,
+            "maximum_target_displacement_m": 0.0,
+            "hold_duration_sec": float(hold_duration_sec),
+            "stop_reason": None,
+            "octomap": octomap,
+        }
+        # Planning and executing the coarse staging trajectory can take several
+        # seconds while this node is waiting on MoveIt.  Do not arm Servo from
+        # the acquisition window captured before that motion: reacquire from
+        # the now-stationary wrist camera so the first Servo cycle starts with
+        # a fresh, filtered target in the staging camera view.
+        reacquisition = self._acquire_continuous_target()
+        report["post_staging_target_acquisition"] = {
+            key: value for key, value in reacquisition.items() if key != "target"
+        }
+        if not reacquisition.get("success"):
+            report["stop_reason"] = (
+                reacquisition.get("reason")
+                or "post_staging_target_acquisition_failed"
+            )
+            return report
+        failures = self._execution_state_failures(
+            confirm_real_motion=confirm_real_motion
+        )
+        if failures:
+            report["stop_reason"] = "; ".join(failures)
+            return report
+        initial_validity = self._search_start_state_validity(
+            time.monotonic() + 0.75
+        )
+        report["initial_state_validity"] = initial_validity
+        if not initial_validity.get("available"):
+            report["stop_reason"] = (
+                initial_validity.get("reason")
+                or "continuous state-validity service unavailable"
+            )
+            return report
+        if not initial_validity.get("valid"):
+            report["stop_reason"] = "continuous_start_state_collision"
+            return report
+        activation = self._set_continuous_servo_active(True)
+        report["servo_activation"] = activation
+        if not activation.get("success"):
+            report["stop_reason"] = activation.get("reason")
+            return report
+        if not self._continuous_motion_arbiter.acquire(MotionCommandOwner.SERVO):
+            self._set_continuous_servo_active(False)
+            report["stop_reason"] = "planner still owns motion"
+            return report
+        self._continuous_servo_controller.reset()
+        sink = RosServoCommandSink(
+            self,
+            topic=str(self._continuous_parameters["servo_twist_topic"]),
+            max_linear_mps=float(
+                self._continuous_parameters["maximum_linear_speed_mps"]
+            ),
+            max_angular_rps=float(
+                self._continuous_parameters["maximum_angular_speed_rps"]
+            ),
+            armed=True,
+        )
+        started = time.monotonic()
+        last_update = started
+        hold_started: float | None = None
+        diagnostics: list[dict[str, Any]] = []
+        validity_period_sec = float(
+            self._continuous_parameters["state_validity_check_period_sec"]
+        )
+        next_validity_check = started
+        latest_state_validity = initial_validity
+        report["state_validity_check_period_sec"] = validity_period_sec
+        report["state_validity_check_count"] = 1
+        try:
+            while rclpy.ok():
+                rclpy.spin_once(self, timeout_sec=0.05)
+                now = time.monotonic()
+                live_failure = self._live_ur_execution_state_failure()
+                if live_failure is not None:
+                    report["stop_reason"] = live_failure
+                    break
+                servo_status = self._continuous_servo_status_snapshot(now=now)
+                if not servo_status.get("success"):
+                    report["stop_reason"] = servo_status.get("reason")
+                    break
+                if now >= next_validity_check:
+                    latest_state_validity = self._search_start_state_validity(
+                        time.monotonic() + max(0.20, validity_period_sec)
+                    )
+                    report["state_validity_check_count"] += 1
+                    next_validity_check = time.monotonic() + validity_period_sec
+                    if not latest_state_validity.get("available"):
+                        report["stop_reason"] = (
+                            latest_state_validity.get("reason")
+                            or "continuous state-validity watchdog unavailable"
+                        )
+                        break
+                    if not latest_state_validity.get("valid"):
+                        report["stop_reason"] = "continuous_state_collision"
+                        report["collision_state_validity"] = latest_state_validity
+                        break
+                target = self._continuous_tracker.target(now_monotonic_sec=now)
+                tool = self._tool0_pose()
+                camera = self._frame_transform(BASE_FRAME, CAMERA_OPTICAL_FRAME)
+                if not tool.get("available") or not camera.get("available"):
+                    report["stop_reason"] = "live tool0 or camera TF became unavailable"
+                    break
+                decision = self._continuous_servo_controller.update(
+                    target,
+                    current_tool0_position_m=tool["position_m"],
+                    current_tool0_orientation_xyzw=tool["orientation_quat_xyzw"],
+                    camera_position_m=camera["position_m"],
+                    servo_status_code=int(servo_status["code"]),
+                    elapsed_sec=now - started,
+                    dt_sec=now - last_update,
+                )
+                last_update = now
+                report["maximum_target_error_m"] = max(
+                    float(report["maximum_target_error_m"]),
+                    0.0
+                    if not math.isfinite(decision.target_error_m)
+                    else float(decision.target_error_m),
+                )
+                report["maximum_target_displacement_m"] = max(
+                    float(report["maximum_target_displacement_m"]),
+                    float(decision.target_displacement_m),
+                )
+                self._publish_continuous_diagnostics(
+                    target,
+                    state=decision.state,
+                    servo_status=servo_status,
+                    target_error_m=decision.target_error_m,
+                    target_displacement_m=decision.target_displacement_m,
+                    fallback_reason=decision.fallback_reason,
+                    safety_stop_reason=decision.safety_stop_reason,
+                    octomap=octomap,
+                )
+                diagnostics.append(
+                    {
+                        "elapsed_sec": now - started,
+                        "state": decision.state,
+                        "target_age_sec": target.age_sec,
+                        "target_confidence": target.confidence,
+                        "target_error_m": decision.target_error_m,
+                        "target_displacement_m": decision.target_displacement_m,
+                        "servo_status": servo_status,
+                        "state_validity": latest_state_validity,
+                        "fallback_reason": decision.fallback_reason,
+                        "safety_stop_reason": decision.safety_stop_reason,
+                    }
+                )
+                if len(diagnostics) > 100:
+                    diagnostics.pop(0)
+                if decision.safety_stop_reason is not None:
+                    report["stop_reason"] = decision.safety_stop_reason
+                    break
+                if decision.recovery_required:
+                    sink.halt()
+                    self._set_continuous_servo_active(False)
+                    self._continuous_motion_arbiter.release(MotionCommandOwner.SERVO)
+                    recovery_target = {
+                        "frame_id": BASE_FRAME,
+                        "position_m": list(decision.desired_tool0_position_m),
+                        "orientation_quat_xyzw": list(
+                            tool["orientation_quat_xyzw"]
+                        ),
+                    }
+                    recovery_plan = self._continuous_plan_with_fallback(
+                        recovery_target
+                    )
+                    recovery_execution = None
+                    if recovery_plan.get("success"):
+                        recovery_execution = self._execute_continuous_planned_trajectory(
+                            confirm_real_motion=confirm_real_motion
+                        )
+                    recovery = {
+                        "reason": decision.fallback_reason,
+                        "plan": recovery_plan,
+                        "execution": recovery_execution,
+                    }
+                    report["recovery_attempts"].append(recovery)
+                    if (
+                        not recovery_plan.get("success")
+                        or not isinstance(recovery_execution, dict)
+                        or not recovery_execution.get("success")
+                    ):
+                        report["stop_reason"] = (
+                            recovery_plan.get("reason")
+                            or (recovery_execution or {}).get("reason")
+                            or "continuous recovery failed"
+                        )
+                        break
+                    current_target = self._continuous_tracker.target(
+                        now_monotonic_sec=time.monotonic()
+                    )
+                    if not current_target.available:
+                        report["stop_reason"] = (
+                            current_target.reason
+                            or "target became stale during recovery"
+                        )
+                        break
+                    if len(report["recovery_attempts"]) >= 3:
+                        report["stop_reason"] = "continuous recovery attempt limit"
+                        break
+                    activation = self._set_continuous_servo_active(True)
+                    if not activation.get("success"):
+                        report["stop_reason"] = activation.get("reason")
+                        break
+                    if not self._continuous_motion_arbiter.acquire(
+                        MotionCommandOwner.SERVO
+                    ):
+                        report["stop_reason"] = "could not reacquire Servo ownership"
+                        break
+                    sink.armed = True
+                    self._continuous_servo_controller.reset()
+                    last_update = time.monotonic()
+                    hold_started = None
+                    continue
+                request = MotionRequest(
+                    target_position=decision.desired_tool0_position_m,
+                    target_orientation_xyzw=tuple(
+                        float(value) for value in tool["orientation_quat_xyzw"]
+                    ),
+                    plan_only=False,
+                    reason="continuous_camera_ray_premouth_tracking",
+                    linear_velocity_mps=decision.linear_velocity_mps,
+                    angular_velocity_rps=decision.angular_velocity_rps,
+                    preserve_orientation=True,
+                )
+                sink(request)
+                report["servo_command_count"] += 1
+                if decision.hold_ready:
+                    if hold_started is None:
+                        hold_started = now
+                    if now - hold_started >= float(hold_duration_sec):
+                        report["success"] = True
+                        report["stop_reason"] = "hold_duration_complete"
+                        break
+                else:
+                    hold_started = None
+        finally:
+            sink.halt()
+            self._set_continuous_servo_active(False)
+            if self._continuous_motion_arbiter.owner == MotionCommandOwner.SERVO:
+                self._continuous_motion_arbiter.release(MotionCommandOwner.SERVO)
+        report["recent_diagnostics"] = diagnostics
+        report["elapsed_sec"] = time.monotonic() - started
+        report["hold_elapsed_sec"] = (
+            0.0
+            if hold_started is None
+            else max(0.0, time.monotonic() - hold_started)
+        )
+        report["final_tool0_pose"] = self._tool0_pose()
+        return report
+
+    def run_continuous_integrated(
+        self,
+        *,
+        execute: bool,
+        confirm_real_motion: bool,
+        allow_validated_camera_ray_execute: bool,
+        no_execute: bool,
+        hold_duration_sec: float,
+        use_octomap: bool,
+    ) -> tuple[int, dict[str, Any]]:
+        """Run the separate continuous-Servo feed-water workflow."""
+        report: dict[str, Any] = {
+            "success": False,
+            "mode": "execute" if execute else "plan",
+            "stage": "continuous_tracking_initialization",
+            "execution_attempted": False,
+            "execution_sent": False,
+            "continuous_mouth_tracking": True,
+            "existing_one_shot_path_modified": False,
+            "existing_segmented_tracking_path_modified": False,
+            "parameters": dict(self._continuous_parameters),
+            "backend_priority": ["servo", "cartesian", "pilz", "ompl"],
+            "servo_command_interface": str(
+                self._continuous_parameters["servo_twist_topic"]
+            ),
+            "integrated_real_feed_water": {
+                "mouth_tracking_during_execution": True,
+                "tracking_policy": "continuous_moveit_servo_approach_and_hold",
+                "segmented_approach_enabled": False,
+                "multi_target_identity_lock": True,
+                "active_search_vertical_axis_constraint": True,
+                "tool_axis_spin_free": True,
+                "vertical_axis_detour_after_direct_rejection": True,
+                "same_target_replanning": True,
+            },
+        }
+        if execute and no_execute:
+            report.update(stage="no_execute_policy", reason="--no-execute prohibits motion")
+            return 2, report
+        if execute and not allow_validated_camera_ray_execute:
+            report.update(
+                stage="premouth_policy_execution_gate",
+                reason="--allow-validated-camera-ray-execute is required",
+            )
+            return 2, report
+        if not MIN_PREMOUTH_HOLD_SEC <= float(hold_duration_sec) <= MAX_PREMOUTH_HOLD_SEC:
+            report.update(stage="hold_duration_validation", reason="hold duration is invalid")
+            return 2, report
+
+        combined = self._apply_combined_tool_collision_geometry()
+        report["combined_tool_collision_geometry"] = combined
+        if not combined.get("success"):
+            report.update(
+                stage="combined_tool_collision_geometry",
+                reason=combined.get("reason"),
+            )
+            return 2, report
+        initial_before = self._current_initial_position_status()
+        report["initial_position_before"] = initial_before
+        if not initial_before.get("available"):
+            report.update(stage="initial_position_entry_check", reason=initial_before.get("reason"))
+            return 2, report
+        if not initial_before.get("at_initial_position"):
+            code, preflight_return = self.return_to_initial_position(
+                execute=execute,
+                confirm_real_motion=confirm_real_motion,
+                use_octomap=use_octomap,
+            )
+            report["preflight_return_to_initial_position"] = preflight_return
+            if not execute:
+                report.update(
+                    stage="initial_position_required_plan_only",
+                    reason="plan-only mode cannot move to initial_position",
+                )
+                return 2, report
+            initial_after = self._current_initial_position_status()
+            if code != 0 or not initial_after.get("at_initial_position"):
+                report.update(
+                    stage="preflight_return_to_initial_position_refused",
+                    reason=preflight_return.get("reason") or initial_after.get("reason"),
+                    execution_attempted=bool(preflight_return.get("execution_attempted")),
+                    execution_sent=bool(preflight_return.get("execution_sent")),
+                )
+                return 2, report
+
+        acquisition = self._acquire_continuous_target()
+        report["initial_target_acquisition"] = {
+            key: value for key, value in acquisition.items() if key != "target"
+        }
+        if not acquisition.get("success"):
+            search = self.active_search(
+                execute=execute,
+                confirm_real_motion=confirm_real_motion,
+                use_octomap=use_octomap,
+            )
+            report["active_search"] = search
+            report["execution_attempted"] = bool(search.get("trajectory_sent"))
+            report["execution_sent"] = bool(search.get("trajectory_sent"))
+            if not search.get("success"):
+                report.update(
+                    stage="continuous_initial_target_unavailable",
+                    reason=search.get("reason") or acquisition.get("reason"),
+                )
+                return 2, report
+            acquisition = self._acquire_continuous_target()
+            report["post_search_target_acquisition"] = {
+                key: value for key, value in acquisition.items() if key != "target"
+            }
+            if not acquisition.get("success"):
+                report.update(
+                    stage="continuous_post_search_target_unavailable",
+                    reason=acquisition.get("reason"),
+                )
+                return 2, report
+        target = acquisition["target"]
+        report["detected_mouth_pose"] = {
+            "frame_id": BASE_FRAME,
+            "position_m": [float(value) for value in target.position_m],
+            "tracking": self._continuous_target_report(target),
+        }
+        snapshot = self._continuous_scene_snapshot(target, execute=execute)
+        readiness = self._base_readiness_failures(snapshot)
+        if readiness:
+            report.update(
+                stage="continuous_readiness",
+                reason="; ".join(readiness),
+                failures=readiness,
+            )
+            return 2, report
+        scene = self._apply_multi_person_planning_scene(snapshot)
+        report["fixed_planning_scene"] = scene
+        if not scene.get("success"):
+            report.update(stage="fixed_planning_scene", reason=scene.get("reason"))
+            return 2, report
+        scene_sync = self._synchronize_servo_planning_scene()
+        report["servo_planning_scene_synchronization"] = scene_sync
+        if not scene_sync.get("success"):
+            report.update(
+                stage="servo_planning_scene_synchronization",
+                reason=scene_sync.get("reason"),
+            )
+            return 2, report
+        monitored_scene, _ = self._planning_scene_geometry()
+        report["monitored_planning_scene"] = monitored_scene
+        if not use_octomap and monitored_scene.get("octomap", {}).get("present"):
+            report["octomap"] = {
+                **octomap_layer_status(
+                    use_octomap=False,
+                    rebuild_succeeded=None,
+                    occupancy_present=True,
+                ),
+            }
+            report.update(
+                stage="octomap_configuration_mismatch",
+                reason=(
+                    "continuous mode requested use_octomap=false but the running "
+                    "MoveGroup still contains occupancy; restart MoveIt with "
+                    "use_octomap:=false before planning"
+                ),
+            )
+            return 2, report
+
+        final_target = self._continuous_pose_target(
+            target,
+            standoff_m=float(self._continuous_parameters["final_pre_mouth_standoff_m"]),
+        )
+        if not final_target.get("success"):
+            report.update(stage="continuous_target_generation", reason=final_target.get("reason"))
+            return 2, report
+        report["target_tool0_pose"] = {
+            "frame_id": BASE_FRAME,
+            "position_m": list(final_target["position_m"]),
+            "orientation_quat_xyzw": list(
+                final_target["orientation_quat_xyzw"]
+            ),
+        }
+        report["pre_mouth_pose"] = {
+            "frame_id": BASE_FRAME,
+            "position_m": list(final_target["straw_tip_position_m"]),
+            "standoff_m": float(final_target["standoff_m"]),
+        }
+        octomap_rebuild = None
+        if use_octomap:
+            dynamic = self.dynamic_readiness(execution_mode=True if execute else None)
+            if dynamic.get("success"):
+                octomap_rebuild = self._prepare_dynamic_scene_for_goal_selection(
+                    mouth=[float(value) for value in target.position_m],
+                    original_pre_mouth=list(final_target["straw_tip_position_m"]),
+                    snapshot=snapshot,
+                    planning_scene_application=scene,
+                )
+            octomap = octomap_layer_status(
+                use_octomap=True,
+                rebuild_succeeded=bool(
+                    dynamic.get("success")
+                    and isinstance(octomap_rebuild, dict)
+                    and octomap_rebuild.get("success")
+                ),
+            )
+            octomap["readiness"] = dynamic
+            octomap["rebuild"] = octomap_rebuild
+            if not octomap["dynamic_obstacle_layer_active"]:
+                report["octomap"] = octomap
+                report.update(
+                    stage="dynamic_obstacle_layer_unavailable",
+                    reason=(
+                        "the explicitly enabled stationary OctoMap rebuild failed; "
+                        "fixed PlanningScene objects remain active, but outbound "
+                        "motion is withheld rather than using stale occupancy"
+                    ),
+                )
+                return 2, report
+        else:
+            octomap = octomap_layer_status(
+                use_octomap=False,
+                rebuild_succeeded=None,
+            )
+        report["octomap"] = octomap
+
+        staging = self._continuous_pose_target(
+            target,
+            standoff_m=float(self._continuous_parameters["coarse_staging_standoff_m"]),
+        )
+        report["coarse_staging_target"] = staging
+        if not staging.get("success"):
+            report.update(stage="coarse_staging_target", reason=staging.get("reason"))
+            return 2, report
+        staging_plan = self._continuous_plan_with_fallback(staging)
+        report["coarse_staging_plan"] = staging_plan
+        if not staging_plan.get("success"):
+            report.update(stage="coarse_staging_plan", reason=staging_plan.get("reason"))
+            return 2, report
+        if not execute:
+            return_validation_code, return_validation = self.return_to_initial_position(
+                execute=False,
+                confirm_real_motion=False,
+                use_octomap=use_octomap,
+            )
+            report.update(
+                success=return_validation_code == 0,
+                stage="continuous_tracking_plan_only_validated",
+                reason=return_validation.get("reason"),
+                return_to_initial_position=return_validation,
+                execution_disabled=True,
+                servo_commands_sent=0,
+                pre_mouth_hold={
+                    "completed": False,
+                    "plan_only": True,
+                    "motion_command_sent": False,
+                },
+            )
+            return (0 if report["success"] else 2), report
+
+        staging_execution = self._execute_continuous_planned_trajectory(
+            confirm_real_motion=confirm_real_motion
+        )
+        report["coarse_staging_execution"] = staging_execution
+        report["execution_attempted"] = bool(staging_execution.get("execution_attempted"))
+        report["execution_sent"] = bool(staging_execution.get("execution_sent"))
+        if not staging_execution.get("success"):
+            recovery = self._attempt_failure_recovery_return(
+                execute=True,
+                confirm_real_motion=confirm_real_motion,
+                motion_sent=bool(staging_execution.get("execution_sent")),
+                use_octomap=use_octomap,
+            )
+            report.update(
+                stage="coarse_staging_execution",
+                reason=staging_execution.get("reason"),
+                failure_recovery_return=recovery,
+            )
+            return 2, report
+        try:
+            servo = self._continuous_servo_approach_and_hold(
+                hold_duration_sec=float(hold_duration_sec),
+                confirm_real_motion=confirm_real_motion,
+                octomap=octomap,
+            )
+        except Exception as exc:
+            # Preserve the single guarded recovery path even if the tracking
+            # controller raises unexpectedly after staging motion was sent.
+            servo = {
+                "success": False,
+                "stage": "continuous_servo_approach_and_hold",
+                "servo_command_count": 0,
+                "stop_reason": (
+                    "continuous_tracking_exception:"
+                    f"{exc.__class__.__name__}:{exc}"
+                ),
+                "exception_caught": True,
+            }
+        report["continuous_servo"] = servo
+        report["pre_mouth_hold"] = {
+            "completed": bool(servo.get("success")),
+            "duration_sec": float(hold_duration_sec),
+            "motion_command_sent": bool(servo.get("servo_command_count", 0)),
+            "tracking": servo,
+        }
+        report["execution_sent"] = bool(
+            report["execution_sent"] or servo.get("servo_command_count", 0)
+        )
+        if not servo.get("success"):
+            recovery = self._attempt_failure_recovery_return(
+                execute=True,
+                confirm_real_motion=confirm_real_motion,
+                motion_sent=bool(report["execution_sent"]),
+                use_octomap=use_octomap,
+            )
+            report.update(
+                stage="continuous_servo_stopped",
+                reason=servo.get("stop_reason"),
+                failure_recovery_return=recovery,
+            )
+            return 2, report
+        return_code, return_result = self.return_to_initial_position(
+            execute=True,
+            confirm_real_motion=confirm_real_motion,
+            use_octomap=use_octomap,
+        )
+        report["return_to_initial_position"] = return_result
+        if return_code != 0 or not return_result.get("success"):
+            report.update(
+                stage="return_to_initial_position_refused",
+                reason=return_result.get("reason"),
+            )
+            return 2, report
+        report.update(
+            success=True,
+            stage="continuous_tracking_returned_initial_position",
+            reason=None,
+            final_state="initial_position",
+        )
+        return 0, report
+
     def run_integrated(
         self,
         *,
@@ -3901,8 +5312,31 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         allow_validated_camera_ray_execute: bool,
         no_execute: bool,
         track_mouth_during_execution: bool = False,
+        continuous_mouth_tracking: bool = False,
+        use_octomap: bool = False,
         hold_duration_sec: float = DEFAULT_PREMOUTH_HOLD_SEC,
     ) -> tuple[int, dict[str, Any]]:
+        if continuous_mouth_tracking:
+            if track_mouth_during_execution:
+                return 2, {
+                    "success": False,
+                    "stage": "tracking_mode_selection",
+                    "reason": (
+                        "continuous and segmented tracking modes are mutually exclusive"
+                    ),
+                    "execution_attempted": False,
+                    "execution_sent": False,
+                }
+            return self.run_continuous_integrated(
+                execute=execute,
+                confirm_real_motion=confirm_real_motion,
+                allow_validated_camera_ray_execute=(
+                    allow_validated_camera_ray_execute
+                ),
+                no_execute=no_execute,
+                hold_duration_sec=hold_duration_sec,
+                use_octomap=use_octomap,
+            )
         contract = {
             "multi_target_identity_lock": True,
             "target_selection": self.target_selection,
@@ -4062,19 +5496,6 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "execution_sent": False,
                 "integrated_real_feed_water": contract,
             }
-        dynamic = self.dynamic_readiness(execution_mode=True if execute else None)
-        if not dynamic.get("success"):
-            return 2, {
-                "success": False,
-                "mode": "execute" if execute else "plan",
-                "stage": "dynamic_octomap_readiness",
-                "reason": "; ".join(dynamic.get("failures", [])),
-                "dynamic_octomap_readiness": dynamic,
-                "combined_tool_collision_geometry": combined_tool_geometry,
-                "execution_attempted": False,
-                "execution_sent": False,
-                "integrated_real_feed_water": contract,
-            }
         initial_before = self._current_initial_position_status()
         preflight_return: dict[str, Any] = {
             "required": False,
@@ -4091,7 +5512,6 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "reason": initial_before.get("reason")
                 or "current initial-position status is unavailable",
                 "preflight_return_to_initial_position": preflight_return,
-                "dynamic_octomap_readiness": dynamic,
                 "combined_tool_collision_geometry": combined_tool_geometry,
                 "execution_attempted": False,
                 "execution_sent": False,
@@ -4125,7 +5545,6 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     "stage": "initial_position_required_plan_only",
                     "reason": preflight_return["reason"],
                     "preflight_return_to_initial_position": preflight_return,
-                    "dynamic_octomap_readiness": dynamic,
                     "combined_tool_collision_geometry": combined_tool_geometry,
                     "execution_attempted": False,
                     "execution_sent": False,
@@ -4154,7 +5573,6 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     "stage": "preflight_return_to_initial_position_refused",
                     "reason": preflight_return["reason"],
                     "preflight_return_to_initial_position": preflight_return,
-                    "dynamic_octomap_readiness": dynamic,
                     "combined_tool_collision_geometry": combined_tool_geometry,
                     "execution_attempted": bool(
                         return_result.get("execution_attempted")
@@ -4165,6 +5583,24 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         else:
             preflight_return["reason"] = None
             preflight_return["initial_position_after"] = initial_before
+        # Initial-position recovery is a prerequisite for every outbound
+        # feed-water operation.  Evaluate the outbound dynamic layer only
+        # after that prerequisite has been checked and, when authorized,
+        # guardedly restored.
+        dynamic = self.dynamic_readiness(execution_mode=True if execute else None)
+        if not dynamic.get("success"):
+            return 2, {
+                "success": False,
+                "mode": "execute" if execute else "plan",
+                "stage": "dynamic_octomap_readiness",
+                "reason": "; ".join(dynamic.get("failures", [])),
+                "dynamic_octomap_readiness": dynamic,
+                "preflight_return_to_initial_position": preflight_return,
+                "combined_tool_collision_geometry": combined_tool_geometry,
+                "execution_attempted": bool(preflight_return.get("execution_sent")),
+                "execution_sent": bool(preflight_return.get("execution_sent")),
+                "integrated_real_feed_water": contract,
+            }
         search = self.active_search(
             execute=execute,
             confirm_real_motion=confirm_real_motion,
@@ -4527,6 +5963,22 @@ def _parse_args() -> argparse.Namespace:
             "and relative Servo corrections during the pre-mouth hold."
         ),
     )
+    parser.add_argument(
+        "--continuous-mouth-tracking",
+        action="store_true",
+        help=(
+            "Use the isolated continuous MoveIt Servo approach/hold mode; "
+            "the existing one-shot and segmented modes remain unchanged."
+        ),
+    )
+    parser.add_argument(
+        "--use-octomap",
+        action="store_true",
+        help=(
+            "Enable the experimental dynamic OctoMap layer for continuous mode; "
+            "disabled by default while fixed PlanningScene objects remain active."
+        ),
+    )
     parser.add_argument("--target-selection", choices=("left", "center", "right"), default="center")
     parser.add_argument("--mouth-sample-seconds", type=float, default=DEFAULT_MOUTH_SAMPLE_SECONDS)
     parser.add_argument(
@@ -4598,6 +6050,8 @@ def main() -> int:
                 track_mouth_during_execution=bool(
                     args.track_mouth_during_execution
                 ),
+                continuous_mouth_tracking=bool(args.continuous_mouth_tracking),
+                use_octomap=bool(args.use_octomap),
                 hold_duration_sec=float(args.hold_duration),
             )
     finally:

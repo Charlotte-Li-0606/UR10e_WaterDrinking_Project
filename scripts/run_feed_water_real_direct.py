@@ -48,9 +48,20 @@ def _parse_args() -> argparse.Namespace:
         "--track-mouth-during-execution",
         action="store_true",
         help=(
-            "Opt in to tracked MoveIt cancel/replan and bounded Servo "
-            "corrections during the pre-mouth hold."
+            "Use the preserved legacy segmented MoveIt tracking path. "
+            "New continuous tracking requests should use "
+            "--continuous-mouth-tracking."
         ),
+    )
+    parser.add_argument(
+        "--continuous-mouth-tracking",
+        action="store_true",
+        help="Use the opt-in continuous MoveIt Servo approach and hold mode.",
+    )
+    parser.add_argument(
+        "--use-octomap",
+        action="store_true",
+        help="Enable the experimental dynamic OctoMap layer in continuous mode.",
     )
     return parser.parse_args()
 
@@ -84,6 +95,8 @@ def main() -> int:
         "track_mouth_during_execution": bool(
             args.track_mouth_during_execution
         ),
+        "continuous_mouth_tracking": bool(args.continuous_mouth_tracking),
+        "use_octomap": bool(args.use_octomap),
     }
     command = [
         sys.executable,

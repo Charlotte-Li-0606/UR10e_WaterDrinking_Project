@@ -67,6 +67,8 @@ def _pipeline_command(
     target_selection: str,
     hold_duration_sec: float,
     track_mouth_during_execution: bool = False,
+    continuous_mouth_tracking: bool = False,
+    use_octomap: bool = False,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -91,6 +93,10 @@ def _pipeline_command(
         command.append("--no-execute")
     if track_mouth_during_execution:
         command.append("--track-mouth-during-execution")
+    if continuous_mouth_tracking:
+        command.append("--continuous-mouth-tracking")
+    if use_octomap:
+        command.append("--use-octomap")
     return command
 
 
@@ -340,6 +346,8 @@ def run_real_feed_water(
     target_selection: str = "center",
     hold_duration_sec: float = DEFAULT_HOLD_SECONDS,
     track_mouth_during_execution: bool = False,
+    continuous_mouth_tracking: bool = False,
+    use_octomap: bool = False,
     environ: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Run or plan the real safe pre-mouth-only ``feed_water`` operation."""
@@ -372,6 +380,8 @@ def run_real_feed_water(
         "no_tilt_or_pour": True,
         "hold_duration_in_range": True,
         "tracked_feed_requested": bool(track_mouth_during_execution),
+        "continuous_mouth_tracking_requested": bool(continuous_mouth_tracking),
+        "use_octomap": bool(use_octomap),
     }
     if not gates["backend_real"]:
         return _failure_report(
@@ -427,6 +437,8 @@ def run_real_feed_water(
                 target_selection=target_selection,
                 hold_duration_sec=duration,
                 track_mouth_during_execution=track_mouth_during_execution,
+                continuous_mouth_tracking=continuous_mouth_tracking,
+                use_octomap=use_octomap,
             ),
             cwd=PROJECT_ROOT,
             env=child_environment,

@@ -240,6 +240,8 @@ def validate_safe_feeding_tool_call(
             "allow_vertical_adjust",
             "hold_duration_sec",
             "track_mouth_during_execution",
+            "continuous_mouth_tracking",
+            "use_octomap",
         },
     }
     extra = set(raw_args) - allowed[tool]
@@ -326,6 +328,18 @@ def validate_safe_feeding_tool_call(
         raise FeedingToolValidationError(
             "track_mouth_during_execution must be a boolean"
         )
+    continuous_tracking = raw_args.get("continuous_mouth_tracking", False)
+    if not isinstance(continuous_tracking, bool):
+        raise FeedingToolValidationError(
+            "continuous_mouth_tracking must be a boolean"
+        )
+    use_octomap = raw_args.get("use_octomap", False)
+    if not isinstance(use_octomap, bool):
+        raise FeedingToolValidationError("use_octomap must be a boolean")
+    if tracked_execution and continuous_tracking:
+        raise FeedingToolValidationError(
+            "segmented and continuous mouth tracking modes are mutually exclusive"
+        )
     return {
         "tool": tool,
         "args": {
@@ -335,6 +349,8 @@ def validate_safe_feeding_tool_call(
             "allow_vertical_adjust": vertical_adjust,
             "hold_duration_sec": _validate_feed_water_hold_duration(raw_args.get("hold_duration_sec", 3.0)),
             "track_mouth_during_execution": tracked_execution,
+            "continuous_mouth_tracking": continuous_tracking,
+            "use_octomap": use_octomap,
         },
     }
 

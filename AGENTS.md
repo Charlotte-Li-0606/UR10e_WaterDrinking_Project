@@ -125,7 +125,14 @@
   whether any Servo command was published, the maximum displacement/speed,
   and the final stop reason.
 
-## Tracked feed-water execution
+## Legacy segmented feed-water execution
+
+- `--track-mouth-during-execution` is the preserved legacy segmented mode.
+  Do not use it for new user requests for tracked or continuous feed-water
+  execution. It remains available only for regression testing and explicit
+  maintenance of that older implementation.
+
+## Continuous tracked feed-water execution
 
 - A standalone request for “feed me water with tracking” authorizes one
   integrated guarded execution through the canonical Codex entrypoint:
@@ -133,29 +140,23 @@
   ```bash
   UR10E_ALLOW_REAL_EXECUTION=1 scripts/codex_feed_water.sh \
     --execute --confirm-real-motion --hold-duration 5 \
-    --track-mouth-during-execution
+    --continuous-mouth-tracking
   ```
 
-- The tracking flag is explicit opt-in; ordinary `feed_water` keeps the
-  existing frozen-target one-shot behavior. During tracked execution, MoveIt
-  exclusively owns the controller for the collision-checked approach. Split a
-  direct Cartesian approach into at most 16 MoveIt-planned segments, each no
-  longer than 50 mm translation or 15 degrees rotation. Recheck every segment
-  waypoint against the current PlanningScene, stop at each segment boundary,
-  refresh the stable selected mouth and fixed human scene, and plan the next
-  segment from the stationary state. Keep the complete tracked approach within
-  45 seconds. Do not split an OMPL detour; OMPL remains an exceptional full
-  collision-checked route.
-- Stable mouth drift above 50 mm during a segment cancels that segment and may
-  trigger at most two target-drift replans. After a cancellation or segment
-  boundary, wait up to three seconds for two joint-state samples at or below
-  0.010 rad/s before rebuilding the OctoMap; never raise that threshold or
-  rebuild occupancy from a moving wrist camera. Servo may publish only after
-  MoveGroup finishes and releases the controller, and only for bounded
-  relative translation during the pre-mouth hold.
+- The continuous tracking flag is explicit opt-in; ordinary `feed_water` keeps
+  the existing frozen-target one-shot behavior. A collision-checked MoveIt
+  trajectory may move the arm to the conservative coarse staging pose, but the
+  approach from staging through the pre-mouth hold must use continuous MoveIt
+  Servo commands without fixed 50 mm segments or stationary pauses.
+- Mouth displacement within the configured 100 mm Servo tracking range is
+  followed continuously and must not invoke OMPL or the legacy segmented
+  planner. At or above the 100 mm recovery threshold, or after a Servo
+  collision/singularity/joint-limit halt, stop Servo, refresh the target, and
+  try Cartesian then Pilz recovery before OMPL. Resume Servo only after the
+  recovery backend releases controller ownership and the target remains fresh.
 - Never publish MoveIt execution and Servo commands concurrently. Preserve the
   validated pre-mouth offset, locked tool orientation, human collision scene,
-  OctoMap, 60 mm relative target limit, 20 mm/s Servo limit, 0.10 m/s²
-  acceleration limit, target-loss halt, and guarded return. Report all replan
-  attempts, Servo command count, measured tool displacement/orientation error,
-  and the final stop reason.
+  optional OctoMap policy, 100 mm Servo recovery threshold, 20 mm/s Servo
+  limit, 0.10 m/s² acceleration limit, target-loss halt, and guarded return.
+  Report all recovery attempts, Servo command count, measured tool
+  displacement/orientation error, and the final stop reason.

@@ -7,7 +7,13 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from moveit_msgs.msg import RobotState, RobotTrajectory
+from moveit_msgs.msg import (
+    AttachedCollisionObject,
+    CollisionObject,
+    PlanningScene,
+    RobotState,
+    RobotTrajectory,
+)
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectoryPoint
 
@@ -30,6 +36,7 @@ from scripts.real_feed_water_integrated import (
     TRACKING_SEGMENT_MAX_TRANSLATION_M,
     RealIntegratedFeedWater,
     _bounded_tracking_segment_target,
+    _active_search_cloud_gate_failures,
     _compare_final_state_validity,
     _load_initial_position_config,
     _orientation_after_local_tool_z_rotation,
@@ -102,6 +109,31 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertFalse(comparison["available"])
         self.assertIsNone(comparison["changed"])
         self.assertIn("adaptive candidate", comparison["reason"])
+
+    def test_active_search_skips_cloud_gate_when_octomap_is_disabled(self) -> None:
+        failures = _active_search_cloud_gate_failures(
+            use_octomap=False,
+            cloud_statuses={
+                "/wrist_rgbd/points": {"active": False},
+                "/wrist_rgbd/filtered_cloud": {"active": False},
+            },
+        )
+
+        self.assertEqual([], failures)
+
+    def test_active_search_keeps_cloud_gate_when_octomap_is_enabled(self) -> None:
+        failures = _active_search_cloud_gate_failures(
+            use_octomap=True,
+            cloud_statuses={
+                "/wrist_rgbd/points": {"active": True},
+                "/wrist_rgbd/filtered_cloud": {"active": False},
+            },
+        )
+
+        self.assertEqual(
+            ["raw or filtered wrist point cloud became stale before search motion"],
+            failures,
+        )
 
     def test_octomap_rebuild_reports_actual_final_state_validity_change(self) -> None:
         comparison = _compare_final_state_validity(
@@ -984,6 +1016,241 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertNotIn("--track-mouth-during-execution", default_command)
         self.assertIn("--track-mouth-during-execution", tracked_command)
 
+    def test_continuous_execute_command_and_octomap_are_explicit_opt_ins(self) -> None:
+        default_command = backend._pipeline_command(
+            execute=True,
+            report_path=backend.REPORT_DIR / "default.json",
+            target_selection="center",
+            hold_duration_sec=DEFAULT_PREMOUTH_HOLD_SEC,
+        )
+        continuous_command = backend._pipeline_command(
+            execute=True,
+            report_path=backend.REPORT_DIR / "continuous.json",
+            target_selection="center",
+            hold_duration_sec=DEFAULT_PREMOUTH_HOLD_SEC,
+            continuous_mouth_tracking=True,
+            use_octomap=True,
+        )
+
+        self.assertNotIn("--continuous-mouth-tracking", default_command)
+        self.assertNotIn("--use-octomap", default_command)
+        self.assertIn("--continuous-mouth-tracking", continuous_command)
+        self.assertIn("--use-octomap", continuous_command)
+
+    def test_continuous_mode_dispatches_before_legacy_workflow(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.run_continuous_integrated = Mock(return_value=(0, {"success": True}))
+
+        code, result = node.run_integrated(
+            execute=False,
+            confirm_real_motion=False,
+            allow_validated_camera_ray_execute=False,
+            no_execute=False,
+            continuous_mouth_tracking=True,
+            use_octomap=False,
+            hold_duration_sec=5.0,
+        )
+
+        self.assertEqual(0, code)
+        self.assertTrue(result["success"])
+        node.run_continuous_integrated.assert_called_once_with(
+            execute=False,
+            confirm_real_motion=False,
+            allow_validated_camera_ray_execute=False,
+            no_execute=False,
+            hold_duration_sec=5.0,
+            use_octomap=False,
+        )
+
+    def test_continuous_servo_requires_fresh_post_staging_target(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._acquire_continuous_target = Mock(
+            return_value={
+                "success": False,
+                "state": "NO_TARGET",
+                "reason": "no_valid_observation_after_acquisition_timeout",
+                "target": object(),
+            }
+        )
+        node._execution_state_failures = Mock(return_value=[])
+
+        result = node._continuous_servo_approach_and_hold(
+            hold_duration_sec=5.0,
+            confirm_real_motion=True,
+            octomap={"use_octomap": False},
+        )
+
+        self.assertFalse(result["success"])
+        self.assertEqual(
+            "no_valid_observation_after_acquisition_timeout",
+            result["stop_reason"],
+        )
+        self.assertEqual(
+            "NO_TARGET",
+            result["post_staging_target_acquisition"]["state"],
+        )
+        node._execution_state_failures.assert_not_called()
+
+    def test_continuous_servo_checks_execution_only_after_fresh_reacquisition(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._acquire_continuous_target = Mock(
+            return_value={
+                "success": True,
+                "state": "STABLE_TARGET",
+                "reason": "stable_target_acquired",
+                "target": object(),
+            }
+        )
+        node._execution_state_failures = Mock(
+            return_value=["controller readiness changed"]
+        )
+
+        result = node._continuous_servo_approach_and_hold(
+            hold_duration_sec=5.0,
+            confirm_real_motion=True,
+            octomap={"use_octomap": False},
+        )
+
+        self.assertFalse(result["success"])
+        self.assertEqual("controller readiness changed", result["stop_reason"])
+        self.assertEqual(
+            "STABLE_TARGET",
+            result["post_staging_target_acquisition"]["state"],
+        )
+        node._execution_state_failures.assert_called_once_with(
+            confirm_real_motion=True
+        )
+
+    def test_event_driven_servo_status_does_not_expire_by_message_age(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.count_publishers = Mock(return_value=1)
+        node._latest_servo_status = SimpleNamespace(code=0, message="No warnings")
+        node._latest_servo_status_monotonic = 1.0
+
+        result = node._continuous_servo_status_snapshot(now=101.0)
+
+        self.assertTrue(result["success"])
+        self.assertEqual(100.0, result["last_event_age_sec"])
+        self.assertEqual(
+            "reliable_transient_local_event_driven",
+            result["delivery_policy"],
+        )
+
+    def test_event_driven_servo_status_requires_live_publisher(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.count_publishers = Mock(return_value=0)
+        node._latest_servo_status = SimpleNamespace(code=0, message="No warnings")
+        node._latest_servo_status_monotonic = 1.0
+
+        result = node._continuous_servo_status_snapshot(now=2.0)
+
+        self.assertFalse(result["success"])
+        self.assertEqual("servo_status_publisher_unavailable", result["reason"])
+
+    @patch("scripts.real_feed_water_integrated.time.monotonic", return_value=10.0)
+    def test_fresh_explicit_no_face_can_authorize_empty_human_scene(
+        self,
+        _monotonic: Mock,
+    ) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.count_publishers = Mock(return_value=1)
+        node.latest_mouth_status = {"detected": False, "reason": "no_face"}
+        node.latest_mouth_status_received_monotonic = 9.8
+
+        result = node._fresh_explicit_no_face_evidence()
+
+        self.assertTrue(result["success"])
+        self.assertTrue(result["explicit_no_face"])
+        self.assertAlmostEqual(0.2, result["status_age_sec"])
+
+    @patch("scripts.real_feed_water_integrated.time.monotonic", return_value=10.0)
+    def test_stale_no_face_does_not_authorize_empty_human_scene(
+        self,
+        _monotonic: Mock,
+    ) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.count_publishers = Mock(return_value=1)
+        node.latest_mouth_status = {"detected": False, "reason": "no_face"}
+        node.latest_mouth_status_received_monotonic = 9.0
+
+        result = node._fresh_explicit_no_face_evidence()
+
+        self.assertFalse(result["success"])
+
+    @patch("scripts.real_feed_water_integrated.PlanningSceneObstacleManager")
+    def test_verified_empty_view_retires_only_managed_stale_human_scene(
+        self,
+        manager_type: Mock,
+    ) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._spin_for = Mock()
+        evidence = {
+            "success": True,
+            "explicit_no_face": True,
+            "status_age_sec": 0.01,
+        }
+        node._fresh_explicit_no_face_evidence = Mock(return_value=evidence)
+        manager = manager_type.return_value
+        manager.remove.return_value = {
+            "success": True,
+            "operation": "remove",
+            "object_ids": ["real_human_obstacle_0_torso"],
+        }
+
+        result = node._retire_stale_human_scene_for_empty_view()
+
+        self.assertTrue(result["success"])
+        self.assertTrue(result["retired"])
+        self.assertFalse(result["collision_bypassed"])
+        manager.remove.assert_called_once_with(verify=True)
+        manager.destroy_node.assert_called_once_with()
+
+    @patch("scripts.real_feed_water_integrated.rclpy.spin_once")
+    @patch("scripts.real_feed_water_integrated.rclpy.spin_until_future_complete")
+    def test_continuous_scene_is_shared_with_movegroup_and_servo(
+        self,
+        _spin_until_complete: Mock,
+        _spin_once: Mock,
+    ) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.count_subscribers = Mock(return_value=2)
+        scene = PlanningScene()
+        human = CollisionObject()
+        human.id = "real_human_obstacle_0_torso"
+        scene.world.collision_objects.append(human)
+        tool = AttachedCollisionObject()
+        tool.object.id = "combined_camera_cup_holder_straw_collision"
+        scene.robot_state.attached_collision_objects.append(tool)
+        future = Mock()
+        future.result.return_value = SimpleNamespace(scene=scene)
+        node.get_planning_scene = Mock()
+        node.get_planning_scene.wait_for_service.return_value = True
+        node.get_planning_scene.call_async.return_value = future
+        node._planning_scene_publisher = Mock()
+
+        result = node._synchronize_servo_planning_scene()
+
+        self.assertTrue(result["success"])
+        self.assertTrue(result["movegroup_and_servo_scene_shared"])
+        node._planning_scene_publisher.publish.assert_called_once_with(scene)
+        self.assertTrue(scene.is_diff)
+        self.assertTrue(scene.robot_state.is_diff)
+        self.assertEqual([], list(scene.robot_state.joint_state.name))
+
+    def test_continuous_scene_sync_refuses_without_both_monitors(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.count_subscribers = Mock(return_value=1)
+        node.get_planning_scene = Mock()
+
+        with patch(
+            "scripts.real_feed_water_integrated.rclpy.ok", return_value=False
+        ):
+            result = node._synchronize_servo_planning_scene()
+
+        self.assertFalse(result["success"])
+        self.assertEqual(1, result["subscriber_count"])
+        node.get_planning_scene.wait_for_service.assert_not_called()
+
     def test_integrated_plan_sequences_search_before_dynamic_target_plan(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
         node.target_selection = "center"
@@ -1157,6 +1424,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             execute=True,
             confirm_real_motion=True,
         )
+        node.dynamic_readiness.assert_not_called()
         node.active_search.assert_not_called()
 
     def test_plan_only_reports_required_initial_return_without_motion(self) -> None:
@@ -1200,6 +1468,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             execute=False,
             confirm_real_motion=False,
         )
+        node.dynamic_readiness.assert_not_called()
         node.active_search.assert_not_called()
 
     def test_failure_recovery_reuses_guarded_return_after_motion(self) -> None:
