@@ -221,6 +221,10 @@ class ContinuousServoController:
         self._startup_approach_active = True
         self._reference_target = None
 
+    def pause_for_reacquisition(self) -> None:
+        """Restart acceleration limiting from zero without losing target history."""
+        self._last_velocity[:] = 0.0
+
     def update(
         self,
         target: ContinuousMouthTarget,

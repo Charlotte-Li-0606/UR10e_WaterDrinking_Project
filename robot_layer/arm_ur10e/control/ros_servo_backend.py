@@ -40,9 +40,15 @@ class RosServoCommandSink:
         # Servo also times out, but explicit zero twists make the stop request
         # immediate and deterministic before the sink is disarmed.
         if self.armed:
-            for _ in range(4):
-                msg = TwistStamped()
-                msg.header.stamp = self.node.get_clock().now().to_msg()
-                msg.header.frame_id = "base_link"
-                self.publisher.publish(msg)
+            self.publish_zero()
         self.armed = False
+
+    def publish_zero(self) -> None:
+        """Hold position without surrendering command ownership."""
+        if not self.armed:
+            raise RuntimeError("ROS Servo command sink is disarmed")
+        for _ in range(4):
+            msg = TwistStamped()
+            msg.header.stamp = self.node.get_clock().now().to_msg()
+            msg.header.frame_id = "base_link"
+            self.publisher.publish(msg)

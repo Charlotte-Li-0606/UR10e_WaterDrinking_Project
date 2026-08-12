@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import unittest
 
+import numpy as np
+
 from .mouth_perception_node import (
     MouthPerceptionNode,
     _displacement_scale_diagnostic,
@@ -54,6 +56,33 @@ class MouthPerceptionDiagnosticTests(unittest.TestCase):
                 "tool0 @ base_link", (0.1, -0.2, 0.3)
             ),
         )
+
+    def test_depth_patch_expands_over_a_small_close_range_hole(self) -> None:
+        depth = np.zeros((31, 31), dtype=np.float32)
+        depth[10:21, 10:21] = 0.30
+        depth[12:19, 12:19] = 0.0
+
+        value, radius, count = MouthPerceptionNode._valid_depth_patch(
+            depth, 15.0, 15.0, 3, 0.15, 1.30
+        )
+
+        self.assertAlmostEqual(0.30, value, places=6)
+        self.assertEqual(7, radius)
+        self.assertGreater(count, 0)
+
+    def test_depth_patch_does_not_invent_depth(self) -> None:
+        value, radius, count = MouthPerceptionNode._valid_depth_patch(
+            np.zeros((31, 31), dtype=np.float32),
+            15.0,
+            15.0,
+            3,
+            0.15,
+            1.30,
+        )
+
+        self.assertIsNone(value)
+        self.assertIsNone(radius)
+        self.assertEqual(0, count)
 
 
 if __name__ == "__main__":

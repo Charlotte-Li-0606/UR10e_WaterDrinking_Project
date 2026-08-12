@@ -21,7 +21,9 @@ loop.
    never sent to Servo.
 7. Halt Servo before any recovery planner acquires motion ownership. Resume
    only after the prior planned execution completes and the target is fresh.
-8. Perform the existing guarded return to the immutable initial position.
+8. Perform the existing guarded return to the immutable initial position after
+   success, and attempt it after every stop that follows a sent motion. Failure
+   recovery preserves and collision-checks the current human scene.
 
 Tool0 +Z remains aligned with `base_link` -Z. The controller applies only the
 angular correction needed for this axis alignment, so spin/yaw about the
@@ -32,6 +34,8 @@ vertical tool axis remains free. It never commands `wrist_3_joint` directly.
 Parameters are in `config/continuous_mouth_tracking.yaml`. Important defaults:
 
 - acquisition timeout: 3.0 s;
+- stale-target zero-velocity hold begins at 0.30 s and target loss aborts at
+  1.00 s; a fresh same-target observation resumes tracking;
 - final/provisional standoff: 80/250 mm;
 - Servo recovery hysteresis: enter at 100 mm, exit at 60 mm;
 - bounded staging-to-Servo startup envelope: 250 mm, used only until the
@@ -39,7 +43,7 @@ Parameters are in `config/continuous_mouth_tracking.yaml`. Important defaults:
 - maximum linear speed: 20 mm/s (10 mm/s while provisional);
 - maximum linear acceleration: 0.10 m/s²;
 - maximum angular correction speed: 0.15 rad/s;
-- target stale/lost timeout: 0.30/0.50 s;
+- target stale/lost timeout: 0.30/1.00 s;
 - maximum tracking duration: 45 s;
 - dynamic OctoMap: disabled by default.
 

@@ -1,7 +1,8 @@
 continuous_mouth_tracking:
   initial_target_acquisition_timeout_sec: 3.0
   target_timeout_sec: 0.30
-  lost_target_timeout_sec: 0.50
+  # Hold zero velocity through brief D435i/MediaPipe dropouts, then abort.
+  lost_target_timeout_sec: 1.00
   minimum_confidence: 0.60
   stable_sample_count: 3
   stable_max_spread_m: 0.025

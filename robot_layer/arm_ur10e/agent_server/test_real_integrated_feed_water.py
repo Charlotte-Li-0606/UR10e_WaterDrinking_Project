@@ -1166,6 +1166,69 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             use_octomap=False,
         )
 
+    def test_continuous_failure_after_sent_motion_requests_guarded_return(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.run_continuous_integrated = Mock(
+            return_value=(
+                2,
+                {
+                    "success": False,
+                    "stage": "continuous_post_search_target_unavailable",
+                    "execution_sent": True,
+                },
+            )
+        )
+        node._attempt_failure_recovery_return = Mock(
+            return_value={"success": True, "final_state": "initial_position"}
+        )
+
+        code, result = node.run_integrated(
+            execute=True,
+            confirm_real_motion=True,
+            allow_validated_camera_ray_execute=True,
+            no_execute=False,
+            continuous_mouth_tracking=True,
+            use_octomap=False,
+        )
+
+        self.assertEqual(2, code)
+        self.assertEqual("initial_position", result["final_state"])
+        node._attempt_failure_recovery_return.assert_called_once_with(
+            execute=True,
+            confirm_real_motion=True,
+            motion_sent=True,
+            use_octomap=False,
+        )
+
+    def test_continuous_failure_does_not_repeat_existing_recovery(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        prior = {"success": False, "attempted": True}
+        node.run_continuous_integrated = Mock(
+            return_value=(
+                2,
+                {
+                    "success": False,
+                    "stage": "continuous_servo_stopped",
+                    "execution_sent": True,
+                    "failure_recovery_return": prior,
+                },
+            )
+        )
+        node._attempt_failure_recovery_return = Mock()
+
+        code, result = node.run_integrated(
+            execute=True,
+            confirm_real_motion=True,
+            allow_validated_camera_ray_execute=True,
+            no_execute=False,
+            continuous_mouth_tracking=True,
+            use_octomap=False,
+        )
+
+        self.assertEqual(2, code)
+        self.assertIs(prior, result["failure_recovery_return"])
+        node._attempt_failure_recovery_return.assert_not_called()
+
     def test_continuous_servo_requires_fresh_post_staging_target(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
         node._acquire_continuous_target = Mock(
@@ -1852,6 +1915,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         node.return_to_initial_position.assert_called_once_with(
             execute=True,
             confirm_real_motion=True,
+            preserve_current_human_scene=True,
         )
 
     def test_active_search_failure_requests_recovery_when_motion_was_sent(self) -> None:

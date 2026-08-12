@@ -421,15 +421,33 @@ class MouthPerceptionNode(Node):
         self._debug_publisher.publish(output)
 
     @staticmethod
-    def _valid_depth_patch(depth_m: np.ndarray, u: float, v: float, radius: int, min_depth: float, max_depth: float) -> float | None:
+    def _valid_depth_patch(
+        depth_m: np.ndarray,
+        u: float,
+        v: float,
+        radius: int,
+        min_depth: float,
+        max_depth: float,
+    ) -> tuple[float | None, int | None, int]:
+        """Return robust mouth depth, expanding once around small depth holes."""
         x = int(round(u))
         y = int(round(v))
-        x0, x1 = max(0, x - radius), min(depth_m.shape[1], x + radius + 1)
-        y0, y1 = max(0, y - radius), min(depth_m.shape[0], y + radius + 1)
-        patch = depth_m[y0:y1, x0:x1]
-        valid = patch[np.isfinite(patch)]
-        valid = valid[(valid >= min_depth) & (valid <= max_depth)]
-        return float(np.median(valid)) if valid.size else None
+        base_radius = max(1, int(radius))
+        # The 3 px primary patch preserves the validated coordinate policy.
+        # The bounded 7 px fallback only fills local D435i holes; it does not
+        # substitute another landmark or invent a depth.
+        radii = (base_radius, max(base_radius, 7))
+        for patch_radius in dict.fromkeys(radii):
+            x0 = max(0, x - patch_radius)
+            x1 = min(depth_m.shape[1], x + patch_radius + 1)
+            y0 = max(0, y - patch_radius)
+            y1 = min(depth_m.shape[0], y + patch_radius + 1)
+            patch = depth_m[y0:y1, x0:x1]
+            valid = patch[np.isfinite(patch)]
+            valid = valid[(valid >= min_depth) & (valid <= max_depth)]
+            if valid.size:
+                return float(np.median(valid)), patch_radius, int(valid.size)
+        return None, None, 0
 
     def _depth_image_meters(self, depth: Image) -> np.ndarray | None:
         try:
@@ -650,7 +668,7 @@ class MouthPerceptionNode(Node):
             mouth_v = float(np.mean([landmarks[index].y for index in self._options.mouth_landmarks]) * rgb.height)
             depth_u = mouth_u * depth_m.shape[1] / rgb.width
             depth_v = mouth_v * depth_m.shape[0] / rgb.height
-            z = self._valid_depth_patch(
+            z, depth_patch_radius, valid_depth_samples = self._valid_depth_patch(
                 depth_m,
                 depth_u,
                 depth_v,
@@ -692,6 +710,8 @@ class MouthPerceptionNode(Node):
                     "image_x": mouth_u,
                     "image_y": mouth_v,
                     "depth_m": z,
+                    "depth_patch_radius_px": depth_patch_radius,
+                    "valid_depth_samples": valid_depth_samples,
                     "tf_mode": tf_mode,
                 }
             )
@@ -718,6 +738,12 @@ class MouthPerceptionNode(Node):
                         "image_x": round(float(candidate["image_x"]), 3),
                         "image_y": round(float(candidate["image_y"]), 3),
                         "depth_m": round(float(candidate["depth_m"]), 4),
+                        "depth_patch_radius_px": int(
+                            candidate["depth_patch_radius_px"]
+                        ),
+                        "valid_depth_samples": int(
+                            candidate["valid_depth_samples"]
+                        ),
                         "surface_normal": None
                         if candidate["surface_normal"] is None
                         else [round(float(value), 6) for value in candidate["surface_normal"]],
@@ -771,6 +797,8 @@ class MouthPerceptionNode(Node):
             pixel_u=round(float(primary["image_x"]), 2),
             pixel_v=round(float(primary["image_y"]), 2),
             depth_m=round(float(primary["depth_m"]), 4),
+            depth_patch_radius_px=int(primary["depth_patch_radius_px"]),
+            valid_depth_samples=int(primary["valid_depth_samples"]),
             frame_id=self._options.base_frame,
             tf_mode=str(primary["tf_mode"]),
             surface_normal_available=normal is not None,

@@ -229,6 +229,12 @@ def _load_continuous_tracking_config() -> dict[str, Any]:
         raise RuntimeError(
             "state_validity_check_period_sec must remain within [0.05, 0.50] seconds"
         )
+    target_timeout = float(values.get("target_timeout_sec", 0.0))
+    lost_timeout = float(values.get("lost_target_timeout_sec", 0.0))
+    if not 0.10 <= target_timeout < lost_timeout <= 2.0:
+        raise RuntimeError(
+            "target/lost timeouts must satisfy 0.10 <= target < lost <= 2.0 seconds"
+        )
     return dict(values)
 
 
@@ -1997,6 +2003,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         return_kwargs = {
             "execute": True,
             "confirm_real_motion": confirm_real_motion,
+            "preserve_current_human_scene": True,
         }
         if not use_octomap:
             return_kwargs["use_octomap"] = False
@@ -2184,6 +2191,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         execute: bool,
         confirm_real_motion: bool,
         use_octomap: bool = True,
+        preserve_current_human_scene: bool = False,
     ) -> tuple[int, dict[str, Any]]:
         """Validate, plan, and optionally execute the one configured return."""
         response: dict[str, Any] = {
@@ -2198,7 +2206,17 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "wrist_3_direct_command": False,
         }
         stale_scene = (
-            self._retire_stale_human_scene_for_empty_view()
+            {
+                "success": True,
+                "retired": False,
+                "reason": (
+                    "failure recovery preserves the current verified human scene"
+                ),
+                "execution_sent": False,
+                "collision_bypassed": False,
+            }
+            if execute and preserve_current_human_scene
+            else self._retire_stale_human_scene_for_empty_view()
             if execute
             else {
                 "success": True,
@@ -5229,6 +5247,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "maximum_target_displacement_m": 0.0,
             "hold_duration_sec": float(hold_duration_sec),
             "stop_reason": None,
+            "stale_target_zero_velocity_cycles": 0,
+            "maximum_stale_target_age_sec": 0.0,
+            "target_reacquisition_count": 0,
             "octomap": octomap,
         }
         # Planning and executing the coarse staging trajectory can take several
@@ -5295,6 +5316,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         )
         next_validity_check = started
         latest_state_validity = initial_validity
+        stale_target_hold_active = False
         report["state_validity_check_period_sec"] = validity_period_sec
         report["state_validity_check_count"] = 1
         try:
@@ -5326,6 +5348,58 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         report["collision_state_validity"] = latest_state_validity
                         break
                 target = self._continuous_tracker.target(now_monotonic_sec=now)
+                if (
+                    not target.available
+                    and target.reason == "target_stale_grace"
+                ):
+                    # Never advance toward a stale mouth pose.  Keep Servo as
+                    # the sole command owner, publish an explicit zero command,
+                    # and allow the bounded tracker loss window to reacquire.
+                    sink.publish_zero()
+                    self._continuous_servo_controller.pause_for_reacquisition()
+                    last_update = now
+                    hold_started = None
+                    stale_target_hold_active = True
+                    report["stale_target_zero_velocity_cycles"] += 1
+                    report["maximum_stale_target_age_sec"] = max(
+                        float(report["maximum_stale_target_age_sec"]),
+                        float(target.age_sec),
+                    )
+                    perception_status = (
+                        dict(self.latest_mouth_status)
+                        if isinstance(self.latest_mouth_status, dict)
+                        else None
+                    )
+                    self._publish_continuous_diagnostics(
+                        target,
+                        state="TARGET_STALE_HOLD",
+                        servo_status=servo_status,
+                        safety_stop_reason=None,
+                        octomap=octomap,
+                    )
+                    diagnostics.append(
+                        {
+                            "elapsed_sec": now - started,
+                            "state": "TARGET_STALE_HOLD",
+                            "target_age_sec": target.age_sec,
+                            "target_confidence": target.confidence,
+                            "servo_status": servo_status,
+                            "state_validity": latest_state_validity,
+                            "fallback_reason": None,
+                            "safety_stop_reason": None,
+                            "perception_status": perception_status,
+                            "last_observation_update": dict(
+                                self._continuous_last_observation_update
+                            ),
+                            "zero_velocity_commanded": True,
+                        }
+                    )
+                    if len(diagnostics) > 100:
+                        diagnostics.pop(0)
+                    continue
+                if target.available and stale_target_hold_active:
+                    report["target_reacquisition_count"] += 1
+                    stale_target_hold_active = False
                 tool = self._tool0_pose()
                 camera = self._frame_transform(BASE_FRAME, CAMERA_OPTICAL_FRAME)
                 if not tool.get("available") or not camera.get("available"):
@@ -5471,6 +5545,14 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             if self._continuous_motion_arbiter.owner == MotionCommandOwner.SERVO:
                 self._continuous_motion_arbiter.release(MotionCommandOwner.SERVO)
         report["recent_diagnostics"] = diagnostics
+        report["last_perception_status"] = (
+            dict(self.latest_mouth_status)
+            if isinstance(self.latest_mouth_status, dict)
+            else None
+        )
+        report["last_observation_update"] = dict(
+            self._continuous_last_observation_update
+        )
         report["elapsed_sec"] = time.monotonic() - started
         report["hold_elapsed_sec"] = (
             0.0
@@ -5864,6 +5946,29 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 hold_duration_sec=hold_duration_sec,
                 use_octomap=use_octomap,
             )
+            # Cover every continuous-mode failure after outbound motion,
+            # including search motion followed by a later refusal.  A stage
+            # that already attempted guarded recovery is never retried here.
+            prior_recovery = result.get("failure_recovery_return")
+            preflight_return_failure = str(result.get("stage", "")).startswith(
+                "preflight_return_to_initial_position"
+            )
+            if (
+                execute
+                and code != 0
+                and bool(result.get("execution_sent"))
+                and not isinstance(prior_recovery, dict)
+                and not preflight_return_failure
+            ):
+                recovery = self._attempt_failure_recovery_return(
+                    execute=True,
+                    confirm_real_motion=confirm_real_motion,
+                    motion_sent=True,
+                    use_octomap=use_octomap,
+                )
+                result["failure_recovery_return"] = recovery
+                if recovery.get("success"):
+                    result["final_state"] = "initial_position"
             result["previous_session_collision_geometry_reset"] = session_scene_reset
             return code, result
         contract = {

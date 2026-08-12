@@ -93,7 +93,19 @@ def test_prediction_is_bounded_and_disabled_for_provisional_target():
     assert stable.prediction_m <= 0.02
 
 
-def test_stale_target_transitions_to_target_lost():
+def test_stale_target_holds_before_target_lost_timeout():
+    tracker = ContinuousMouthTracker()
+    _add(tracker, (0.80, 0.20, 0.60), 0)
+
+    target = tracker.target(now_monotonic_sec=10.31)
+
+    assert not target.available
+    assert target.state == ContinuousTrackingState.TRACKING
+    assert target.reason == "target_stale_grace"
+    assert abs(target.age_sec - 0.31) < 1.0e-9
+
+
+def test_lost_timeout_transitions_to_target_lost():
     tracker = ContinuousMouthTracker()
     _add(tracker, (0.80, 0.20, 0.60), 0)
 

@@ -268,10 +268,14 @@ class ContinuousMouthTracker:
                 target_id=latest.target_id,
             )
         if age > self.target_timeout_sec:
-            self._state = ContinuousTrackingState.TARGET_LOST
+            # A short RGB-D dropout is common at close range.  Mark this as a
+            # bounded hold/reacquisition interval instead of declaring target
+            # loss immediately.  The motion layer must command zero velocity
+            # while this unavailable target is returned.
+            self._state = ContinuousTrackingState.TRACKING
             return self._empty_target(
                 self._state,
-                "target_stale",
+                "target_stale_grace",
                 age_sec=age,
                 target_id=latest.target_id,
             )

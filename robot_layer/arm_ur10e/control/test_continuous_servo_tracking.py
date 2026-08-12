@@ -270,6 +270,34 @@ def test_no_target_and_target_loss_publish_no_motion():
     assert lost.safety_stop_reason == "target_stale"
 
 
+def test_reacquisition_pause_resets_acceleration_history() -> None:
+    controller = ContinuousServoController()
+    desired = _desired_tool()
+    moving = controller.update(
+        _target(),
+        current_tool0_position_m=desired - np.array((0.08, 0.0, 0.0)),
+        current_tool0_orientation_xyzw=FLANGE_DOWN_XYZW,
+        camera_position_m=CAMERA_POSITION,
+        servo_status_code=0,
+        elapsed_sec=0.0,
+        dt_sec=0.1,
+    )
+    assert np.linalg.norm(moving.linear_velocity_mps) > 0.0
+
+    controller.pause_for_reacquisition()
+    resumed = controller.update(
+        _target(),
+        current_tool0_position_m=desired - np.array((0.08, 0.0, 0.0)),
+        current_tool0_orientation_xyzw=FLANGE_DOWN_XYZW,
+        camera_position_m=CAMERA_POSITION,
+        servo_status_code=0,
+        elapsed_sec=0.5,
+        dt_sec=0.1,
+    )
+
+    assert np.linalg.norm(resumed.linear_velocity_mps) <= 0.010000001
+
+
 def test_servo_collision_singularity_and_joint_limit_codes_halt():
     for status in (2, 5, 6):
         decision = ContinuousServoController().update(
