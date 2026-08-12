@@ -11,6 +11,7 @@ from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import (
     AttachedCollisionObject,
     CollisionObject,
+    Constraints,
     PlanningScene,
     RobotState,
     RobotTrajectory,
@@ -331,6 +332,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         goal_for_target: Mock,
     ) -> None:
         goal_for_target.return_value = MoveGroup.Goal()
+        goal_for_target.return_value.request.goal_constraints.append(Constraints())
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
         node.latest_joint_state = JointState(
             name=[
@@ -367,6 +369,36 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             "continuous_local_ik_branch_with_vertical_tool_axis",
             goal.request.path_constraints.name,
         )
+        goal_orientation = goal.request.goal_constraints[0].orientation_constraints[0]
+        self.assertAlmostEqual(math.pi, goal_orientation.absolute_z_axis_tolerance)
+        self.assertGreater(goal_orientation.absolute_x_axis_tolerance, 0.05)
+        self.assertGreater(goal.request.allowed_planning_time, 1.0)
+
+    def test_continuous_recovery_goal_uses_zero_velocity_live_start(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.latest_joint_state = JointState(
+            name=["shoulder_pan_joint", "shoulder_lift_joint"],
+            position=[0.2, -1.1],
+            velocity=[0.04, -0.03],
+        )
+        node._run_goal = Mock(
+            return_value={
+                "success": False,
+                "error_code": 99999,
+                "reason": None,
+            }
+        )
+        goal = MoveGroup.Goal()
+
+        result = node._run_continuous_recovery_goal(goal)
+
+        self.assertEqual(
+            [0.0, 0.0], list(goal.request.start_state.joint_state.velocity)
+        )
+        self.assertEqual(
+            [0.2, -1.1], list(goal.request.start_state.joint_state.position)
+        )
+        self.assertIn("generic FAILURE (99999)", result["reason"])
 
     def test_fixed_initial_joint_goal_keeps_vertical_path_constraint(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)

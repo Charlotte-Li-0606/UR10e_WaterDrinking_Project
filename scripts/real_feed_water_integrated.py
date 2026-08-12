@@ -29,6 +29,7 @@ trajectory that has not passed waypoint FK validation.
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import math
 import os
@@ -4989,6 +4990,25 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         goal = RealDynamicObstacleAvoidancePlan._goal_for_target(
             self, pose_target
         )
+        # The continuous policy constrains flange tilt, not vertical-axis
+        # spin.  An exact quaternion goal made the constrained OMPL sampler
+        # reject otherwise valid flange-down IK states near the face.
+        pose = Pose()
+        pose.position.x, pose.position.y, pose.position.z = pose_target[
+            "position_m"
+        ]
+        (
+            pose.orientation.x,
+            pose.orientation.y,
+            pose.orientation.z,
+            pose.orientation.w,
+        ) = pose_target["orientation_quat_xyzw"]
+        for constraints in goal.request.goal_constraints:
+            constraints.orientation_constraints.clear()
+            constraints.orientation_constraints.append(
+                self._vertical_axis_constraint(pose)
+            )
+            constraints.name = "continuous_local_position_and_vertical_axis"
         state = self.latest_joint_state
         names = list(getattr(state, "name", [])) if state is not None else []
         positions = list(getattr(state, "position", [])) if state is not None else []
@@ -5016,7 +5036,31 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             constraint.tolerance_below = limit
             constraint.weight = 1.0
             goal.request.path_constraints.joint_constraints.append(constraint)
+        goal.request.allowed_planning_time = 5.0
         return goal
+
+    def _zero_velocity_recovery_start_state(self, goal: MoveGroup.Goal) -> None:
+        """Freeze a fresh live joint position with zero start velocity."""
+        state = self.latest_joint_state
+        names = list(getattr(state, "name", [])) if state is not None else []
+        positions = list(getattr(state, "position", [])) if state is not None else []
+        if not names or len(names) != len(positions):
+            raise RuntimeError("live joint state is incomplete after Servo stop")
+        if not all(math.isfinite(float(value)) for value in positions):
+            raise RuntimeError("live joint positions are invalid after Servo stop")
+        frozen = JointState()
+        frozen.header = copy.deepcopy(state.header)
+        frozen.name = [str(name) for name in names]
+        frozen.position = [float(value) for value in positions]
+        frozen.velocity = [0.0] * len(names)
+        effort = list(getattr(state, "effort", []))
+        frozen.effort = (
+            [float(value) for value in effort]
+            if len(effort) == len(names)
+            else []
+        )
+        goal.request.start_state.joint_state = frozen
+        goal.request.start_state.is_diff = True
 
     def _continuous_plan_with_fallback(
         self,
@@ -5048,7 +5092,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 ("cartesian", lambda: self._run_cartesian_plan(pose_target)),
                 (
                     "pilz",
-                    lambda: self._run_goal(
+                    lambda: self._run_continuous_recovery_goal(
                         RealPreMouthFromPerceptionPlan._goal_for_target(
                             self, pose_target
                         )
@@ -5056,7 +5100,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 ),
                 (
                     "ompl",
-                    lambda: self._run_goal(
+                    lambda: self._run_continuous_recovery_goal(
                         self._continuous_ompl_goal_for_target(pose_target)
                         if local_recovery
                         else RealDynamicObstacleAvoidancePlan._goal_for_target(
@@ -5140,13 +5184,38 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     if isinstance(item.get("recovery_motion_validation"), dict)
                     and item["recovery_motion_validation"].get("reason")
                 ),
-                (
-                    "Cartesian, Pilz, and constrained OMPL could not produce a validated local route"
-                    if local_recovery
-                    else "Cartesian, Pilz, and OMPL could not produce a validated route"
+                next(
+                    (
+                        item["plan"]["reason"]
+                        for item in reversed(attempts)
+                        if isinstance(item.get("plan"), dict)
+                        and item["plan"].get("reason")
+                    ),
+                    (
+                        "Cartesian, Pilz, and constrained OMPL could not produce a validated local route"
+                        if local_recovery
+                        else "Cartesian, Pilz, and OMPL could not produce a validated route"
+                    ),
                 ),
             ),
         }
+
+    def _run_continuous_recovery_goal(
+        self,
+        goal: MoveGroup.Goal,
+    ) -> dict[str, Any]:
+        """Plan from the verified stopped state and retain useful errors."""
+        self._zero_velocity_recovery_start_state(goal)
+        result = self._run_goal(goal)
+        if not result.get("success") and not result.get("reason"):
+            code = result.get("error_code")
+            result["reason"] = (
+                "MoveIt returned generic FAILURE (99999); inspect the "
+                "planner-specific diagnostic in the MoveGroup log"
+                if code == 99999
+                else f"MoveIt recovery planning failed with error code {code}"
+            )
+        return result
 
     def _execute_continuous_planned_trajectory(
         self,
@@ -5458,11 +5527,74 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     sink.halt()
                     self._set_continuous_servo_active(False)
                     self._continuous_motion_arbiter.release(MotionCommandOwner.SERVO)
+                    stationary = self._wait_for_tracking_replan_stationary()
+                    if not stationary.get("success"):
+                        recovery = {
+                            "reason": decision.fallback_reason,
+                            "stationary_wait": stationary,
+                            "plan": None,
+                            "execution": None,
+                        }
+                        report["recovery_attempts"].append(recovery)
+                        report["stop_reason"] = (
+                            stationary.get("reason")
+                            or "UR10e did not become stationary before continuous recovery"
+                        )
+                        break
+                    current_target = self._continuous_tracker.target(
+                        now_monotonic_sec=time.monotonic()
+                    )
+                    if not current_target.available:
+                        recovery = {
+                            "reason": decision.fallback_reason,
+                            "stationary_wait": stationary,
+                            "plan": None,
+                            "execution": None,
+                            "target_after_stop": self._continuous_target_report(
+                                current_target
+                            ),
+                        }
+                        report["recovery_attempts"].append(recovery)
+                        report["stop_reason"] = (
+                            current_target.reason
+                            or "target became unavailable before continuous recovery"
+                        )
+                        break
+                    refreshed_target = self._continuous_pose_target(
+                        current_target,
+                        standoff_m=(
+                            float(
+                                self._continuous_parameters[
+                                    "provisional_standoff_m"
+                                ]
+                            )
+                            if current_target.provisional
+                            else float(
+                                self._continuous_parameters[
+                                    "final_pre_mouth_standoff_m"
+                                ]
+                            )
+                        ),
+                    )
+                    if not refreshed_target.get("success"):
+                        recovery = {
+                            "reason": decision.fallback_reason,
+                            "stationary_wait": stationary,
+                            "plan": None,
+                            "execution": None,
+                            "target_after_stop": self._continuous_target_report(
+                                current_target
+                            ),
+                            "refreshed_target": refreshed_target,
+                        }
+                        report["recovery_attempts"].append(recovery)
+                        report["stop_reason"] = refreshed_target.get("reason")
+                        break
                     recovery_target = {
                         "frame_id": BASE_FRAME,
-                        "position_m": list(decision.desired_tool0_position_m),
+                        "position_m": list(refreshed_target["position_m"]),
                         "orientation_quat_xyzw": list(
-                            tool["orientation_quat_xyzw"]
+                            refreshed_target["orientation_quat_xyzw"]
                         ),
                     }
                     recovery_plan = self._continuous_plan_with_fallback(
@@ -5476,6 +5608,11 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         )
                     recovery = {
                         "reason": decision.fallback_reason,
+                        "stationary_wait": stationary,
+                        "target_after_stop": self._continuous_target_report(
+                            current_target
+                        ),
+                        "refreshed_target": refreshed_target,
                         "plan": recovery_plan,
                         "execution": recovery_execution,
                     }
