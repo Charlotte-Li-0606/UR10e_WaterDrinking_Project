@@ -1309,6 +1309,252 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         manager.remove.assert_called_once_with(verify=True)
         manager.destroy_node.assert_called_once_with()
 
+    @patch("scripts.real_feed_water_integrated.rclpy.spin_until_future_complete")
+    @patch("scripts.real_feed_water_integrated.PlanningSceneObstacleManager")
+    def test_new_process_clears_and_verifies_previous_session_geometry(
+        self,
+        manager_type: Mock,
+        _spin_until_complete: Mock,
+    ) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        before = {
+            "available": True,
+            "human_object_ids": ["real_human_obstacle_0_torso"],
+            "octomap": {"present": True},
+            "attached_collision_objects": [
+                {"id": "combined_camera_cup_holder_straw_collision"}
+            ],
+        }
+        after = {
+            "available": True,
+            "human_object_ids": [],
+            "octomap": {"present": False},
+            "attached_collision_objects": [
+                {"id": "combined_camera_cup_holder_straw_collision"}
+            ],
+        }
+        node._planning_scene_geometry = Mock(
+            side_effect=[(before, []), (after, [])]
+        )
+        manager = manager_type.return_value
+        manager.remove.return_value = {
+            "success": True,
+            "operation": "remove",
+            "object_ids": ["real_human_obstacle_0_torso"],
+            "verification": {"success": True, "present_object_ids": []},
+        }
+        clear_future = Mock()
+        clear_future.result.return_value = object()
+        node._clear_octomap_client = Mock()
+        node._clear_octomap_client.wait_for_service.return_value = True
+        node._clear_octomap_client.call_async.return_value = clear_future
+
+        result = node._reset_previous_session_collision_geometry()
+
+        self.assertTrue(result["success"])
+        self.assertEqual(
+            ["real_human_obstacle_0_torso"], result["removed_object_ids"]
+        )
+        self.assertTrue(result["octomap_clear_service_confirmed"])
+        self.assertFalse(result["scope"]["combined_attached_tool_removed"])
+        self.assertFalse(result["scope"]["unmanaged_world_objects_removed"])
+        manager.remove.assert_called_once_with(verify=True)
+        manager.destroy_node.assert_called_once_with()
+        node._clear_octomap_client.call_async.assert_called_once()
+
+    def test_previous_session_cleanup_runs_only_once_per_process(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._session_collision_geometry_reset_complete = False
+        node._session_collision_geometry_reset_result = None
+        successful = {
+            "success": True,
+            "performed": True,
+            "execution_sent": False,
+        }
+        node._reset_previous_session_collision_geometry = Mock(
+            return_value=successful
+        )
+
+        first = node._ensure_previous_session_collision_geometry_reset()
+        second = node._ensure_previous_session_collision_geometry_reset()
+
+        self.assertIs(successful, first)
+        self.assertIs(successful, second)
+        node._reset_previous_session_collision_geometry.assert_called_once_with()
+
+    @patch("scripts.real_feed_water_integrated.rclpy.ok", return_value=True)
+    @patch("scripts.real_feed_water_integrated.rclpy.spin_once")
+    def test_planning_scene_discovery_retries_a_transient_service_miss(
+        self,
+        spin_once: Mock,
+        _rclpy_ok: Mock,
+    ) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        available = {
+            "available": True,
+            "human_object_ids": [],
+            "octomap": {"present": False},
+        }
+        node._planning_scene_geometry = Mock(
+            side_effect=[
+                ({"available": False, "reason": "/get_planning_scene is unavailable"}, []),
+                (available, ["current_scene_object"]),
+            ]
+        )
+
+        scene, objects = node._planning_scene_geometry_with_discovery(
+            timeout_sec=0.5
+        )
+
+        self.assertTrue(scene["available"])
+        self.assertEqual(2, scene["discovery_attempts"])
+        self.assertEqual(["current_scene_object"], objects)
+        spin_once.assert_called_once()
+
+    def test_planning_scene_discovery_still_refuses_a_persistent_miss(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._planning_scene_geometry = Mock(
+            return_value=(
+                {"available": False, "reason": "/get_planning_scene is unavailable"},
+                [],
+            )
+        )
+
+        scene, objects = node._planning_scene_geometry_with_discovery(
+            timeout_sec=0.0
+        )
+
+        self.assertFalse(scene["available"])
+        self.assertEqual(1, scene["discovery_attempts"])
+        self.assertEqual([], objects)
+
+    def test_cleanup_failure_blocks_workflow_before_continuous_dispatch(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._session_collision_geometry_reset_complete = False
+        node._session_collision_geometry_reset_result = None
+        node._reset_previous_session_collision_geometry = Mock(
+            return_value={
+                "success": False,
+                "reason": "PlanningScene removal could not be verified",
+                "execution_sent": False,
+            }
+        )
+        node.run_continuous_integrated = Mock()
+
+        code, result = node.run_integrated(
+            execute=True,
+            confirm_real_motion=True,
+            allow_validated_camera_ray_execute=True,
+            no_execute=False,
+            continuous_mouth_tracking=True,
+        )
+
+        self.assertEqual(2, code)
+        self.assertEqual(
+            "previous_session_collision_geometry_reset", result["stage"]
+        )
+        self.assertFalse(result["execution_sent"])
+        node.run_continuous_integrated.assert_not_called()
+
+    def test_visible_face_rebuilds_missing_human_scene_for_return(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.mouth_sample_seconds = 0.25
+        missing_scene = {
+            "available": True,
+            "human_collision_objects_preserved": False,
+            "human_allowed_collision_pairs": [],
+        }
+        rebuilt_scene = {
+            "available": True,
+            "human_collision_objects_preserved": True,
+            "human_allowed_collision_pairs": [],
+        }
+        node._planning_scene_geometry = Mock(
+            side_effect=[(missing_scene, []), (rebuilt_scene, [])]
+        )
+        node._fresh_explicit_no_face_evidence = Mock(
+            return_value={"success": False, "explicit_no_face": False}
+        )
+        snapshot = {
+            "mouth_pose": {"available": True, "stable": True},
+            "camera_tf": {"available": True, "position_m": [0.0, 0.0, 0.0]},
+        }
+        node.snapshot = Mock(return_value=snapshot)
+        node._apply_multi_person_planning_scene = Mock(
+            return_value={
+                "success": True,
+                "object_ids": [
+                    "real_human_obstacle_0_face_safety",
+                    "real_human_obstacle_0_head",
+                    "real_human_obstacle_0_torso",
+                ],
+            }
+        )
+
+        result = node._restore_visible_human_scene_for_return()
+
+        self.assertTrue(result["success"])
+        self.assertEqual("visible_human_objects_rebuilt", result["action"])
+        self.assertFalse(result["collision_bypassed"])
+        node.snapshot.assert_called_once_with(
+            mouth_sample_sec=0.50,
+            inspect_controllers=False,
+        )
+        node._apply_multi_person_planning_scene.assert_called_once_with(snapshot)
+
+    def test_visible_face_without_stable_mouth_refuses_scene_rebuild(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.mouth_sample_seconds = 0.25
+        node._planning_scene_geometry = Mock(
+            return_value=(
+                {
+                    "available": True,
+                    "human_collision_objects_preserved": False,
+                    "human_allowed_collision_pairs": [],
+                },
+                [],
+            )
+        )
+        node._fresh_explicit_no_face_evidence = Mock(
+            return_value={"success": False, "explicit_no_face": False}
+        )
+        node.snapshot = Mock(
+            return_value={
+                "mouth_pose": {
+                    "available": False,
+                    "stable": False,
+                    "reason": "visible mouth is not stable",
+                }
+            }
+        )
+        node._apply_multi_person_planning_scene = Mock()
+
+        result = node._restore_visible_human_scene_for_return()
+
+        self.assertFalse(result["success"])
+        self.assertEqual("visible mouth is not stable", result["reason"])
+        node._apply_multi_person_planning_scene.assert_not_called()
+
+    def test_existing_human_scene_is_preserved_without_rebuild(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._planning_scene_geometry = Mock(
+            return_value=(
+                {
+                    "available": True,
+                    "human_collision_objects_preserved": True,
+                    "human_allowed_collision_pairs": [],
+                },
+                [],
+            )
+        )
+        node._fresh_explicit_no_face_evidence = Mock()
+
+        result = node._restore_visible_human_scene_for_return()
+
+        self.assertTrue(result["success"])
+        self.assertEqual("existing_human_objects_preserved", result["action"])
+        node._fresh_explicit_no_face_evidence.assert_not_called()
+
     @patch("scripts.real_feed_water_integrated.rclpy.spin_once")
     @patch("scripts.real_feed_water_integrated.rclpy.spin_until_future_complete")
     def test_continuous_scene_is_shared_with_movegroup_and_servo(

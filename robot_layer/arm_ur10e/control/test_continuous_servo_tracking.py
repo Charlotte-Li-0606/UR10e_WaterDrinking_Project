@@ -111,6 +111,15 @@ def test_mouth_motion_within_ten_centimetres_stays_in_servo():
 
 def test_target_beyond_servo_range_uses_cartesian_pilz_ompl_priority():
     controller = ContinuousServoController()
+    controller.update(
+        _target(),
+        current_tool0_position_m=_desired_tool() - np.array((0.09, 0.0, 0.0)),
+        current_tool0_orientation_xyzw=FLANGE_DOWN_XYZW,
+        camera_position_m=CAMERA_POSITION,
+        servo_status_code=0,
+        elapsed_sec=0.5,
+        dt_sec=0.02,
+    )
     decision = controller.update(
         _target(),
         current_tool0_position_m=_desired_tool() - np.array((0.13, 0.0, 0.0)),
@@ -178,7 +187,7 @@ def test_bounded_startup_envelope_enters_normal_tracking_without_pause():
 def test_startup_error_above_bounded_envelope_uses_recovery():
     decision = ContinuousServoController().update(
         _target(),
-        current_tool0_position_m=_desired_tool() - np.array((0.121, 0.0, 0.0)),
+        current_tool0_position_m=_desired_tool() - np.array((0.251, 0.0, 0.0)),
         current_tool0_orientation_xyzw=FLANGE_DOWN_XYZW,
         camera_position_m=CAMERA_POSITION,
         servo_status_code=0,
@@ -191,10 +200,27 @@ def test_startup_error_above_bounded_envelope_uses_recovery():
     assert decision.fallback_reason == "servo_startup_error_limit"
 
 
+def test_enhanced_startup_envelope_accepts_observed_205mm_gap():
+    decision = ContinuousServoController().update(
+        _target(),
+        current_tool0_position_m=_desired_tool() - np.array((0.205, 0.0, 0.0)),
+        current_tool0_orientation_xyzw=FLANGE_DOWN_XYZW,
+        camera_position_m=CAMERA_POSITION,
+        servo_status_code=0,
+        elapsed_sec=0.0,
+        dt_sec=0.02,
+    )
+
+    assert decision.command_allowed
+    assert not decision.recovery_required
+    assert abs(decision.target_error_m - 0.205) < 1.0e-9
+    assert np.linalg.norm(decision.linear_velocity_mps) <= 0.020
+
+
 def test_provisional_target_uses_large_standoff_and_reduced_speed_without_hold():
     controller = ContinuousServoController()
     target = _target(stable=False)
-    desired = _desired_tool(standoff=0.17)
+    desired = _desired_tool(standoff=0.25)
     decision = controller.update(
         target,
         current_tool0_position_m=desired - np.array((0.05, 0.0, 0.0)),

@@ -56,9 +56,9 @@ class MotionCommandArbiter:
 @dataclass(frozen=True)
 class ContinuousServoConfig:
     final_pre_mouth_standoff_m: float = 0.080
-    provisional_standoff_m: float = 0.170
+    provisional_standoff_m: float = 0.250
     servo_tracking_max_error_m: float = 0.10
-    servo_startup_max_error_m: float = 0.12
+    servo_startup_max_error_m: float = 0.25
     servo_replan_enter_m: float = 0.10
     servo_replan_exit_m: float = 0.06
     hold_entry_tolerance_m: float = 0.010
@@ -85,9 +85,9 @@ class ContinuousServoConfig:
         if not (
             self.servo_tracking_max_error_m
             <= self.servo_startup_max_error_m
-            <= 0.15
+            <= 0.30
         ):
-            raise ValueError("Servo startup envelope must be within [tracking, 0.15] m")
+            raise ValueError("Servo startup envelope must be within [tracking, 0.30] m")
         if not 0.0 < self.provisional_linear_speed_mps <= self.maximum_linear_speed_mps:
             raise ValueError("provisional speed must be positive and no greater than maximum")
         if self.maximum_linear_acceleration_mps2 <= 0.0:
@@ -272,11 +272,11 @@ class ContinuousServoController:
             self._reference_target = target.position_m.copy()
         displacement = float(np.linalg.norm(target.position_m - self._reference_target))
 
-        # The validated coarse staging pose is nominally 90 mm from the final
-        # pre-mouth pose.  A small bounded startup envelope absorbs perception
-        # refresh differences without redefining the 100 mm ongoing tracking
-        # limit.  Once the error enters the normal envelope, startup cannot be
-        # re-entered until the controller is explicitly reset for a new run.
+        # The conservative coarse staging pose remains far enough from the
+        # face for reliable RGB-D.  Its bounded startup envelope lets Servo
+        # close that initial gap at limited speed without redefining the
+        # 100 mm ongoing tracking limit.  Startup cannot be re-entered until
+        # the controller is explicitly reset for a new run.
         if displacement > self.config.servo_tracking_max_error_m:
             self._recovery_latched = True
             return self._recovery(

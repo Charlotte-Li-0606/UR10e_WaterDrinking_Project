@@ -37,6 +37,7 @@ from tf2_ros import Buffer, TransformListener
 # Inner upper lip, inner lower lip, and the two mouth corners. Using all four
 # reduces sensitivity to one noisy lip landmark.
 DEFAULT_MOUTH_LANDMARKS = (13, 14, 78, 308)
+TOOL_FRAME = "tool0"
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,66 @@ def _rotation_matrix(transform: TransformStamped) -> np.ndarray:
         ],
         dtype=np.float64,
     )
+
+
+def _displacement_scale_diagnostic(
+    *,
+    camera_translation_m: float,
+    camera_forward_m: float,
+    expected_camera_to_mouth_m: float,
+    detected_mouth_jump_m: float,
+) -> dict[str, float | None]:
+    """Describe camera motion versus a raw base-frame mouth-position jump.
+
+    These ratios are diagnostics, not calibration factors.  In particular,
+    ``expected_range_over_jump`` is the requested rough ``0.094 / 1.46``
+    comparison: it helps expose a close-range depth failure but must never be
+    used to rescale a robot target.
+    """
+    values = (
+        camera_translation_m,
+        camera_forward_m,
+        expected_camera_to_mouth_m,
+        detected_mouth_jump_m,
+    )
+    if not all(math.isfinite(float(value)) for value in values):
+        raise ValueError("displacement diagnostic inputs must be finite")
+    if (
+        min(
+            camera_translation_m,
+            expected_camera_to_mouth_m,
+            detected_mouth_jump_m,
+        )
+        < 0.0
+    ):
+        raise ValueError("displacement diagnostic magnitudes must be non-negative")
+    if detected_mouth_jump_m <= 1.0e-9:
+        return {
+            "camera_translation_m": float(camera_translation_m),
+            "camera_forward_m": float(camera_forward_m),
+            "expected_camera_to_mouth_m": float(expected_camera_to_mouth_m),
+            "detected_mouth_jump_m": float(detected_mouth_jump_m),
+            "camera_translation_over_jump": None,
+            "expected_range_over_jump": None,
+            "jump_over_expected_range": None,
+        }
+    return {
+        "camera_translation_m": float(camera_translation_m),
+        "camera_forward_m": float(camera_forward_m),
+        "expected_camera_to_mouth_m": float(expected_camera_to_mouth_m),
+        "detected_mouth_jump_m": float(detected_mouth_jump_m),
+        "camera_translation_over_jump": float(
+            camera_translation_m / detected_mouth_jump_m
+        ),
+        "expected_range_over_jump": float(
+            expected_camera_to_mouth_m / detected_mouth_jump_m
+        ),
+        "jump_over_expected_range": (
+            None
+            if expected_camera_to_mouth_m <= 1.0e-9
+            else float(detected_mouth_jump_m / expected_camera_to_mouth_m)
+        ),
+    }
 
 
 def _surface_normal_from_depth(
@@ -194,6 +255,12 @@ class MouthPerceptionNode(Node):
         self._outlier_count = 0
         self._last_face_seen_monotonic: float | None = None
         self._last_tf_mode: str | None = None
+        self._latest_camera_frame: str | None = None
+        self._latest_camera_position_base: np.ndarray | None = None
+        self._latest_camera_optical_z_base: np.ndarray | None = None
+        self._last_accepted_camera_position_base: np.ndarray | None = None
+        self._last_accepted_camera_optical_z_base: np.ndarray | None = None
+        self._last_displacement_diagnostic: dict[str, float | None] | None = None
         self._last_warning_times: dict[str, float] = {}
         self.get_logger().info(
             "Mouth perception: %s + %s + %s -> %s in %s"
@@ -223,7 +290,110 @@ class MouthPerceptionNode(Node):
         message.data = json.dumps(status, sort_keys=True)
         self._status_publisher.publish(message)
 
-    def _publish_debug(self, rgb_bgr: np.ndarray, rgb: Image, text: str, mouth_pixel: tuple[float, float] | None = None) -> None:
+    @staticmethod
+    def _format_xyz(label: str, value: Sequence[float] | None) -> str:
+        """Format one live coordinate row for the rqt debug image."""
+        if value is None or len(value) != 3:
+            return f"{label}: unavailable"
+        xyz = tuple(float(component) for component in value)
+        if not all(math.isfinite(component) for component in xyz):
+            return f"{label}: unavailable"
+        return f"{label}: ({xyz[0]:+.3f}, {xyz[1]:+.3f}, {xyz[2]:+.3f}) m"
+
+    def _debug_coordinate_lines(
+        self,
+        mouth_base_position: Sequence[float] | None,
+    ) -> list[str]:
+        """Read current TF without blocking perception and build overlay rows."""
+        lines = ["base_link origin: (+0.000, +0.000, +0.000) m"]
+        tool_transform = None
+        try:
+            tool_transform = self._tf_buffer.lookup_transform(
+                self._options.base_frame,
+                TOOL_FRAME,
+                Time(),
+                timeout=Duration(seconds=0.0),
+            )
+        except Exception:
+            pass
+        tool_position = None
+        if tool_transform is not None:
+            translation = tool_transform.transform.translation
+            tool_position = np.array(
+                [translation.x, translation.y, translation.z], dtype=np.float64
+            )
+        lines.append(self._format_xyz(f"{TOOL_FRAME} @ base_link", tool_position))
+
+        camera_position = self._latest_camera_position_base
+        if self._latest_camera_frame is not None:
+            try:
+                camera_transform = self._tf_buffer.lookup_transform(
+                    self._options.base_frame,
+                    self._latest_camera_frame,
+                    Time(),
+                    timeout=Duration(seconds=0.0),
+                )
+                camera_translation = camera_transform.transform.translation
+                camera_position = np.array(
+                    [
+                        camera_translation.x,
+                        camera_translation.y,
+                        camera_translation.z,
+                    ],
+                    dtype=np.float64,
+                )
+            except Exception:
+                pass
+        lines.append(self._format_xyz("camera @ base_link", camera_position))
+
+        mouth_base = None
+        if mouth_base_position is not None and len(mouth_base_position) == 3:
+            candidate = np.asarray(mouth_base_position, dtype=np.float64)
+            if np.all(np.isfinite(candidate)):
+                mouth_base = candidate
+        lines.append(self._format_xyz("mouth @ base_link", mouth_base))
+        mouth_tool = None
+        if (
+            mouth_base is not None
+            and tool_transform is not None
+            and tool_position is not None
+        ):
+            # base_point = R_base_tool * tool_point + base_translation.
+            mouth_tool = _rotation_matrix(tool_transform).T @ (
+                mouth_base - tool_position
+            )
+        lines.append(self._format_xyz("mouth @ tool0", mouth_tool))
+
+        if mouth_base is not None and camera_position is not None:
+            lines.append(
+                f"camera-mouth range: {np.linalg.norm(mouth_base - camera_position):.3f} m"
+            )
+        diagnostic = self._last_displacement_diagnostic
+        if diagnostic is not None:
+            lines.append(
+                "camera move/fwd: "
+                f"{1000.0 * float(diagnostic['camera_translation_m']):.1f} / "
+                f"{1000.0 * float(diagnostic['camera_forward_m']):+.1f} mm; "
+                f"mouth jump: {1000.0 * float(diagnostic['detected_mouth_jump_m']):.1f} mm"
+            )
+            ratio = diagnostic.get("expected_range_over_jump")
+            exaggeration = diagnostic.get("jump_over_expected_range")
+            if ratio is not None and exaggeration is not None:
+                lines.append(
+                    f"range/jump diagnostic: {float(ratio):.3f} "
+                    f"({float(exaggeration):.1f}x jump/range)"
+                )
+        return lines
+
+    def _publish_debug(
+        self,
+        rgb_bgr: np.ndarray,
+        rgb: Image,
+        text: str,
+        mouth_pixel: tuple[float, float] | None = None,
+        mouth_base_position: Sequence[float] | None = None,
+    ) -> None:
+        """Publish the annotated RGB frame consumed by rqt_image_view."""
         if self._debug_publisher is None:
             return
         image = rgb_bgr.copy()
@@ -231,8 +401,21 @@ class MouthPerceptionNode(Node):
             u, v = (int(round(value)) for value in mouth_pixel)
             cv2.circle(image, (u, v), 7, (0, 0, 255), 2)
             cv2.drawMarker(image, (u, v), (0, 255, 0), cv2.MARKER_CROSS, 15, 2)
-        cv2.putText(image, text, (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 0), 3)
-        cv2.putText(image, text, (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 1)
+        lines = [text, *self._debug_coordinate_lines(mouth_base_position)]
+        for index, line in enumerate(lines):
+            origin = (12, 28 + index * 22)
+            cv2.putText(
+                image, line, origin, cv2.FONT_HERSHEY_SIMPLEX, 0.52, (0, 0, 0), 3
+            )
+            cv2.putText(
+                image,
+                line,
+                origin,
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.52,
+                (255, 255, 255) if index == 0 else (0, 255, 255),
+                1,
+            )
         output = self._bridge.cv2_to_imgmsg(image, encoding="bgr8")
         output.header = rgb.header
         self._debug_publisher.publish(output)
@@ -297,6 +480,11 @@ class MouthPerceptionNode(Node):
                 return None
         translation = transform.transform.translation
         rotation = _rotation_matrix(transform)
+        self._latest_camera_frame = camera_frame
+        self._latest_camera_position_base = np.array(
+            [translation.x, translation.y, translation.z], dtype=np.float64
+        )
+        self._latest_camera_optical_z_base = rotation[:, 2].copy()
         point_base = rotation @ point_camera + np.array(
             [translation.x, translation.y, translation.z], dtype=np.float64
         )
@@ -305,9 +493,45 @@ class MouthPerceptionNode(Node):
     def _filter_position(self, candidate: np.ndarray) -> np.ndarray | None:
         if self._last_base_position is None:
             self._last_base_position = candidate
+            self._last_accepted_camera_position_base = (
+                None
+                if self._latest_camera_position_base is None
+                else self._latest_camera_position_base.copy()
+            )
+            self._last_accepted_camera_optical_z_base = (
+                None
+                if self._latest_camera_optical_z_base is None
+                else self._latest_camera_optical_z_base.copy()
+            )
+            self._last_displacement_diagnostic = None
             self._outlier_count = 0
             return candidate
         distance = float(np.linalg.norm(candidate - self._last_base_position))
+        if (
+            self._latest_camera_position_base is not None
+            and self._last_accepted_camera_position_base is not None
+        ):
+            camera_delta = (
+                self._latest_camera_position_base
+                - self._last_accepted_camera_position_base
+            )
+            optical_z = self._last_accepted_camera_optical_z_base
+            camera_forward = (
+                0.0
+                if optical_z is None
+                else float(np.dot(camera_delta, optical_z))
+            )
+            expected_range = float(
+                np.linalg.norm(
+                    self._last_base_position - self._latest_camera_position_base
+                )
+            )
+            self._last_displacement_diagnostic = _displacement_scale_diagnostic(
+                camera_translation_m=float(np.linalg.norm(camera_delta)),
+                camera_forward_m=camera_forward,
+                expected_camera_to_mouth_m=expected_range,
+                detected_mouth_jump_m=distance,
+            )
         if distance > self._options.max_jump_m and self._outlier_count < 3:
             self._outlier_count += 1
             self._warn_throttled("outlier", f"Rejecting mouth-pose jump of {distance:.3f} m")
@@ -315,6 +539,16 @@ class MouthPerceptionNode(Node):
         self._outlier_count = 0
         alpha = self._options.smoothing_alpha
         self._last_base_position = alpha * candidate + (1.0 - alpha) * self._last_base_position
+        self._last_accepted_camera_position_base = (
+            None
+            if self._latest_camera_position_base is None
+            else self._latest_camera_position_base.copy()
+        )
+        self._last_accepted_camera_optical_z_base = (
+            None
+            if self._latest_camera_optical_z_base is None
+            else self._latest_camera_optical_z_base.copy()
+        )
         return self._last_base_position
 
     def _reset_filter_state(self) -> None:
@@ -322,6 +556,9 @@ class MouthPerceptionNode(Node):
         self._last_base_position = None
         self._last_base_normal = None
         self._outlier_count = 0
+        self._last_accepted_camera_position_base = None
+        self._last_accepted_camera_optical_z_base = None
+        self._last_displacement_diagnostic = None
 
     def _filter_normal(self, candidate: np.ndarray) -> np.ndarray | None:
         magnitude = float(np.linalg.norm(candidate))
@@ -351,6 +588,11 @@ class MouthPerceptionNode(Node):
             self._status(False, "invalid_camera_intrinsics")
             self._warn_throttled("intrinsics", "CameraInfo has invalid focal lengths")
             return
+        header_camera_frame = (
+            camera_info.header.frame_id or depth.header.frame_id or rgb.header.frame_id
+        )
+        if header_camera_frame:
+            self._latest_camera_frame = header_camera_frame
 
         try:
             rgb_bgr = self._bridge.imgmsg_to_cv2(rgb, desired_encoding="bgr8")
@@ -499,6 +741,7 @@ class MouthPerceptionNode(Node):
                 rgb,
                 "Primary mouth outlier rejected",
                 (float(primary["image_x"]), float(primary["image_y"])),
+                primary["position"],
             )
             return
 
@@ -538,6 +781,7 @@ class MouthPerceptionNode(Node):
             rgb,
             f"Mouth candidates: {len(candidates)}",
             (float(primary["image_x"]), float(primary["image_y"])),
+            filtered_point,
         )
 
 

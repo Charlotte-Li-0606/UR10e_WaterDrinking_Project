@@ -9,13 +9,13 @@ continuous_mouth_tracking:
   maximum_prediction_m: 0.020
 
   final_pre_mouth_standoff_m: 0.080
-  coarse_staging_standoff_m: 0.170
-  provisional_standoff_m: 0.170
+  coarse_staging_standoff_m: 0.250
+  provisional_standoff_m: 0.250
   hold_entry_tolerance_m: 0.010
   hold_duration_sec: 5.0
 
   servo_tracking_max_error_m: 0.10
-  servo_startup_max_error_m: 0.12
+  servo_startup_max_error_m: 0.25
   servo_replan_enter_m: 0.10
   servo_replan_exit_m: 0.06
   maximum_tracking_duration_sec: 45.0

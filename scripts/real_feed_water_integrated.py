@@ -810,6 +810,11 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         self._integrated_tracking_enabled = False
         self._latest_servo_status: ServoStatus | None = None
         self._latest_servo_status_monotonic: float | None = None
+        # A fresh CLI process owns a fresh human/OctoMap scene lifecycle.  The
+        # first integrated workflow must retire the previous process's managed
+        # geometry before it can rebuild the current scene or plan any motion.
+        self._session_collision_geometry_reset_complete = False
+        self._session_collision_geometry_reset_result: dict[str, Any] | None = None
         self._state_validity_client = self.create_client(
             GetStateValidity,
             "/check_state_validity",
@@ -956,6 +961,182 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "reason": None if success else "fresh explicit no_face evidence is unavailable",
         }
 
+    def _reset_previous_session_collision_geometry(self) -> dict[str, Any]:
+        """Remove and verify only collision geometry owned by a prior session."""
+        before, _ = self._planning_scene_geometry_with_discovery()
+        report: dict[str, Any] = {
+            "success": False,
+            "performed": True,
+            "execution_sent": False,
+            "collision_bypassed": False,
+            "scope": {
+                "managed_human_world_objects": True,
+                "dynamic_octomap": True,
+                "combined_attached_tool_removed": False,
+                "unmanaged_world_objects_removed": False,
+            },
+            "planning_scene_before": before,
+        }
+        if not before.get("available"):
+            return {
+                **report,
+                "reason": before.get("reason") or "MoveIt PlanningScene is unavailable",
+            }
+
+        manager: PlanningSceneObstacleManager | None = None
+        try:
+            manager = PlanningSceneObstacleManager(
+                PlanningSceneObstacleConfig(
+                    base_frame=BASE_FRAME,
+                    mouth_topic="/detected_mouth_pose",
+                    include_table=False,
+                    service_timeout_sec=5.0,
+                    mouth_wait_timeout_sec=1.0,
+                )
+            )
+            managed_removal = manager.remove(verify=True)
+        except Exception as exc:
+            managed_removal = {
+                "success": False,
+                "reason": (
+                    "previous-session PlanningScene cleanup raised "
+                    f"{exc.__class__.__name__}: {exc}"
+                ),
+            }
+        finally:
+            if manager is not None:
+                manager.destroy_node()
+        report["managed_world_object_removal"] = managed_removal
+        if not managed_removal.get("success"):
+            return {
+                **report,
+                "reason": (
+                    managed_removal.get("reason")
+                    or "previous-session managed collision objects could not be removed"
+                ),
+            }
+
+        octomap_present = bool(before.get("octomap", {}).get("present"))
+        octomap_clear: dict[str, Any] = {
+            "success": True,
+            "required": octomap_present,
+            "attempted": False,
+            "reason": None,
+        }
+        if octomap_present:
+            clear_client = getattr(self, "_clear_octomap_client", None)
+            if clear_client is None or not clear_client.wait_for_service(timeout_sec=1.0):
+                octomap_clear.update(
+                    success=False,
+                    reason="previous dynamic OctoMap exists but /clear_octomap is unavailable",
+                )
+            else:
+                future = clear_client.call_async(Empty.Request())
+                rclpy.spin_until_future_complete(self, future, timeout_sec=2.0)
+                octomap_clear["attempted"] = True
+                if future.result() is None:
+                    octomap_clear.update(
+                        success=False,
+                        reason="previous dynamic OctoMap clear timed out",
+                    )
+        report["dynamic_octomap_clear"] = octomap_clear
+        if not octomap_clear.get("success"):
+            return {**report, "reason": octomap_clear.get("reason")}
+
+        after, _ = self._planning_scene_geometry_with_discovery()
+        report["planning_scene_after"] = after
+        if not after.get("available"):
+            return {
+                **report,
+                "reason": after.get("reason") or "PlanningScene cleanup could not be verified",
+            }
+        remaining_human_ids = list(after.get("human_object_ids", []))
+        report["remaining_managed_human_object_ids"] = remaining_human_ids
+        if remaining_human_ids:
+            return {
+                **report,
+                "reason": "previous-session human collision objects remain after cleanup",
+            }
+
+        return {
+            **report,
+            "success": True,
+            "reason": None,
+            "removed_object_ids": list(managed_removal.get("object_ids", [])),
+            "octomap_was_present": octomap_present,
+            "octomap_clear_service_confirmed": bool(
+                not octomap_present or octomap_clear.get("attempted")
+            ),
+            "current_scene_rebuild_required_before_motion": True,
+        }
+
+    def _planning_scene_geometry_with_discovery(
+        self,
+        *,
+        timeout_sec: float = 4.0,
+    ) -> tuple[dict[str, Any], list[Any]]:
+        """Bound fresh-node discovery before declaring PlanningScene unavailable."""
+        started = time.monotonic()
+        deadline = started + max(0.0, float(timeout_sec))
+        attempts = 0
+        last_scene: dict[str, Any] = {
+            "available": False,
+            "reason": "PlanningScene discovery has not been attempted",
+        }
+        last_objects: list[Any] = []
+        while True:
+            attempts += 1
+            last_scene, last_objects = self._planning_scene_geometry()
+            if last_scene.get("available"):
+                return (
+                    {
+                        **last_scene,
+                        "discovery_attempts": attempts,
+                        "discovery_elapsed_sec": time.monotonic() - started,
+                    },
+                    last_objects,
+                )
+            remaining = deadline - time.monotonic()
+            if remaining <= 0.0 or not rclpy.ok():
+                break
+            # Let Fast DDS process graph updates for this newly created node,
+            # then retry the service query.  No ROS action or motion command is
+            # issued during discovery.
+            rclpy.spin_once(self, timeout_sec=min(0.10, remaining))
+        return (
+            {
+                **last_scene,
+                "available": False,
+                "discovery_attempts": attempts,
+                "discovery_elapsed_sec": time.monotonic() - started,
+                "discovery_timeout_sec": max(0.0, float(timeout_sec)),
+                "reason": (
+                    last_scene.get("reason")
+                    or "MoveIt PlanningScene remained unavailable after bounded discovery"
+                ),
+            },
+            last_objects,
+        )
+
+    def _ensure_previous_session_collision_geometry_reset(self) -> dict[str, Any]:
+        """Run the previous-session cleanup exactly once for a fresh process."""
+        # Instances constructed normally always define this flag as False.
+        # Treat its absence as already reset for narrow unit-test fixtures that
+        # intentionally allocate the class with __new__ and no ROS services.
+        if getattr(self, "_session_collision_geometry_reset_complete", True):
+            cached = getattr(self, "_session_collision_geometry_reset_result", None)
+            return cached or {
+                "success": True,
+                "performed": False,
+                "reason": "previous-session collision geometry was already reset",
+                "execution_sent": False,
+                "collision_bypassed": False,
+            }
+        result = self._reset_previous_session_collision_geometry()
+        self._session_collision_geometry_reset_result = result
+        self._session_collision_geometry_reset_complete = bool(result.get("success"))
+        return result
+
     def _retire_stale_human_scene_for_empty_view(self) -> dict[str, Any]:
         """Remove only prior-session human objects after fresh no-face evidence."""
         # Fast DDS graph discovery on the real stack can take just over two
@@ -1014,6 +1195,87 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "removal": removal,
             "execution_sent": False,
             "collision_bypassed": False,
+        }
+
+    def _restore_visible_human_scene_for_return(self) -> dict[str, Any]:
+        """Rebuild missing human geometry before a return when a face is visible."""
+        scene_before, _ = self._planning_scene_geometry()
+        base: dict[str, Any] = {
+            "success": False,
+            "execution_sent": False,
+            "collision_bypassed": False,
+            "planning_scene_before": scene_before,
+        }
+        if not scene_before.get("available"):
+            return {
+                **base,
+                "reason": (
+                    scene_before.get("reason")
+                    or "MoveIt PlanningScene is unavailable for human-scene reconciliation"
+                ),
+            }
+        if scene_before.get("human_collision_objects_preserved"):
+            return {
+                **base,
+                "success": True,
+                "action": "existing_human_objects_preserved",
+                "reason": None,
+            }
+
+        empty_view = self._fresh_explicit_no_face_evidence()
+        base["empty_view_evidence"] = empty_view
+        if empty_view.get("success"):
+            return {
+                **base,
+                "success": True,
+                "action": "verified_empty_view_kept_without_human_objects",
+                "reason": None,
+            }
+
+        # A visible face after an earlier no-face cleanup is a normal scene
+        # transition.  Rebuild the deterministic objects from a fresh stable
+        # mouth window instead of either ignoring the person or deadlocking
+        # the guarded return on missing prior-session geometry.
+        snapshot = self.snapshot(
+            mouth_sample_sec=max(0.50, self.mouth_sample_seconds),
+            inspect_controllers=False,
+        )
+        base["visible_view_snapshot"] = snapshot
+        mouth = snapshot.get("mouth_pose", {})
+        if not mouth.get("available") or not mouth.get("stable"):
+            return {
+                **base,
+                "reason": (
+                    mouth.get("reason")
+                    or "a stable visible mouth is unavailable for return-scene reconstruction"
+                ),
+            }
+        application = self._apply_multi_person_planning_scene(snapshot)
+        base["planning_scene_application"] = application
+        if not application.get("success"):
+            return {
+                **base,
+                "reason": (
+                    application.get("reason")
+                    or "visible human collision geometry could not be reconstructed"
+                ),
+            }
+        scene_after, _ = self._planning_scene_geometry()
+        base["planning_scene_after"] = scene_after
+        success = bool(
+            scene_after.get("available")
+            and scene_after.get("human_collision_objects_preserved")
+            and not scene_after.get("human_allowed_collision_pairs")
+        )
+        return {
+            **base,
+            "success": success,
+            "action": "visible_human_objects_rebuilt" if success else None,
+            "reason": (
+                None
+                if success
+                else "reconstructed human collision geometry was not verified in MoveIt"
+            ),
         }
 
     def _synchronize_servo_planning_scene(self) -> dict[str, Any]:
@@ -1953,6 +2215,27 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             )
             return 2, response
         combined = self._apply_combined_tool_collision_geometry()
+        human_scene = (
+            self._restore_visible_human_scene_for_return()
+            if execute
+            else {
+                "success": True,
+                "action": "plan_only_scene_mutation_deferred",
+                "execution_sent": False,
+                "collision_bypassed": False,
+                "reason": None,
+            }
+        )
+        response["human_scene_reconciliation"] = human_scene
+        if not human_scene.get("success"):
+            response.update(
+                stage="return_human_scene_reconciliation_refused",
+                reason=(
+                    human_scene.get("reason")
+                    or "human collision scene could not be reconciled for return"
+                ),
+            )
+            return 2, response
         dynamic = (
             self.dynamic_readiness(execution_mode=True if execute else None)
             if use_octomap
@@ -5543,6 +5826,22 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         use_octomap: bool = False,
         hold_duration_sec: float = DEFAULT_PREMOUTH_HOLD_SEC,
     ) -> tuple[int, dict[str, Any]]:
+        session_scene_reset = (
+            self._ensure_previous_session_collision_geometry_reset()
+        )
+        if not session_scene_reset.get("success"):
+            return 2, {
+                "success": False,
+                "mode": "execute" if execute else "plan",
+                "stage": "previous_session_collision_geometry_reset",
+                "reason": (
+                    session_scene_reset.get("reason")
+                    or "previous-session collision geometry could not be reset"
+                ),
+                "previous_session_collision_geometry_reset": session_scene_reset,
+                "execution_attempted": False,
+                "execution_sent": False,
+            }
         if continuous_mouth_tracking:
             if track_mouth_during_execution:
                 return 2, {
@@ -5551,10 +5850,11 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     "reason": (
                         "continuous and segmented tracking modes are mutually exclusive"
                     ),
+                    "previous_session_collision_geometry_reset": session_scene_reset,
                     "execution_attempted": False,
                     "execution_sent": False,
                 }
-            return self.run_continuous_integrated(
+            code, result = self.run_continuous_integrated(
                 execute=execute,
                 confirm_real_motion=confirm_real_motion,
                 allow_validated_camera_ray_execute=(
@@ -5564,7 +5864,10 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 hold_duration_sec=hold_duration_sec,
                 use_octomap=use_octomap,
             )
+            result["previous_session_collision_geometry_reset"] = session_scene_reset
+            return code, result
         contract = {
+            "previous_session_collision_geometry_reset": session_scene_reset,
             "multi_target_identity_lock": True,
             "target_selection": self.target_selection,
             "active_search": True,

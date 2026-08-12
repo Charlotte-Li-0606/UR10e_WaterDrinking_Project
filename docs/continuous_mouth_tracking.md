@@ -14,7 +14,7 @@ loop.
    outbound command; the existing active-search path may run.
 4. Preserve the fixed human and attached tool collision objects. The dynamic
    OctoMap layer is disabled by default.
-5. Plan a conservative 170 mm coarse staging pose on the calibrated camera ray.
+5. Plan a conservative 250 mm coarse staging pose on the calibrated camera ray.
    Recovery priority is Cartesian, Pilz, then OMPL.
 6. Use MoveIt Servo Twist commands continuously from staging through the 80 mm
    pre-mouth hold. Commands are bounded and filtered; raw MediaPipe points are
@@ -32,9 +32,9 @@ vertical tool axis remains free. It never commands `wrist_3_joint` directly.
 Parameters are in `config/continuous_mouth_tracking.yaml`. Important defaults:
 
 - acquisition timeout: 3.0 s;
-- final/provisional standoff: 80/170 mm;
+- final/provisional standoff: 80/250 mm;
 - Servo recovery hysteresis: enter at 100 mm, exit at 60 mm;
-- bounded staging-to-Servo startup envelope: 120 mm, used only until the
+- bounded staging-to-Servo startup envelope: 250 mm, used only until the
   initial tool error enters the normal 100 mm tracking envelope;
 - maximum linear speed: 20 mm/s (10 mm/s while provisional);
 - maximum linear acceleration: 0.10 m/s²;
