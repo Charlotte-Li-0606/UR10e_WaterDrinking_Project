@@ -2,11 +2,10 @@
 """Real-only ``feed_water`` adapter for the integrated guarded pipeline.
 
 This module deliberately contains no perception projection, target geometry,
-MoveIt planning, trajectory, joint, controller, cup-tilt, or pour logic.
-Frozen-target and legacy segmented calls retain the established integrated
-runner. Explicit continuous-tracking calls select the preserved base-Y backup
-through an isolated adapter, leaving the camera-ray implementation unchanged.
-Both integrated processes retain the guarded checks and fixed return.
+MoveIt planning, trajectory, joint, controller, cup-tilt, or pour logic. It
+invokes the active ``scripts/real_feed_water_integrated.py`` implementation for
+every original execution mode, including explicit continuous camera-ray
+tracking. The separately preserved base-Y backup is never selected here.
 """
 
 from __future__ import annotations
@@ -24,9 +23,6 @@ from typing import Any, Mapping
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 REAL_FEED_WATER_SCRIPT = PROJECT_ROOT / "scripts/real_feed_water_integrated.py"
-CONTINUOUS_BASE_Y_BACKUP_SCRIPT = (
-    PROJECT_ROOT / "scripts/real_feed_water_integrated_base_y_backup.py"
-)
 REPORT_DIR = PROJECT_ROOT / "reports"
 
 REAL_BACKEND = "real"
@@ -84,14 +80,9 @@ def _pipeline_command(
     continuous_mouth_tracking: bool = False,
     use_octomap: bool = False,
 ) -> list[str]:
-    pipeline_script = (
-        CONTINUOUS_BASE_Y_BACKUP_SCRIPT
-        if continuous_mouth_tracking
-        else REAL_FEED_WATER_SCRIPT
-    )
     command = [
         sys.executable,
-        str(pipeline_script),
+        str(REAL_FEED_WATER_SCRIPT),
         "--execute" if execute else "--plan-only",
         "--target-selection",
         target_selection,

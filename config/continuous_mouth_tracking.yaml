@@ -29,6 +29,9 @@ continuous_mouth_tracking:
   standoff_final_tolerance_m: 0.001
   maximum_tracking_duration_sec: 45.0
   state_validity_check_period_sec: 0.10
+  # Match the active MoveIt Servo publish period (0.004 s). Perception may
+  # update more slowly; the controller always reuses only its newest target.
+  control_rate_hz: 250.0
   maximum_linear_speed_mps: 0.020
   provisional_linear_speed_mps: 0.010
   maximum_linear_acceleration_mps2: 0.10

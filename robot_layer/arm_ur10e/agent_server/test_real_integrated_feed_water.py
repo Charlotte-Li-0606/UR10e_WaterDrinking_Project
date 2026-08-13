@@ -7,6 +7,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import numpy as np
+
 from moveit_msgs.action import MoveGroup
 from moveit_msgs.msg import (
     AttachedCollisionObject,
@@ -59,11 +61,65 @@ from scripts.real_premouth_from_perception_plan import (
     _tool_vertical_tilt_rad,
 )
 from robot_layer.arm_ur10e.perception.continuous_mouth_tracker import (
+    ContinuousMouthTarget,
     ContinuousMouthTracker,
+    ContinuousTrackingState,
 )
 
 
 class RealIntegratedFeedWaterTest(unittest.TestCase):
+    def test_continuous_pose_target_executes_camera_ray_margin_branch(self) -> None:
+        """Exercise the live-target branch that plan-only cannot reach without a face."""
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._continuous_parameters = {"maximum_tool_radius_m": 1.30}
+        node._tool0_pose = Mock(
+            return_value={
+                "available": True,
+                "position_m": [-0.30, 0.15, 0.80],
+                "orientation_quat_xyzw": [1.0, 0.0, 0.0, 0.0],
+            }
+        )
+        node._frame_transform = Mock(
+            side_effect=lambda parent, child: (
+                {
+                    "available": True,
+                    "position_m": [-0.31, 0.22, 0.78],
+                }
+                if child == "d435i_color_optical_frame"
+                else {
+                    "available": True,
+                    "position_m": [0.0, 0.0, 0.0],
+                    "orientation_quat_xyzw": [0.0, 0.0, 0.0, 1.0],
+                }
+            )
+        )
+        node._point_in_ur_base = Mock(side_effect=lambda point, transform: point)
+        position = np.asarray((-0.95, 0.25, 0.65), dtype=np.float64)
+        target = ContinuousMouthTarget(
+            available=True,
+            position_m=position,
+            predicted_position_m=position,
+            velocity_mps=np.zeros(3),
+            source_timestamp_sec=1.0,
+            age_sec=0.01,
+            confidence=1.0,
+            target_id="center",
+            state=ContinuousTrackingState.STABLE_TARGET,
+            provisional=False,
+            stable=True,
+            sample_count=3,
+            spread_m=0.001,
+            prediction_m=0.0,
+            reason=None,
+        )
+
+        result = node._continuous_pose_target(target, standoff_m=0.25)
+
+        self.assertTrue(result["success"], result)
+        straw_tip = np.asarray(result["straw_tip_position_m"], dtype=np.float64)
+        self.assertAlmostEqual(0.25, float(np.linalg.norm(position - straw_tip)))
+        self.assertEqual(0.25, result["requested_standoff_m"])
+
     def test_approach_lateral_sign_relationship_rejects_opposite_motion(self) -> None:
         relationship = _approach_lateral_sign_relationship(
             image_x_delta_px=10.0,

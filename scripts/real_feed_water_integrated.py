@@ -78,6 +78,7 @@ from robot_layer.arm_ur10e.control.ros_servo_backend import RosServoCommandSink 
 from robot_layer.arm_ur10e.control.continuous_servo_tracking import (  # noqa: E402
     ContinuousServoConfig,
     ContinuousServoController,
+    MINIMUM_CAMERA_RAY_FORWARD_MARGIN_M,
     MotionCommandArbiter,
     MotionCommandOwner,
     camera_ray_premouth_target,
@@ -266,6 +267,9 @@ def _load_continuous_tracking_config() -> dict[str, Any]:
         raise RuntimeError("standoff progress error is outside the local tracking range")
     if not 0.0 < standoff_final_tolerance <= 0.01:
         raise RuntimeError("standoff final tolerance must be within (0, 0.01] m")
+    control_rate_hz = float(values.get("control_rate_hz", 0.0))
+    if not 10.0 <= control_rate_hz <= 250.0:
+        raise RuntimeError("control_rate_hz must remain within [10, 250] Hz")
     return dict(values)
 
 
@@ -5820,10 +5824,30 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         stale_target_hold_active = False
         report["state_validity_check_period_sec"] = validity_period_sec
         report["state_validity_check_count"] = 1
+        control_period_sec = 1.0 / float(
+            self._continuous_parameters["control_rate_hz"]
+        )
+        next_control_monotonic = started
+        report["control_rate_hz"] = float(
+            self._continuous_parameters["control_rate_hz"]
+        )
         try:
             while rclpy.ok():
-                rclpy.spin_once(self, timeout_sec=0.05)
+                wait_sec = max(
+                    0.0,
+                    min(
+                        control_period_sec,
+                        next_control_monotonic - time.monotonic(),
+                    ),
+                )
+                rclpy.spin_once(self, timeout_sec=wait_sec)
                 now = time.monotonic()
+                if now < next_control_monotonic:
+                    continue
+                next_control_monotonic += control_period_sec
+                if next_control_monotonic < now:
+                    # Do not replay missed cycles or accumulate commands.
+                    next_control_monotonic = now + control_period_sec
                 live_failure = self._live_ur_execution_state_failure()
                 if live_failure is not None:
                     report["stop_reason"] = live_failure
