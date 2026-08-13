@@ -2,14 +2,11 @@
 """Real-only ``feed_water`` adapter for the integrated guarded pipeline.
 
 This module deliberately contains no perception projection, target geometry,
-MoveIt planning, trajectory, joint, controller, cup-tilt, or pour logic.  It
-invokes ``scripts/real_feed_water_integrated.py``.  That real-only state
-machine retains selected-person identity, performs bounded active search with
-vertical tool-axis alignment and free tool-axis spin when needed,
-freezes the camera-ray 50 mm pre-mouth target, and uses the wrist OctoMap for
-same-target alternate-path replanning.  The integrated process performs the
-motionless pre-mouth dwell and the guarded return to its fixed configured
-initial position so all ROS state and MoveIt checks remain in one process.
+MoveIt planning, trajectory, joint, controller, cup-tilt, or pour logic.
+Frozen-target and legacy segmented calls retain the established integrated
+runner. Explicit continuous-tracking calls select the preserved base-Y backup
+through an isolated adapter, leaving the camera-ray implementation unchanged.
+Both integrated processes retain the guarded checks and fixed return.
 """
 
 from __future__ import annotations
@@ -27,6 +24,9 @@ from typing import Any, Mapping
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 REAL_FEED_WATER_SCRIPT = PROJECT_ROOT / "scripts/real_feed_water_integrated.py"
+CONTINUOUS_BASE_Y_BACKUP_SCRIPT = (
+    PROJECT_ROOT / "scripts/real_feed_water_integrated_base_y_backup.py"
+)
 REPORT_DIR = PROJECT_ROOT / "reports"
 
 REAL_BACKEND = "real"
@@ -84,9 +84,14 @@ def _pipeline_command(
     continuous_mouth_tracking: bool = False,
     use_octomap: bool = False,
 ) -> list[str]:
+    pipeline_script = (
+        CONTINUOUS_BASE_Y_BACKUP_SCRIPT
+        if continuous_mouth_tracking
+        else REAL_FEED_WATER_SCRIPT
+    )
     command = [
         sys.executable,
-        str(REAL_FEED_WATER_SCRIPT),
+        str(pipeline_script),
         "--execute" if execute else "--plan-only",
         "--target-selection",
         target_selection,

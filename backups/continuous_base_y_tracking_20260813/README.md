@@ -1,10 +1,12 @@
-# Disabled continuous base-Y tracking backup
+# Active continuous base-Y tracking backup
 
-This directory is an inert source snapshot retained at the user's request.
-Nothing under this directory is imported, installed, launched, or selected by
-the active guarded feed-water entry point.
+This preserved source snapshot is selected only for explicit continuous mouth
+tracking requests. The guarded real-backend router launches it through
+`scripts/real_feed_water_integrated_base_y_backup.py`, which loads the backup
+controller, tracker, runner, and configuration in an isolated child process.
 
-The active project remains on the established camera-ray execution policy.
-To evaluate this backup in the future, first copy it to a separate development
-branch and perform no-motion validation. Do not run these files directly on the
-robot.
+The established camera-ray implementation remains byte-for-byte untouched and
+is not selected for continuous tracking. Frozen-target and legacy segmented
+modes continue to use their established runner. Do not run backup files
+directly; use the canonical guarded Codex entry point so all authorization and
+runtime gates remain active.

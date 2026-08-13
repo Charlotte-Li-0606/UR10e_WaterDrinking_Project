@@ -13,6 +13,28 @@ from robot_layer.arm_ur10e.agent_server import real_feed_water_backend as backen
 
 
 class RealFeedWaterBackendTest(unittest.TestCase):
+    def test_continuous_tracking_selects_preserved_base_y_backup(self) -> None:
+        command = backend._pipeline_command(
+            execute=False,
+            report_path=Path("/tmp/plan.json"),
+            target_selection="center",
+            hold_duration_sec=5.0,
+            continuous_mouth_tracking=True,
+        )
+
+        self.assertEqual(str(backend.CONTINUOUS_BASE_Y_BACKUP_SCRIPT), command[1])
+        self.assertIn("--continuous-mouth-tracking", command)
+
+    def test_non_continuous_modes_retain_untouched_current_runner(self) -> None:
+        command = backend._pipeline_command(
+            execute=False,
+            report_path=Path("/tmp/plan.json"),
+            target_selection="center",
+            hold_duration_sec=5.0,
+        )
+
+        self.assertEqual(str(backend.REAL_FEED_WATER_SCRIPT), command[1])
+
     def test_missing_pipeline_report_preserves_bounded_stderr(self) -> None:
         completed = subprocess.CompletedProcess(
             ["pipeline"],
