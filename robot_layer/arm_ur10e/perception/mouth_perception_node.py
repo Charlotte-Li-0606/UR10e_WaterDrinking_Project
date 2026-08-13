@@ -399,20 +399,34 @@ class MouthPerceptionNode(Node):
         image = rgb_bgr.copy()
         if mouth_pixel is not None:
             u, v = (int(round(value)) for value in mouth_pixel)
-            cv2.circle(image, (u, v), 7, (0, 0, 255), 2)
-            cv2.drawMarker(image, (u, v), (0, 255, 0), cv2.MARKER_CROSS, 15, 2)
+            cv2.circle(image, (u, v), 4, (0, 0, 255), 1)
+            cv2.drawMarker(image, (u, v), (0, 255, 0), cv2.MARKER_CROSS, 9, 1)
         lines = [text, *self._debug_coordinate_lines(mouth_base_position)]
+        # Keep the diagnostic overlay readable without covering most of a
+        # reduced-resolution camera preview.  At 640x480 this stays close to
+        # the original size; smaller streams use a compact font and spacing.
+        frame_scale = min(image.shape[1] / 640.0, image.shape[0] / 480.0)
+        font_scale = max(0.30, min(0.48, 0.52 * frame_scale))
+        line_step = max(14, min(20, int(round(22 * frame_scale))))
+        left_margin = max(6, int(round(12 * frame_scale)))
+        top_margin = max(15, int(round(28 * frame_scale)))
         for index, line in enumerate(lines):
-            origin = (12, 28 + index * 22)
+            origin = (left_margin, top_margin + index * line_step)
             cv2.putText(
-                image, line, origin, cv2.FONT_HERSHEY_SIMPLEX, 0.52, (0, 0, 0), 3
+                image,
+                line,
+                origin,
+                cv2.FONT_HERSHEY_SIMPLEX,
+                font_scale,
+                (0, 0, 0),
+                2,
             )
             cv2.putText(
                 image,
                 line,
                 origin,
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.52,
+                font_scale,
                 (255, 255, 255) if index == 0 else (0, 255, 255),
                 1,
             )
