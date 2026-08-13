@@ -631,7 +631,12 @@ class RealPreMouthFromPerceptionPlan(Node):
             self._robot_mode_callback,
             latched_robot_state_qos,
         )
-        self.create_subscription(String, MOUTH_CANDIDATES_TOPIC, self._mouth_candidates_callback, 20)
+        self._mouth_candidates_subscription = self.create_subscription(
+            String,
+            MOUTH_CANDIDATES_TOPIC,
+            self._mouth_candidates_callback,
+            20,
+        )
         self.create_subscription(String, MOUTH_STATUS_TOPIC, self._mouth_status_callback, 20)
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self, spin_thread=False)

@@ -16,7 +16,7 @@ from moveit_msgs.msg import (
     RobotState,
     RobotTrajectory,
 )
-from sensor_msgs.msg import JointState
+from sensor_msgs.msg import CameraInfo, JointState
 from trajectory_msgs.msg import JointTrajectoryPoint
 
 from robot_layer.arm_ur10e.agent_server import real_feed_water_backend as backend
@@ -39,7 +39,10 @@ from scripts.real_feed_water_integrated import (
     RealIntegratedFeedWater,
     _bounded_tracking_segment_target,
     _active_search_cloud_gate_failures,
+    _approach_pixel_depth_to_base,
+    _approach_lateral_sign_relationship,
     _compare_final_state_validity,
+    _continuous_stale_hold_policy,
     _load_initial_position_config,
     _orientation_after_local_tool_z_rotation,
     _recorded_tool_pose_in_base_link,
@@ -55,9 +58,92 @@ from scripts.real_premouth_from_perception_plan import (
     _execution_target_verification,
     _tool_vertical_tilt_rad,
 )
+from robot_layer.arm_ur10e.perception.continuous_mouth_tracker import (
+    ContinuousMouthTracker,
+)
 
 
 class RealIntegratedFeedWaterTest(unittest.TestCase):
+    def test_approach_lateral_sign_relationship_rejects_opposite_motion(self) -> None:
+        relationship = _approach_lateral_sign_relationship(
+            image_x_delta_px=10.0,
+            previous_base_y_m=0.30,
+            corrected_base_y_m=0.295,
+            previous_base_y_per_horizontal_pixel_mm=0.4,
+            base_y_per_horizontal_pixel_mm=0.4,
+        )
+
+        self.assertAlmostEqual(0.004, relationship["horizontal_pixel_contribution_base_y_m"])
+        self.assertAlmostEqual(-0.005, relationship["corrected_base_y_delta_m"])
+        self.assertTrue(relationship["sign_evidence_available"])
+        self.assertFalse(relationship["sign_consistent"])
+
+    def test_approach_lateral_scale_preserves_image_motion_sign(self) -> None:
+        relationship = _approach_lateral_sign_relationship(
+            image_x_delta_px=12.5,
+            previous_base_y_m=0.30,
+            corrected_base_y_m=0.305,
+            previous_base_y_per_horizontal_pixel_mm=0.4,
+            base_y_per_horizontal_pixel_mm=0.4,
+        )
+
+        self.assertAlmostEqual(0.005, relationship["horizontal_pixel_contribution_base_y_m"])
+        self.assertTrue(relationship["sign_consistent"])
+
+    def test_approach_pixel_scale_uses_depth_intrinsics_and_camera_rotation(self) -> None:
+        info = CameraInfo()
+        info.width = 640
+        info.height = 480
+        info.k = [605.6115, 0.0, 322.4243, 0.0, 605.3865, 246.4957, 0.0, 0.0, 1.0]
+        # Camera optical +X contributes +0.99 to base Y, matching the live
+        # wrist-camera orientation observed during the diagnosed run.
+        half = math.pi / 4.0
+        result = _approach_pixel_depth_to_base(
+            image_x=322.4243,
+            image_y=246.4957,
+            depth_m=0.245,
+            camera_info=info,
+            camera_position_base_m=[0.0, 0.0, 0.0],
+            camera_orientation_base_xyzw=[0.0, 0.0, math.sin(half), math.cos(half)],
+        )
+
+        self.assertAlmostEqual(
+            1000.0 * 0.245 / 605.6115,
+            result["base_y_per_horizontal_pixel_mm"],
+            places=6,
+        )
+        self.assertAlmostEqual(0.245, result["position_m"][2], places=6)
+
+    def test_approach_reprojection_maps_pixel_delta_to_base_y(self) -> None:
+        info = CameraInfo()
+        info.width = 640
+        info.height = 480
+        info.k = [600.0, 0.0, 320.0, 0.0, 600.0, 240.0, 0.0, 0.0, 1.0]
+        half = math.pi / 4.0
+        orientation = [0.0, 0.0, math.sin(half), math.cos(half)]
+        first = _approach_pixel_depth_to_base(
+            image_x=320.0,
+            image_y=240.0,
+            depth_m=0.24,
+            camera_info=info,
+            camera_position_base_m=[0.0, 0.0, 0.0],
+            camera_orientation_base_xyzw=orientation,
+        )
+        moved = _approach_pixel_depth_to_base(
+            image_x=332.5,
+            image_y=240.0,
+            depth_m=0.24,
+            camera_info=info,
+            camera_position_base_m=[0.0, 0.0, 0.0],
+            camera_orientation_base_xyzw=orientation,
+        )
+
+        self.assertAlmostEqual(
+            0.005,
+            moved["position_m"][1] - first["position_m"][1],
+            places=6,
+        )
+
     @staticmethod
     def _cloud_frame(sequence: int, point_count: int) -> dict[str, object]:
         return {
@@ -137,6 +223,36 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             ["raw or filtered wrist point cloud became stale before search motion"],
             failures,
         )
+
+    def test_visible_face_invalid_depth_uses_stationary_depth_reacquisition(self) -> None:
+        policy = _continuous_stale_hold_policy(
+            {
+                "detected": False,
+                "detected_faces": 1,
+                "reason": "invalid_depth",
+                "valid_depth_samples": 0,
+            },
+            lost_target_timeout_sec=1.0,
+            depth_reacquisition_timeout_sec=2.0,
+        )
+
+        self.assertEqual("DEPTH_TEMPORARILY_INVALID", policy["state"])
+        self.assertEqual(2.0, policy["timeout_sec"])
+        self.assertEqual("depth_reacquisition_timeout", policy["timeout_reason"])
+        self.assertTrue(policy["face_visible"])
+        self.assertFalse(policy["depth_valid"])
+
+    def test_no_face_uses_shorter_face_loss_timeout(self) -> None:
+        policy = _continuous_stale_hold_policy(
+            {"detected": False, "reason": "no_face"},
+            lost_target_timeout_sec=1.0,
+            depth_reacquisition_timeout_sec=2.0,
+        )
+
+        self.assertEqual("FACE_LOST_HOLD", policy["state"])
+        self.assertEqual(1.0, policy["timeout_sec"])
+        self.assertEqual("face_lost_timeout", policy["timeout_reason"])
+        self.assertFalse(policy["face_visible"])
 
     def test_octomap_rebuild_reports_actual_final_state_validity_change(self) -> None:
         comparison = _compare_final_state_validity(
@@ -1319,6 +1435,26 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         node._execution_state_failures.assert_called_once_with(
             confirm_real_motion=True
         )
+
+    def test_servo_handoff_does_not_require_stable_target(self) -> None:
+        """A one-frame corrected target must be usable immediately."""
+        tracker = ContinuousMouthTracker(stable_sample_count=3)
+        tracker.reset(searching=True)
+        accepted, reason = tracker.add_observation(
+            [-1.0, 0.2, 0.6],
+            source_timestamp_sec=100.0,
+            received_monotonic_sec=10.0,
+            depth_m=0.25,
+            confidence=1.0,
+        )
+
+        target = tracker.target(now_monotonic_sec=10.01)
+
+        self.assertTrue(accepted, reason)
+        self.assertTrue(target.available)
+        self.assertTrue(target.provisional)
+        self.assertFalse(target.stable)
+        self.assertEqual("PROVISIONAL_TARGET", target.state.value)
 
     def test_event_driven_servo_status_does_not_expire_by_message_age(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)

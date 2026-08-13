@@ -79,7 +79,7 @@ from robot_layer.arm_ur10e.control.continuous_servo_tracking import (  # noqa: E
     ContinuousServoController,
     MotionCommandArbiter,
     MotionCommandOwner,
-    camera_ray_premouth_target,
+    base_y_premouth_target,
     octomap_layer_status,
 )
 from robot_layer.arm_ur10e.agent_tools.planning_scene_manager import (  # noqa: E402
@@ -265,6 +265,30 @@ def _load_continuous_tracking_config() -> dict[str, Any]:
         raise RuntimeError("standoff progress error is outside the local tracking range")
     if not 0.0 < standoff_final_tolerance <= 0.01:
         raise RuntimeError("standoff final tolerance must be within (0, 0.01] m")
+    control_rate = float(values.get("control_rate_hz", 0.0))
+    diagnostic_rate = float(values.get("diagnostic_rate_hz", 0.0))
+    if not 10.0 <= control_rate <= 250.0:
+        raise RuntimeError("control_rate_hz must remain within [10, 250] Hz")
+    if not 0.1 <= diagnostic_rate <= 10.0:
+        raise RuntimeError("diagnostic_rate_hz must remain within [0.1, 10] Hz")
+    maximum_speed = float(values["maximum_linear_speed_mps"])
+    y_speed = float(values.get("y_approach_speed_mps", 0.0))
+    if not 0.0 < y_speed <= maximum_speed:
+        raise RuntimeError("Y approach speed must not exceed the real linear speed")
+    gains = [float(values.get(name, 0.0)) for name in (
+        "x_control_gain", "y_control_gain", "z_control_gain"
+    )]
+    if not all(math.isfinite(gain) and gain > 0.0 for gain in gains):
+        raise RuntimeError("continuous Cartesian control gains must be positive")
+    approach = values.get("approach_direction_base")
+    if not isinstance(approach, list) or len(approach) != 3 or not all(
+        math.isfinite(float(value)) for value in approach
+    ) or not np.allclose(approach, (0.0, -1.0, 0.0), atol=1.0e-9):
+        raise RuntimeError("approach_direction_base must retain validated base_link -Y")
+    alpha_min = float(values.get("filter_min_alpha", 0.0))
+    alpha_max = float(values.get("filter_max_alpha", 0.0))
+    if not 0.0 < alpha_min <= alpha_max <= 1.0:
+        raise RuntimeError("continuous filter alpha limits are invalid")
     return dict(values)
 
 
@@ -1037,6 +1061,13 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             maximum_prediction_m=float(continuous["maximum_prediction_m"]),
             minimum_depth_m=float(continuous["minimum_depth_m"]),
             maximum_depth_m=float(continuous["maximum_depth_m"]),
+            history_size=int(continuous["filter_history_size"]),
+            filter_time_constant_sec=float(continuous["filter_time_constant_sec"]),
+            filter_min_alpha=float(continuous["filter_min_alpha"]),
+            filter_max_alpha=float(continuous["filter_max_alpha"]),
+            filter_full_response_displacement_m=float(
+                continuous["filter_full_response_displacement_m"]
+            ),
         )
         self._continuous_servo_controller = ContinuousServoController(
             ContinuousServoConfig(
@@ -1075,6 +1106,13 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     continuous["orientation_correction_gain"]
                 ),
                 control_gain=float(continuous["control_gain"]),
+                x_control_gain=float(continuous["x_control_gain"]),
+                y_control_gain=float(continuous["y_control_gain"]),
+                z_control_gain=float(continuous["z_control_gain"]),
+                y_approach_speed_mps=float(continuous["y_approach_speed_mps"]),
+                approach_direction_base=tuple(
+                    float(value) for value in continuous["approach_direction_base"]
+                ),
                 maximum_tool_radius_m=float(continuous["maximum_tool_radius_m"]),
                 maximum_flange_tilt_deg=float(
                     continuous["maximum_flange_tilt_deg"]
@@ -1115,15 +1153,20 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "/continuous_mouth_tracking/target_pose",
             10,
         )
+        self._continuous_next_diagnostic_monotonic = 0.0
+
     def _use_latest_only_continuous_mouth_candidates(self) -> None:
-        """Replace the inherited depth-10 candidate queue with KEEP_LAST(1)."""
+        """Consume the actual PoseStamped mouth output through a depth-1 mailbox."""
         if getattr(self, "_continuous_latest_only_subscription_active", False):
             return
-        self.destroy_subscription(self._mouth_candidates_subscription)
-        self._mouth_candidates_subscription = self.create_subscription(
-            String,
-            MOUTH_CANDIDATES_TOPIC,
-            self._mouth_candidates_callback,
+        # Keep the existing candidate subscription solely for the established
+        # center-person identity lock and scene diagnostics. Motion consumes
+        # /detected_mouth_pose, and its KEEP_LAST(1) queue cannot accumulate
+        # stale robot targets.
+        self._continuous_mouth_pose_subscription = self.create_subscription(
+            PoseStamped,
+            "/detected_mouth_pose",
+            self._continuous_mouth_pose_callback,
             QoSProfile(
                 history=HistoryPolicy.KEEP_LAST,
                 depth=1,
@@ -1132,6 +1175,61 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             ),
         )
         self._continuous_latest_only_subscription_active = True
+
+    def _continuous_mouth_pose_callback(self, message: PoseStamped) -> None:
+        """Replace the single pending continuous target from real RGB-D output."""
+        frame_id = str(message.header.frame_id).strip().lstrip("/")
+        if frame_id != BASE_FRAME:
+            self._continuous_last_observation_update = {
+                "accepted": False,
+                "reason": f"continuous mouth pose frame must be {BASE_FRAME}",
+                "frame_id": frame_id,
+            }
+            return
+        source_stamp = (
+            float(message.header.stamp.sec)
+            + float(message.header.stamp.nanosec) * 1.0e-9
+        )
+        position = [
+            float(message.pose.position.x),
+            float(message.pose.position.y),
+            float(message.pose.position.z),
+        ]
+        now = time.monotonic()
+        state = self.target_tracker.current_state(max_age_sec=1.0, now_monotonic=now)
+        try:
+            selected_index = int(state["selected_candidate_index"])
+            depth = float(state["visible_candidates"][selected_index]["depth_m"])
+        except (KeyError, IndexError, TypeError, ValueError):
+            camera = self._frame_transform(BASE_FRAME, CAMERA_OPTICAL_FRAME)
+            if not camera.get("available"):
+                self._continuous_last_observation_update = {
+                    "accepted": False,
+                    "reason": "mouth depth and camera transform are unavailable",
+                    "source_timestamp_sec": source_stamp,
+                }
+                return
+            depth = _norm(_subtract(position, camera["position_m"]))
+        accepted, reason = self._continuous_tracker.add_observation(
+            position,
+            source_timestamp_sec=source_stamp,
+            received_monotonic_sec=now,
+            depth_m=depth,
+            confidence=1.0,
+            target_id=self.target_selection,
+            frame_id=frame_id,
+        )
+        self._continuous_last_observation_update = {
+            "accepted": bool(accepted),
+            "reason": reason,
+            "source_timestamp_sec": source_stamp,
+            "receipt_monotonic_sec": now,
+            "frame_id": frame_id,
+            "position_m": position,
+            "depth_m": depth,
+            "confidence": 1.0,
+            "confidence_source": "accepted_mediapipe_rgbd_pose",
+        }
 
     def _servo_status_callback(self, message: ServoStatus) -> None:
         self._latest_servo_status = message
@@ -1702,6 +1800,12 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
 
     def _mouth_candidates_callback(self, message: String) -> None:
         """Feed the identity-locked candidate into the continuous filter."""
+        if getattr(self, "_continuous_latest_only_subscription_active", False):
+            # Continuous motion consumes the actual /detected_mouth_pose
+            # PoseStamped mailbox. Preserve this callback only for the existing
+            # multi-person identity lock and PlanningScene diagnostics.
+            super()._mouth_candidates_callback(message)
+            return
         selected_message = message
         if self._continuous_approach_correction_active:
             try:
@@ -5216,6 +5320,14 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "sample_count": int(target.sample_count),
             "spread_m": float(target.spread_m),
             "prediction_m": float(target.prediction_m),
+            "sequence_id": int(target.sequence_id),
+            "receipt_monotonic_sec": float(target.received_monotonic_sec),
+            "raw_position_m": (
+                None
+                if target.raw_position_m is None
+                else [float(value) for value in target.raw_position_m]
+            ),
+            "filter_alpha": float(target.filter_alpha),
             "reason": target.reason,
         }
 
@@ -5233,8 +5345,20 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         fallback_reason: str | None = None,
         safety_stop_reason: str | None = None,
         octomap: dict[str, Any] | None = None,
+        live_pre_mouth_m: list[float] | None = None,
+        current_straw_tip_m: list[float] | None = None,
+        cartesian_error_m: list[float] | None = None,
+        linear_velocity_mps: list[float] | None = None,
+        controller_owner: str | None = None,
+        servo_backend: str | None = None,
     ) -> None:
         """Publish the latest local tracking state without network calls."""
+        now = time.monotonic()
+        if now < self._continuous_next_diagnostic_monotonic:
+            return
+        self._continuous_next_diagnostic_monotonic = now + 1.0 / float(
+            self._continuous_parameters["diagnostic_rate_hz"]
+        )
         report = self._continuous_target_report(target)
         report.update(
             {
@@ -5248,11 +5372,38 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "fallback_reason": fallback_reason,
                 "safety_stop_reason": safety_stop_reason,
                 "octomap": octomap,
+                "live_pre_mouth_m": live_pre_mouth_m,
+                "current_straw_tip_m": current_straw_tip_m,
+                "cartesian_error_m": cartesian_error_m,
+                "linear_velocity_mps": linear_velocity_mps,
+                "controller_owner": controller_owner,
+                "servo_backend": servo_backend,
             }
         )
         status = String()
         status.data = json.dumps(_jsonable(report), sort_keys=True)
         self._continuous_status_publisher.publish(status)
+        self.get_logger().info(
+            "continuous tracking diagnostics "
+            + json.dumps(
+                _jsonable(
+                    {
+                        "sequence_id": target.sequence_id,
+                        "target_age_sec": target.age_sec,
+                        "raw_mouth_m": report["raw_position_m"],
+                        "filtered_mouth_m": report["position_m"],
+                        "live_pre_mouth_m": live_pre_mouth_m,
+                        "current_straw_tip_m": current_straw_tip_m,
+                        "cartesian_error_m": cartesian_error_m,
+                        "linear_velocity_mps": linear_velocity_mps,
+                        "servo_status": servo_status,
+                        "controller_owner": controller_owner,
+                        "servo_backend": servo_backend,
+                    }
+                ),
+                sort_keys=True,
+            )
+        )
         if target.available:
             pose = PoseStamped()
             pose.header.stamp = self.get_clock().now().to_msg()
@@ -5267,6 +5418,10 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         """Accept a fresh valid target immediately, including provisional data."""
         self._continuous_tracker.reset(searching=True)
         started = time.monotonic()
+        control_period_sec = 1.0 / float(
+            self._continuous_parameters["control_rate_hz"]
+        )
+        next_control_monotonic = started
         acquirer = InitialTargetAcquirer(
             started_monotonic_sec=started,
             timeout_sec=float(
@@ -5346,30 +5501,22 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         *,
         standoff_m: float,
     ) -> dict[str, Any]:
-        """Build a camera-ray target from the filtered selected mouth."""
+        """Build tool0 from validated base_link -Y and measured straw offset."""
         tool = self._tool0_pose()
-        camera = self._frame_transform(BASE_FRAME, CAMERA_OPTICAL_FRAME)
-        if not tool.get("available") or not camera.get("available"):
+        if not tool.get("available"):
             return {
                 "success": False,
-                "reason": "live tool0 or D435i optical TF is unavailable",
+                "reason": "live tool0 TF is unavailable",
             }
         try:
-            camera_distance = _norm(
-                _subtract(target.predicted_position_m, camera["position_m"])
-            )
-            if camera_distance <= (
-                float(standoff_m) + MINIMUM_CAMERA_RAY_FORWARD_MARGIN_M
-            ):
-                raise ValueError(
-                    "mouth is too close to the D435i for validated camera-ray standoff"
-                )
-            straw, tool0 = camera_ray_premouth_target(
+            straw, tool0 = base_y_premouth_target(
                 mouth_position_m=target.predicted_position_m,
-                camera_position_m=camera["position_m"],
                 tool_orientation_xyzw=tool["orientation_quat_xyzw"],
                 straw_tip_offset_tool0_m=STRAW_TIP_OFFSET_TOOL0_M,
                 standoff_m=float(standoff_m),
+                approach_direction_base=self._continuous_parameters[
+                    "approach_direction_base"
+                ],
             )
             tilt = _tool_vertical_tilt_rad(tool["orientation_quat_xyzw"])
         except (TypeError, ValueError, RuntimeError) as exc:
@@ -5401,6 +5548,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "mouth_position_m": [float(value) for value in target.position_m],
             "standoff_m": float(standoff_m),
             "requested_standoff_m": float(standoff_m),
+            "approach_direction_base": list(
+                self._continuous_parameters["approach_direction_base"]
+            ),
             "flange_vertical_axis_error_rad": float(tilt),
         }
 
@@ -5731,7 +5881,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         """Continuously Servo toward the latest target, recovering only as needed."""
         final_standoff = float(
             getattr(self, "_continuous_parameters", {}).get(
-                "final_pre_mouth_standoff_m", 0.080
+                "final_pre_mouth_standoff_m", 0.050
             )
         )
         report: dict[str, Any] = {
@@ -5807,7 +5957,37 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             ),
             armed=True,
         )
+        # Reset the continuous PoseStamped filter after staging. The existing
+        # candidate stream remains responsible for identity/scene diagnostics;
+        # it is not a second source of motion targets.
+        self._continuous_approach_correction_active = False
+        self._continuous_approach_correction_report = {
+            "active": False,
+            "accepted_samples": 0,
+            "rejected_samples": 0,
+            "last_sample": {
+                "reason": "continuous motion consumes /detected_mouth_pose"
+            },
+        }
+        self._continuous_approach_previous_selected_sample = None
+        self._continuous_tracker.reset(searching=True)
         started = time.monotonic()
+        # The reset above deliberately removes the pre-staging coordinate
+        # epoch. Until the first fresh PoseStamped observation
+        # arrives, command zero velocity instead of treating that brief empty
+        # handoff as target loss.  The first valid observation is accepted
+        # immediately, including a one-frame provisional/unstable target.
+        awaiting_first_live_target = True
+        first_live_target_deadline = started + float(
+            self._continuous_parameters["initial_target_acquisition_timeout_sec"]
+        )
+        report["servo_handoff_target"] = {
+            "required": True,
+            "acquired": False,
+            "stability_required": False,
+            "zero_velocity_cycles": 0,
+            "wait_sec": None,
+        }
         last_update = started
         hold_started: float | None = None
         diagnostics: list[dict[str, Any]] = []
@@ -5821,8 +6001,25 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         report["state_validity_check_count"] = 1
         try:
             while rclpy.ok():
-                rclpy.spin_once(self, timeout_sec=0.05)
+                wait_sec = max(
+                    0.0,
+                    min(
+                        control_period_sec,
+                        next_control_monotonic - time.monotonic(),
+                    ),
+                )
+                rclpy.spin_once(
+                    self,
+                    timeout_sec=wait_sec,
+                )
                 now = time.monotonic()
+                if now < next_control_monotonic:
+                    # Perception callbacks update the single-slot mailbox
+                    # independently; motion runs only on this fixed schedule.
+                    continue
+                next_control_monotonic += control_period_sec
+                if next_control_monotonic < now:
+                    next_control_monotonic = now + control_period_sec
                 live_failure = self._live_ur_execution_state_failure()
                 if live_failure is not None:
                     report["stop_reason"] = live_failure
@@ -5848,6 +6045,32 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         report["collision_state_validity"] = latest_state_validity
                         break
                 target = self._continuous_tracker.target(now_monotonic_sec=now)
+                if awaiting_first_live_target and not target.available:
+                    sink.publish_zero()
+                    self._continuous_servo_controller.pause_for_reacquisition()
+                    last_update = now
+                    report["servo_handoff_target"]["zero_velocity_cycles"] += 1
+                    self._publish_continuous_diagnostics(
+                        target,
+                        state="AWAITING_FIRST_CORRECTED_TARGET",
+                        servo_status=servo_status,
+                        safety_stop_reason=None,
+                        octomap=octomap,
+                    )
+                    if now >= first_live_target_deadline:
+                        report["stop_reason"] = (
+                            "no_valid_live_target_after_servo_handoff_timeout"
+                        )
+                        break
+                    continue
+                if awaiting_first_live_target:
+                    awaiting_first_live_target = False
+                    report["servo_handoff_target"].update(
+                        acquired=True,
+                        target_state=target.state.value,
+                        provisional=bool(target.provisional),
+                        wait_sec=now - started,
+                    )
                 if not target.available and target.reason in {
                     "target_stale_grace",
                     "target_lost_timeout",
@@ -5928,15 +6151,14 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     report["target_reacquisition_count"] += 1
                     stale_target_hold_active = False
                 tool = self._tool0_pose()
-                camera = self._frame_transform(BASE_FRAME, CAMERA_OPTICAL_FRAME)
-                if not tool.get("available") or not camera.get("available"):
-                    report["stop_reason"] = "live tool0 or camera TF became unavailable"
+                if not tool.get("available"):
+                    report["stop_reason"] = "live tool0 TF became unavailable"
                     break
                 decision = self._continuous_servo_controller.update(
                     target,
                     current_tool0_position_m=tool["position_m"],
                     current_tool0_orientation_xyzw=tool["orientation_quat_xyzw"],
-                    camera_position_m=camera["position_m"],
+                    camera_position_m=(0.0, 0.0, 0.0),
                     servo_status_code=int(servo_status["code"]),
                     elapsed_sec=now - started,
                     dt_sec=now - last_update,
@@ -5974,6 +6196,14 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     fallback_reason=decision.fallback_reason,
                     safety_stop_reason=decision.safety_stop_reason,
                     octomap=octomap,
+                    live_pre_mouth_m=list(decision.desired_straw_tip_position_m),
+                    current_straw_tip_m=list(
+                        decision.current_straw_tip_position_m
+                    ),
+                    cartesian_error_m=list(decision.cartesian_error_m),
+                    linear_velocity_mps=list(decision.linear_velocity_mps),
+                    controller_owner=self._continuous_motion_arbiter.owner.value,
+                    servo_backend="moveit_servo_internal_inverse_jacobian",
                 )
                 diagnostics.append(
                     {
@@ -5992,6 +6222,29 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         "state_validity": latest_state_validity,
                         "fallback_reason": decision.fallback_reason,
                         "safety_stop_reason": decision.safety_stop_reason,
+                        "target_sequence_id": target.sequence_id,
+                        "raw_mouth_position_m": (
+                            None
+                            if target.raw_position_m is None
+                            else list(target.raw_position_m)
+                        ),
+                        "filtered_mouth_position_m": list(target.position_m),
+                        "live_pre_mouth_m": list(
+                            decision.desired_straw_tip_position_m
+                        ),
+                        "current_straw_tip_m": list(
+                            decision.current_straw_tip_position_m
+                        ),
+                        "cartesian_error_m": list(decision.cartesian_error_m),
+                        "linear_velocity_mps": list(
+                            decision.linear_velocity_mps
+                        ),
+                        "controller_owner": (
+                            self._continuous_motion_arbiter.owner.value
+                        ),
+                        "servo_backend": (
+                            "moveit_servo_internal_inverse_jacobian"
+                        ),
                     }
                 )
                 if len(diagnostics) > 100:
@@ -6038,7 +6291,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         break
                     refreshed_target = self._continuous_pose_target(
                         current_target,
-                        # Recovery returns to the same live pre-mouth
+                        # Recovery returns to the same live 50 mm pre-mouth
                         # policy; it does not replay an old approach segment.
                         standoff_m=float(decision.commanded_standoff_m),
                     )
@@ -6141,7 +6394,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         float(value) for value in tool["orientation_quat_xyzw"]
                     ),
                     plan_only=False,
-                    reason="continuous_camera_ray_premouth_tracking",
+                    reason="continuous_base_y_premouth_tracking",
                     linear_velocity_mps=decision.linear_velocity_mps,
                     angular_velocity_rps=decision.angular_velocity_rps,
                     preserve_orientation=True,
@@ -6151,6 +6404,17 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 if decision.hold_ready:
                     if hold_started is None:
                         hold_started = now
+                        report["hold_transition"] = {
+                            "entered": True,
+                            "elapsed_sec": now - started,
+                            "target_sequence_id": target.sequence_id,
+                            "live_pre_mouth_m": list(
+                                decision.desired_straw_tip_position_m
+                            ),
+                        }
+                        self.get_logger().info(
+                            "continuous tracking entered HOLD; Servo remains active"
+                        )
                     if now - hold_started >= float(hold_duration_sec):
                         report["success"] = True
                         report["stop_reason"] = "hold_duration_complete"
@@ -6210,6 +6474,11 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "servo_command_interface": str(
                 self._continuous_parameters["servo_twist_topic"]
             ),
+            "servo_backend": "moveit_servo_internal_inverse_jacobian",
+            "configured_moveit_kinematics_plugin": (
+                "kdl_kinematics_plugin/KDLKinematicsPlugin"
+            ),
+            "control_rate_hz": float(self._continuous_parameters["control_rate_hz"]),
             "mouth_candidate_delivery": "keep_last_1_latest_only",
             "integrated_real_feed_water": {
                 "mouth_tracking_during_execution": True,
@@ -6512,6 +6781,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 reason=return_result.get("reason"),
             )
             return 2, report
+        self.get_logger().info("continuous tracking guarded return completed")
         report.update(
             success=True,
             stage="continuous_tracking_returned_initial_position",

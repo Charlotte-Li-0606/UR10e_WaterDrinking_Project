@@ -261,6 +261,8 @@ class MouthPerceptionNode(Node):
         self._last_accepted_camera_position_base: np.ndarray | None = None
         self._last_accepted_camera_optical_z_base: np.ndarray | None = None
         self._last_displacement_diagnostic: dict[str, float | None] | None = None
+        self._last_valid_mouth_depth_m: float | None = None
+        self._depth_invalid_started_monotonic: float | None = None
         self._last_warning_times: dict[str, float] = {}
         self.get_logger().info(
             "Mouth perception: %s + %s + %s -> %s in %s"
@@ -639,6 +641,7 @@ class MouthPerceptionNode(Node):
             mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_rgb), timestamp_ms
         )
         if not result.face_landmarks:
+            self._depth_invalid_started_monotonic = None
             if (
                 self._last_face_seen_monotonic is not None
                 and now - self._last_face_seen_monotonic >= 0.75
@@ -658,6 +661,7 @@ class MouthPerceptionNode(Node):
 
         depth_m = self._depth_image_meters(depth)
         if depth_m is None:
+            self._depth_invalid_started_monotonic = None
             self._status(False, "unsupported_depth_encoding", encoding=depth.encoding)
             return
         camera_frame = camera_info.header.frame_id or depth.header.frame_id or rgb.header.frame_id
@@ -732,7 +736,30 @@ class MouthPerceptionNode(Node):
 
         if not candidates:
             reason = "invalid_depth" if rejected_depth else "tf_unavailable"
-            self._status(False, reason, detected_faces=len(result.face_landmarks), rejected_depth=rejected_depth)
+            if reason == "invalid_depth":
+                if self._depth_invalid_started_monotonic is None:
+                    self._depth_invalid_started_monotonic = time.monotonic()
+                depth_invalid_duration_sec = max(
+                    0.0,
+                    time.monotonic() - self._depth_invalid_started_monotonic,
+                )
+            else:
+                self._depth_invalid_started_monotonic = None
+                depth_invalid_duration_sec = 0.0
+            self._status(
+                False,
+                reason,
+                detected_faces=len(result.face_landmarks),
+                rejected_depth=rejected_depth,
+                valid_depth_samples=0,
+                minimum_depth_m=round(float(self._options.min_depth_m), 4),
+                last_valid_depth_m=(
+                    "unavailable"
+                    if self._last_valid_mouth_depth_m is None
+                    else round(float(self._last_valid_mouth_depth_m), 4)
+                ),
+                depth_invalid_duration_sec=round(depth_invalid_duration_sec, 4),
+            )
             self._publish_debug(rgb_bgr, rgb, "No valid mouth candidate")
             return
 
@@ -773,6 +800,8 @@ class MouthPerceptionNode(Node):
         # This compatibility pose is not a target-selection decision; the
         # multi-target feeding manager consumes candidates_topic instead.
         primary = min(candidates, key=lambda candidate: abs(float(candidate["image_x"]) - rgb.width * 0.5))
+        self._last_valid_mouth_depth_m = float(primary["depth_m"])
+        self._depth_invalid_started_monotonic = None
         filtered_point = self._filter_position(np.asarray(primary["position"], dtype=np.float64))
         if filtered_point is None:
             self._status(False, "outlier_rejected")
@@ -811,6 +840,7 @@ class MouthPerceptionNode(Node):
             pixel_u=round(float(primary["image_x"]), 2),
             pixel_v=round(float(primary["image_y"]), 2),
             depth_m=round(float(primary["depth_m"]), 4),
+            minimum_depth_m=round(float(self._options.min_depth_m), 4),
             depth_patch_radius_px=int(primary["depth_patch_radius_px"]),
             valid_depth_samples=int(primary["valid_depth_samples"]),
             frame_id=self._options.base_frame,

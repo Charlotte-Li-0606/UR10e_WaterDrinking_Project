@@ -1,4 +1,4 @@
-"""Continuous camera-ray pre-mouth control policy for MoveIt Servo."""
+"""Continuous base-frame hybrid pre-mouth control policy for MoveIt Servo."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ class MotionCommandArbiter:
 
 @dataclass(frozen=True)
 class ContinuousServoConfig:
-    final_pre_mouth_standoff_m: float = 0.080
+    final_pre_mouth_standoff_m: float = 0.050
     provisional_standoff_m: float = 0.250
     servo_tracking_max_error_m: float = 0.10
     servo_replan_enter_m: float = 0.10
@@ -70,6 +70,11 @@ class ContinuousServoConfig:
     maximum_angular_speed_rps: float = 0.15
     orientation_correction_gain: float = 1.0
     control_gain: float = 0.8
+    x_control_gain: float = 0.8
+    y_control_gain: float = 0.8
+    z_control_gain: float = 0.8
+    y_approach_speed_mps: float = 0.020
+    approach_direction_base: tuple[float, float, float] = (0.0, -1.0, 0.0)
     maximum_tool_radius_m: float = 1.30
     maximum_flange_tilt_deg: float = 5.0
     maximum_tracking_duration_sec: float = 45.0
@@ -98,6 +103,17 @@ class ContinuousServoConfig:
             raise ValueError("maximum angular speed must be positive")
         if self.orientation_correction_gain <= 0.0:
             raise ValueError("orientation correction gain must be positive")
+        if min(self.x_control_gain, self.y_control_gain, self.z_control_gain) <= 0.0:
+            raise ValueError("Cartesian control gains must be positive")
+        if not 0.0 < self.y_approach_speed_mps <= self.maximum_linear_speed_mps:
+            raise ValueError("Y approach speed must be within the real linear speed limit")
+        direction = np.asarray(self.approach_direction_base, dtype=np.float64)
+        if direction.shape != (3,) or not np.all(np.isfinite(direction)):
+            raise ValueError("approach direction must contain three finite values")
+        if not np.allclose(direction, (0.0, -1.0, 0.0), atol=1.0e-9):
+            raise ValueError(
+                "continuous real tracking must retain the validated base_link -Y approach"
+            )
 
 
 @dataclass(frozen=True)
@@ -118,6 +134,8 @@ class ContinuousServoDecision:
     fallback_reason: str | None
     safety_stop_reason: str | None
     speed_limit_mps: float
+    current_straw_tip_position_m: tuple[float, float, float] = (0.0, 0.0, 0.0)
+    cartesian_error_m: tuple[float, float, float] = (math.inf, math.inf, math.inf)
 
 
 def rotate_vector_xyzw(
@@ -203,6 +221,36 @@ def camera_ray_premouth_target(
     return straw_target, straw_target - offset_base
 
 
+def base_y_premouth_target(
+    *,
+    mouth_position_m: Sequence[float],
+    tool_orientation_xyzw: Sequence[float],
+    straw_tip_offset_tool0_m: Sequence[float],
+    standoff_m: float,
+    approach_direction_base: Sequence[float] = (0.0, -1.0, 0.0),
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return straw-tip/tool0 goals along the validated base_link -Y axis."""
+    mouth = np.asarray(mouth_position_m, dtype=np.float64)
+    direction = np.asarray(approach_direction_base, dtype=np.float64)
+    if mouth.shape != (3,) or not np.all(np.isfinite(mouth)):
+        raise ValueError("mouth position must contain finite base_link XYZ values")
+    if direction.shape != (3,) or not np.all(np.isfinite(direction)):
+        raise ValueError("approach direction must contain finite base_link XYZ values")
+    magnitude = float(np.linalg.norm(direction))
+    if magnitude < 1.0e-9:
+        raise ValueError("approach direction is zero")
+    direction = direction / magnitude
+    if not np.allclose(direction, (0.0, -1.0, 0.0), atol=1.0e-9):
+        raise ValueError("approach direction does not match validated base_link -Y")
+    if not math.isfinite(standoff_m) or standoff_m < 0.05:
+        raise ValueError("standoff must preserve the validated 50 mm offset")
+    straw_target = mouth + float(standoff_m) * direction
+    offset_base = rotate_vector_xyzw(
+        tool_orientation_xyzw, straw_tip_offset_tool0_m
+    )
+    return straw_target, straw_target - offset_base
+
+
 class ContinuousServoController:
     """Generate uninterrupted bounded twist commands or an explicit stop."""
 
@@ -231,19 +279,11 @@ class ContinuousServoController:
         return float(self._commanded_standoff_m)
 
     def reset(self, *, commanded_standoff_m: float | None = None) -> None:
-        """Start a new target-reference epoch without jumping standoff."""
+        """Start a new target-reference epoch for the fixed 50 mm target."""
         self._last_velocity[:] = 0.0
         self._recovery_latched = False
         self._reference_target = None
-        selected = (
-            self.config.provisional_standoff_m
-            if commanded_standoff_m is None
-            else float(commanded_standoff_m)
-        )
-        self._commanded_standoff_m = max(
-            self.config.final_pre_mouth_standoff_m,
-            min(self.config.provisional_standoff_m, selected),
-        )
+        self._commanded_standoff_m = self.config.final_pre_mouth_standoff_m
 
     def pause_for_reacquisition(self) -> None:
         """Restart acceleration limiting from zero without losing target history."""
@@ -281,58 +321,25 @@ class ContinuousServoController:
 
         dt = max(float(dt_sec), 1.0e-3)
         mouth = np.asarray(target.predicted_position_m, dtype=np.float64)
-        camera = np.asarray(camera_position_m, dtype=np.float64)
-        if mouth.shape != (3,) or camera.shape != (3,) or not (
-            np.all(np.isfinite(mouth)) and np.all(np.isfinite(camera))
-        ):
-            return self._stop("camera_or_mouth_position_invalid")
-        camera_mouth_distance = float(np.linalg.norm(mouth - camera))
-        maximum_forward_standoff = (
-            camera_mouth_distance - MINIMUM_CAMERA_RAY_FORWARD_MARGIN_M
-        )
-        if maximum_forward_standoff < self.config.final_pre_mouth_standoff_m:
-            return self._stop("camera_mouth_distance_below_safe_standoff")
-        # At or beyond the camera-mouth distance, the ray target crosses
-        # behind the wrist camera and its Cartesian derivative reverses sign.
-        self._commanded_standoff_m = min(
-            self._commanded_standoff_m,
-            maximum_forward_standoff,
-        )
-        # First evaluate the target at the already-commanded standoff. Only
-        # advance the approach when Servo has caught up locally, preventing a
-        # policy transition from manufacturing a large Cartesian error.
+        if mouth.shape != (3,) or not np.all(np.isfinite(mouth)):
+            return self._stop("mouth_position_invalid")
         try:
-            _current_straw_target, current_tool_target = camera_ray_premouth_target(
+            straw_target, tool_target = base_y_premouth_target(
                 mouth_position_m=target.predicted_position_m,
-                camera_position_m=camera_position_m,
                 tool_orientation_xyzw=current_tool0_orientation_xyzw,
                 straw_tip_offset_tool0_m=self.straw_tip_offset_tool0_m,
-                standoff_m=self._commanded_standoff_m,
+                standoff_m=self.config.final_pre_mouth_standoff_m,
+                approach_direction_base=self.config.approach_direction_base,
             )
         except ValueError as exc:
             return self._stop(f"premouth_target_invalid:{exc}")
-        current_standoff_error = float(np.linalg.norm(current_tool_target - current))
+        self._commanded_standoff_m = self.config.final_pre_mouth_standoff_m
         requested_standoff = self.config.final_pre_mouth_standoff_m
-        # A fresh valid target remains trackable even when its short history is
-        # provisional/unstable. Close the standoff continuously and at the
-        # configured rate; never introduce a stability wait or a binary jump.
-        if current_standoff_error <= self.config.standoff_progress_error_m:
-            self._commanded_standoff_m = max(
-                requested_standoff,
-                self._commanded_standoff_m
-                - self.config.maximum_standoff_rate_mps * dt,
-            )
-        try:
-            straw_target, tool_target = camera_ray_premouth_target(
-                mouth_position_m=target.predicted_position_m,
-                camera_position_m=camera_position_m,
-                tool_orientation_xyzw=current_tool0_orientation_xyzw,
-                straw_tip_offset_tool0_m=self.straw_tip_offset_tool0_m,
-                standoff_m=self._commanded_standoff_m,
-            )
-        except ValueError as exc:
-            return self._stop(f"premouth_target_invalid:{exc}")
-        error_vector = tool_target - current
+        straw_offset_base = rotate_vector_xyzw(
+            current_tool0_orientation_xyzw, self.straw_tip_offset_tool0_m
+        )
+        current_straw = current + straw_offset_base
+        error_vector = straw_target - current_straw
         error = float(np.linalg.norm(error_vector))
         if self._reference_target is None:
             self._reference_target = target.position_m.copy()
@@ -370,15 +377,36 @@ class ContinuousServoController:
         # MoveIt Servo already applies its collision-proximity scaling before
         # executing this bounded command. Do not stack a second 75% slowdown
         # in the application layer; hard halt codes are still rejected above.
-        velocity = self.config.control_gain * error_vector
+        # X/Z use proportional target following. Y keeps the existing real
+        # speed cap while far away and decelerates proportionally at terminal
+        # approach, avoiding both artificial segments and target overshoot.
+        velocity = np.asarray(
+            (
+                self.config.x_control_gain * error_vector[0],
+                math.copysign(
+                    min(
+                        self.config.y_approach_speed_mps,
+                        self.config.y_control_gain * abs(error_vector[1]),
+                    ),
+                    error_vector[1],
+                )
+                if abs(error_vector[1]) > 0.0
+                else 0.0,
+                self.config.z_control_gain * error_vector[2],
+            ),
+            dtype=np.float64,
+        )
         speed = float(np.linalg.norm(velocity))
         if speed > speed_limit and speed > 0.0:
             velocity *= speed_limit / speed
         change = velocity - self._last_velocity
         max_change = self.config.maximum_linear_acceleration_mps2 * dt
-        change_norm = float(np.linalg.norm(change))
-        if change_norm > max_change and change_norm > 0.0:
-            velocity = self._last_velocity + change * (max_change / change_norm)
+        # Apply the configured real acceleration limit independently to each
+        # commanded base axis so vx/vy/vz remain continuous.
+        velocity = self._last_velocity + np.clip(change, -max_change, max_change)
+        limited_speed = float(np.linalg.norm(velocity))
+        if limited_speed > speed_limit and limited_speed > 0.0:
+            velocity *= speed_limit / limited_speed
         self._last_velocity = velocity
         angular_velocity = vertical_axis_angular_correction(
             current_tool0_orientation_xyzw,
@@ -403,16 +431,17 @@ class ContinuousServoController:
             target_displacement_m=displacement,
             commanded_standoff_m=self._commanded_standoff_m,
             requested_standoff_m=requested_standoff,
-            standoff_transition_active=bool(
-                self._commanded_standoff_m
-                > self.config.final_pre_mouth_standoff_m
-            ),
+            standoff_transition_active=False,
             state=("HOLDING" if hold_ready else "TRACKING"),
             hold_ready=hold_ready,
             recovery_required=False,
             fallback_reason=None,
             safety_stop_reason=None,
             speed_limit_mps=speed_limit,
+            current_straw_tip_position_m=tuple(
+                float(value) for value in current_straw
+            ),
+            cartesian_error_m=tuple(float(value) for value in error_vector),
         )
 
     def _stop(self, reason: str) -> ContinuousServoDecision:

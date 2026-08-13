@@ -1,4 +1,4 @@
-"""Simulation-only tests for robust continuous mouth acquisition."""
+"""DISABLED backup tests for robust continuous mouth acquisition."""
 
 import numpy as np
 
@@ -32,7 +32,9 @@ def test_two_valid_observations_form_provisional_average_without_stability_wait(
     assert acquisition.complete
     assert acquisition.state == ContinuousTrackingState.PROVISIONAL_TARGET
     assert target.provisional
-    assert np.allclose(target.position_m, (0.81, 0.20, 0.60))
+    assert 0.80 < target.position_m[0] <= 0.82
+    assert np.allclose(target.raw_position_m, (0.82, 0.20, 0.60))
+    assert target.sequence_id == 2
 
 
 def test_single_valid_observation_starts_provisional_tracking_immediately():
@@ -65,6 +67,36 @@ def test_stable_target_completes_before_timeout_with_robust_median():
     assert target.stable
     assert target.state == ContinuousTrackingState.STABLE_TARGET
     assert np.linalg.norm(target.position_m - np.array((0.80, 0.20, 0.60))) < 0.001
+
+
+def test_latest_target_mailbox_replaces_pending_target_without_fifo_replay():
+    tracker = ContinuousMouthTracker(history_size=3)
+    for index in range(10):
+        _add(tracker, (0.80 + 0.01 * index, 0.20, 0.60), index)
+
+    target = tracker.target(now_monotonic_sec=10.91)
+
+    assert target.sequence_id == 10
+    assert np.allclose(target.raw_position_m, (0.89, 0.20, 0.60))
+    assert target.position_m[0] > 0.87
+    assert len(tracker._observations) == 3
+
+
+def test_adaptive_ema_smooths_jitter_but_responds_to_large_motion():
+    tracker = ContinuousMouthTracker(
+        filter_min_alpha=0.20,
+        filter_max_alpha=0.85,
+        filter_full_response_displacement_m=0.10,
+    )
+    _add(tracker, (0.80, 0.20, 0.60), 0)
+    _add(tracker, (0.802, 0.20, 0.60), 1)
+    jitter = tracker.target(now_monotonic_sec=10.11)
+    _add(tracker, (0.92, 0.20, 0.60), 2)
+    moved = tracker.target(now_monotonic_sec=10.21)
+
+    assert 0.80 < jitter.position_m[0] < 0.802
+    assert moved.position_m[0] > 0.89
+    assert moved.filter_alpha > jitter.filter_alpha
 
 
 def test_no_initial_target_requests_search_without_inventing_pose():

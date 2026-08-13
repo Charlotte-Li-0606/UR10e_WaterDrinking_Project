@@ -15,7 +15,17 @@ continuous_mouth_tracking:
   stable_max_spread_m: 0.025
   prediction_horizon_sec: 0.10
   maximum_prediction_m: 0.020
-  final_pre_mouth_standoff_m: 0.080
+  # Timestamp-aware adaptive EMA used only by the continuous controller.
+  filter_time_constant_sec: 0.08
+  filter_min_alpha: 0.20
+  filter_max_alpha: 0.85
+  filter_full_response_displacement_m: 0.10
+  filter_history_size: 5
+
+  # Validated real convention: camera horizontal -> base X, depth -> base Y,
+  # image-up -> base Z, and pre-mouth lies 50 mm toward base_link -Y.
+  final_pre_mouth_standoff_m: 0.050
+  approach_direction_base: [0.0, -1.0, 0.0]
   coarse_staging_standoff_m: 0.250
   provisional_standoff_m: 0.250
   hold_entry_tolerance_m: 0.010
@@ -35,6 +45,13 @@ continuous_mouth_tracking:
   maximum_angular_speed_rps: 0.15
   orientation_correction_gain: 1.0
   control_gain: 0.8
+  x_control_gain: 0.8
+  y_control_gain: 0.8
+  z_control_gain: 0.8
+  # Reuses the project's existing 20 mm/s real linear command ceiling.
+  y_approach_speed_mps: 0.020
+  control_rate_hz: 50.0
+  diagnostic_rate_hz: 5.0
   maximum_tool_radius_m: 1.30
   maximum_flange_tilt_deg: 5.0
 

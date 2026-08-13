@@ -1,4 +1,4 @@
-"""Simulation-only tests for the continuous MoveIt Servo control policy."""
+"""DISABLED backup tests for the continuous real MoveIt Servo control policy."""
 
 import numpy as np
 
@@ -11,7 +11,7 @@ from .continuous_servo_tracking import (
     ContinuousServoController,
     MotionCommandArbiter,
     MotionCommandOwner,
-    camera_ray_premouth_target,
+    base_y_premouth_target,
     octomap_layer_status,
     run_recovery_backends,
     vertical_axis_angular_correction,
@@ -19,8 +19,7 @@ from .continuous_servo_tracking import (
 
 
 FLANGE_DOWN_XYZW = (1.0, 0.0, 0.0, 0.0)
-CAMERA_POSITION = (0.0, 0.0, 0.0)
-MOUTH = (1.0, 0.0, 0.0)
+MOUTH = (0.40, 0.60, 0.90)
 
 
 def _target(position=MOUTH, *, stable=True, available=True):
@@ -47,16 +46,20 @@ def _target(position=MOUTH, *, stable=True, available=True):
         spread_m=0.002,
         prediction_m=0.0,
         reason=None if available else "no_valid_target",
+        sequence_id=1,
+        frame_id="base_link",
+        received_monotonic_sec=1.0,
+        raw_position_m=point.copy(),
+        filter_alpha=0.5,
     )
 
 
-def _desired_tool(mouth=MOUTH, standoff=0.08):
-    _, tool = camera_ray_premouth_target(
+def _desired_tool(mouth=MOUTH):
+    _, tool = base_y_premouth_target(
         mouth_position_m=mouth,
-        camera_position_m=CAMERA_POSITION,
         tool_orientation_xyzw=FLANGE_DOWN_XYZW,
         straw_tip_offset_tool0_m=(0.110, 0.0, 0.0),
-        standoff_m=standoff,
+        standoff_m=0.05,
     )
     return tool
 
@@ -66,42 +69,72 @@ def _update(controller, target, tool, *, elapsed=0.0, dt=0.02, status=0):
         target,
         current_tool0_position_m=tool,
         current_tool0_orientation_xyzw=FLANGE_DOWN_XYZW,
-        camera_position_m=CAMERA_POSITION,
+        camera_position_m=(0.0, 0.0, 0.0),
         servo_status_code=status,
         elapsed_sec=elapsed,
         dt_sec=dt,
     )
 
 
-def test_camera_ray_target_retains_validated_standoff_and_tool_offset():
-    straw, tool = camera_ray_premouth_target(
+def test_validated_live_premouth_is_50mm_in_base_negative_y():
+    straw, tool = base_y_premouth_target(
         mouth_position_m=MOUTH,
-        camera_position_m=CAMERA_POSITION,
         tool_orientation_xyzw=FLANGE_DOWN_XYZW,
         straw_tip_offset_tool0_m=(0.110, 0.0, 0.0),
-        standoff_m=0.08,
+        standoff_m=0.05,
     )
-    assert np.allclose(straw, (0.92, 0.0, 0.0))
+
+    assert np.allclose(straw, (0.40, 0.55, 0.90))
     assert np.allclose(tool + np.array((0.110, 0.0, 0.0)), straw)
 
 
-def test_acceleration_and_speed_limits_apply_to_cartesian_command():
+def test_hybrid_policy_tracks_x_z_and_constant_speed_y_far_from_target():
+    controller = ContinuousServoController()
+    desired = _desired_tool()
+    current = desired - np.array((0.04, 0.20, -0.03))
+    decision = _update(controller, _target(), current, dt=0.20)
+
+    assert decision.command_allowed
+    assert decision.cartesian_error_m[0] > 0.0
+    assert decision.cartesian_error_m[1] > 0.0
+    assert decision.cartesian_error_m[2] < 0.0
+    assert decision.linear_velocity_mps[0] > 0.0
+    assert decision.linear_velocity_mps[1] > 0.0
+    assert decision.linear_velocity_mps[2] < 0.0
+    assert decision.linear_velocity_mps[1] <= 0.020
+
+
+def test_y_terminal_velocity_decelerates_smoothly():
+    controller = ContinuousServoController(
+        ContinuousServoConfig(maximum_linear_acceleration_mps2=1.0)
+    )
+    desired = _desired_tool()
+    far = _update(controller, _target(), desired - np.array((0.0, 0.10, 0.0)), dt=1.0)
+    controller.reset()
+    near = _update(controller, _target(), desired - np.array((0.0, 0.005, 0.0)), dt=1.0)
+
+    assert abs(far.linear_velocity_mps[1] - 0.020) < 1.0e-9
+    assert 0.0 < near.linear_velocity_mps[1] < far.linear_velocity_mps[1]
+    assert abs(near.linear_velocity_mps[1] - 0.004) < 1.0e-9
+
+
+def test_acceleration_limit_applies_to_each_cartesian_axis():
     controller = ContinuousServoController()
     desired = _desired_tool()
     decision = _update(
         controller,
         _target(),
-        desired - np.array((0.20, 0.0, 0.0)),
+        desired - np.array((0.20, 0.20, 0.20)),
         dt=0.02,
     )
 
-    assert np.linalg.norm(decision.linear_velocity_mps) <= 0.020000001
+    assert all(abs(value) <= 0.002000001 for value in decision.linear_velocity_mps)
     assert np.linalg.norm(decision.linear_velocity_mps) <= 0.020000001
 
 
-def test_static_mouth_reaches_hold_without_segmented_pauses():
+def test_static_mouth_reaches_all_axis_hold_without_segmented_pauses():
     controller = ContinuousServoController()
-    tool = _desired_tool() - np.array((0.08, 0.0, 0.0))
+    tool = _desired_tool() - np.array((0.02, 0.10, -0.02))
     command_count = 0
     for index in range(3000):
         decision = _update(controller, _target(), tool, elapsed=index * 0.02)
@@ -114,16 +147,31 @@ def test_static_mouth_reaches_hold_without_segmented_pauses():
 
     assert command_count > 1
     assert decision.hold_ready
-    assert decision.target_error_m <= 0.01
+    assert all(abs(value) <= 0.01 for value in decision.cartesian_error_m)
+
+
+def test_hold_continues_correcting_a_live_mouth_shift():
+    controller = ContinuousServoController()
+    initial = _update(controller, _target(), _desired_tool())
+    shifted = _update(
+        controller,
+        _target((0.405, 0.604, 0.897)),
+        _desired_tool(),
+        elapsed=0.02,
+    )
+
+    assert initial.hold_ready
+    assert shifted.command_allowed
+    assert np.linalg.norm(shifted.linear_velocity_mps) > 0.0
+    assert np.allclose(shifted.desired_straw_tip_position_m, (0.405, 0.554, 0.897))
 
 
 def test_provisional_target_moves_at_existing_reduced_speed_without_hold():
     controller = ContinuousServoController()
-    desired = _desired_tool(standoff=0.25)
     decision = _update(
         controller,
         _target(stable=False),
-        desired - np.array((0.05, 0.0, 0.0)),
+        _desired_tool() - np.array((0.05, 0.05, 0.0)),
         dt=0.20,
     )
 
@@ -138,7 +186,7 @@ def test_large_live_mouth_displacement_requests_bounded_recovery():
     _update(controller, _target(), _desired_tool())
     decision = _update(
         controller,
-        _target((1.0, 0.11, 0.0)),
+        _target((0.51, 0.60, 0.90)),
         _desired_tool(),
         elapsed=0.02,
     )

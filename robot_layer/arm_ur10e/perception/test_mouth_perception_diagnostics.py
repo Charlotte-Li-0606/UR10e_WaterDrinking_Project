@@ -84,6 +84,22 @@ class MouthPerceptionDiagnosticTests(unittest.TestCase):
         self.assertIsNone(radius)
         self.assertEqual(0, count)
 
+    def test_depth_patch_accepts_finite_close_range_sample(self) -> None:
+        depth = np.full((15, 15), 0.12, dtype=np.float32)
+
+        value, radius, count = MouthPerceptionNode._valid_depth_patch(
+            depth,
+            7.0,
+            7.0,
+            3,
+            0.05,
+            1.30,
+        )
+
+        self.assertAlmostEqual(0.12, value, places=6)
+        self.assertEqual(3, radius)
+        self.assertEqual(49, count)
+
 
 if __name__ == "__main__":
     unittest.main()
