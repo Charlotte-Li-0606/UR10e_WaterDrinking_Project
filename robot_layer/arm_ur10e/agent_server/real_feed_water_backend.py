@@ -39,6 +39,7 @@ MIN_HOLD_SECONDS = 2.0
 MAX_HOLD_SECONDS = 5.0
 DEFAULT_HOLD_SECONDS = 5.0
 PIPELINE_TIMEOUT_SECONDS = 240.0
+MAXIMUM_PIPELINE_ERROR_DETAIL_CHARACTERS = 2000
 
 
 def _timestamp() -> tuple[str, str]:
@@ -58,6 +59,19 @@ def _finite_hold_duration(value: Any) -> float:
 def _write_report(path: Path, report: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _pipeline_error_detail(completed: subprocess.CompletedProcess[str]) -> str | None:
+    """Return bounded child diagnostics without exposing an unbounded log."""
+    stderr = (completed.stderr or "").strip()
+    stdout = (completed.stdout or "").strip()
+    detail = stderr or stdout
+    if not detail:
+        return None
+    if len(detail) > MAXIMUM_PIPELINE_ERROR_DETAIL_CHARACTERS:
+        detail = detail[-MAXIMUM_PIPELINE_ERROR_DETAIL_CHARACTERS:]
+        detail = "[truncated to final output] " + detail
+    return detail
 
 
 def _pipeline_command(
@@ -224,6 +238,23 @@ def _tool_report(
         if success
         else str(pipeline.get("stage") or "refused")
     )
+    execution_state_unknown = bool(pipeline.get("execution_state_unknown"))
+    if execution_state_unknown:
+        execution_attempted: bool | None = None
+        execution_sent: bool | None = None
+        outbound_execution_attempted: bool | None = None
+        outbound_execution_sent: bool | None = None
+    else:
+        execution_attempted = bool(
+            pipeline.get("execution_attempted")
+            or return_result.get("execution_attempted")
+        )
+        execution_sent = bool(
+            pipeline.get("execution_sent")
+            or return_result.get("execution_sent")
+        )
+        outbound_execution_attempted = bool(pipeline.get("execution_attempted"))
+        outbound_execution_sent = bool(pipeline.get("execution_sent"))
     report = {
         "schema_version": 1,
         "tool": "feed_water",
@@ -260,16 +291,11 @@ def _tool_report(
         "planned_displacement_m": pipeline.get("planned_tool0_translation_m"),
         "planned_displacement_norm_m": pipeline.get("planned_tool0_translation_norm_m"),
         "maximum_planned_displacement_m": MAXIMUM_PLAN_TRANSLATION_M,
-        "execution_attempted": bool(
-            pipeline.get("execution_attempted")
-            or return_result.get("execution_attempted")
-        ),
-        "execution_sent": bool(
-            pipeline.get("execution_sent")
-            or return_result.get("execution_sent")
-        ),
-        "outbound_execution_attempted": bool(pipeline.get("execution_attempted")),
-        "outbound_execution_sent": bool(pipeline.get("execution_sent")),
+        "execution_attempted": execution_attempted,
+        "execution_sent": execution_sent,
+        "execution_state_unknown": execution_state_unknown,
+        "outbound_execution_attempted": outbound_execution_attempted,
+        "outbound_execution_sent": outbound_execution_sent,
         "return_to_initial_position": return_result,
         "return_execution_attempted": bool(return_result.get("execution_attempted")),
         "return_execution_sent": bool(return_result.get("execution_sent")),
@@ -460,13 +486,17 @@ def run_real_feed_water(
     try:
         pipeline = json.loads(pipeline_report_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
+        detail = _pipeline_error_detail(completed)
+        reason = f"validated real pre-mouth pipeline did not produce a readable report: {exc}"
+        if detail:
+            reason += f"; pipeline output: {detail}"
         return _failure_report(
             captured_at=captured_at,
             report_path=report_path,
             execute=execute,
             hold_duration_sec=duration,
             stage="pipeline_report",
-            reason=f"validated real pre-mouth pipeline did not produce a readable report: {exc}",
+            reason=reason,
             gates={**gates, "pipeline_exit_code": completed.returncode},
         )
 

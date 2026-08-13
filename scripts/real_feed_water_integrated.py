@@ -35,6 +35,7 @@ import math
 import os
 import sys
 import time
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -7265,14 +7266,26 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
-    rclpy.init()
-    node = RealIntegratedFeedWater(
-        target_selection=args.target_selection,
-        mouth_sample_seconds=args.mouth_sample_seconds,
-        trajectory_velocity_scaling=args.trajectory_velocity_scaling,
-        trajectory_acceleration_scaling=args.trajectory_acceleration_scaling,
-    )
+    node: RealIntegratedFeedWater | None = None
+    rclpy_initialized = False
+    code = 2
+    result: dict[str, Any] = {
+        "success": False,
+        "stage": "pipeline_initialization",
+        "reason": "pipeline did not initialize",
+        "execution_attempted": False,
+        "execution_sent": False,
+        "final_state": "refused",
+    }
     try:
+        rclpy.init()
+        rclpy_initialized = True
+        node = RealIntegratedFeedWater(
+            target_selection=args.target_selection,
+            mouth_sample_seconds=args.mouth_sample_seconds,
+            trajectory_velocity_scaling=args.trajectory_velocity_scaling,
+            trajectory_acceleration_scaling=args.trajectory_acceleration_scaling,
+        )
         if args.validate_initial_position:
             code, result = node.return_to_initial_position(
                 execute=False,
@@ -7313,9 +7326,36 @@ def main() -> int:
                 use_octomap=bool(args.use_octomap),
                 hold_duration_sec=float(args.hold_duration),
             )
+    except Exception as exc:
+        traceback.print_exc(file=sys.stderr)
+        detail = str(exc).strip()
+        result = {
+            "success": False,
+            "stage": "pipeline_exception",
+            "reason": (
+                f"{exc.__class__.__name__}: {detail}"
+                if detail
+                else exc.__class__.__name__
+            ),
+            # An exception can occur after a guarded operation has begun. Do
+            # not make an unsupported claim about whether motion was sent.
+            "execution_attempted": None,
+            "execution_sent": None,
+            "execution_state_unknown": True,
+            "final_state": "refused",
+        }
+        code = 2
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        if node is not None:
+            try:
+                node.destroy_node()
+            except Exception:
+                traceback.print_exc(file=sys.stderr)
+        if rclpy_initialized:
+            try:
+                rclpy.shutdown()
+            except Exception:
+                traceback.print_exc(file=sys.stderr)
     report = json.dumps(_jsonable(result), indent=2, sort_keys=True)
     print(report, flush=True)
     if args.report_file is not None:

@@ -13,6 +13,61 @@ from robot_layer.arm_ur10e.agent_server import real_feed_water_backend as backen
 
 
 class RealFeedWaterBackendTest(unittest.TestCase):
+    def test_missing_pipeline_report_preserves_bounded_stderr(self) -> None:
+        completed = subprocess.CompletedProcess(
+            ["pipeline"],
+            1,
+            stdout="",
+            stderr="Traceback: startup exploded",
+        )
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            backend, "REPORT_DIR", Path(directory)
+        ), patch.object(backend.subprocess, "run", return_value=completed):
+            result = backend.run_real_feed_water(
+                execute=False,
+                environ={"UR10E_BACKEND": "real"},
+            )
+
+        self.assertFalse(result["success"])
+        self.assertEqual("pipeline_report", result["stage"])
+        self.assertIn("Traceback: startup exploded", result["reason"])
+        self.assertEqual(1, result["safety_gates"]["pipeline_exit_code"])
+
+    def test_pipeline_exception_does_not_claim_that_no_motion_was_sent(self) -> None:
+        pipeline = {
+            "success": False,
+            "stage": "pipeline_exception",
+            "reason": "RuntimeError: unexpected failure",
+            "execution_attempted": None,
+            "execution_sent": None,
+            "execution_state_unknown": True,
+            "final_state": "refused",
+        }
+
+        def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+            report_argument = command.index("--report-file") + 1
+            Path(command[report_argument]).write_text(
+                json.dumps(pipeline), encoding="utf-8"
+            )
+            return subprocess.CompletedProcess(command, 2, "", "")
+
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            backend, "REPORT_DIR", Path(directory)
+        ), patch.object(backend.subprocess, "run", side_effect=fake_run):
+            result = backend.run_real_feed_water(
+                execute=True,
+                confirm_real_motion=True,
+                environ={
+                    "UR10E_BACKEND": "real",
+                    "UR10E_ALLOW_REAL_EXECUTION": "1",
+                },
+            )
+
+        self.assertFalse(result["success"])
+        self.assertTrue(result["execution_state_unknown"])
+        self.assertIsNone(result["execution_attempted"])
+        self.assertIsNone(result["execution_sent"])
+
     def test_execute_requires_environment_and_runtime_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as directory, patch.object(
             backend, "REPORT_DIR", Path(directory)
