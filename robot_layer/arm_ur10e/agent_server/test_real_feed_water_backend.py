@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,29 @@ from robot_layer.arm_ur10e.agent_server import real_feed_water_backend as backen
 
 
 class RealFeedWaterBackendTest(unittest.TestCase):
+    def test_base_y_backup_loads_config_and_versioned_initial_position(self) -> None:
+        script = backend.CONTINUOUS_BASE_Y_BACKUP_SCRIPT
+        probe = "\n".join(
+            (
+                "from scripts.real_feed_water_integrated_base_y_backup import load_backup_runner",
+                "runner = load_backup_runner()",
+                "config = runner._load_continuous_tracking_config()",
+                "initial = runner._load_initial_position_config()",
+                "assert config['approach_direction_base'] == [0.0, -1.0, 0.0]",
+                "assert config['final_pre_mouth_standoff_m'] == 0.05",
+                "assert initial['name'] == 'initial_position'",
+            )
+        )
+        completed = subprocess.run(
+            [sys.executable, "-c", probe],
+            cwd=script.parents[1],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(0, completed.returncode, completed.stderr)
+
     def test_continuous_tracking_selects_preserved_base_y_backup(self) -> None:
         command = backend._pipeline_command(
             execute=False,

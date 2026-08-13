@@ -85,18 +85,30 @@ def _write_exception_report(exc: Exception) -> None:
     )
 
 
-def main() -> int:
+def load_backup_runner() -> ModuleType:
+    """Load and configure the preserved runner for this isolated process."""
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
+    _load_module(TRACKER_MODULE, BACKUP_TRACKER)
+    _load_module(CONTROLLER_MODULE, BACKUP_CONTROLLER)
+    runner = _load_module(RUNNER_MODULE, BACKUP_RUNNER)
+    runner.PROJECT_ROOT = PROJECT_ROOT
+    initial_position_config = (
+        PROJECT_ROOT / "config" / "ur10e_real" / "initial_position.json"
+    )
+    runner.INITIAL_POSITION_CONFIG = initial_position_config
+    # The backup function captured its original path as a default argument at
+    # module load time; replace that default for this isolated process.
+    runner._load_initial_position_config.__defaults__ = (
+        initial_position_config,
+    )
+    runner.CONTINUOUS_TRACKING_CONFIG = BACKUP_CONFIG
+    return runner
+
+
+def main() -> int:
     try:
-        _load_module(TRACKER_MODULE, BACKUP_TRACKER)
-        _load_module(CONTROLLER_MODULE, BACKUP_CONTROLLER)
-        runner = _load_module(RUNNER_MODULE, BACKUP_RUNNER)
-        runner.PROJECT_ROOT = PROJECT_ROOT
-        runner.INITIAL_POSITION_CONFIG = (
-            PROJECT_ROOT / "config" / "ur10e_real" / "initial_position.json"
-        )
-        runner.CONTINUOUS_TRACKING_CONFIG = BACKUP_CONFIG
+        runner = load_backup_runner()
         return int(runner.main())
     except Exception as exc:
         traceback.print_exc(file=sys.stderr)
