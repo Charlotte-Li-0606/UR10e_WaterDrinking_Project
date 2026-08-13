@@ -3,6 +3,11 @@ continuous_mouth_tracking:
   target_timeout_sec: 0.30
   # Hold zero velocity through brief full-target loss, then abort.
   lost_target_timeout_sec: 1.00
+  # MediaPipe can briefly report no_face when the wrist camera reaches a
+  # close-up view. Keep the robot stationary while allowing a small backward
+  # head movement to restore a fresh target; never move from the retained pose.
+  close_range_face_dropout_depth_m: 0.200
+  close_range_face_reacquisition_timeout_sec: 3.00
   # A visible face with a temporarily invalid depth gets a longer stationary
   # reacquisition window. No RGB-only motion is permitted during this time.
   depth_reacquisition_timeout_sec: 2.00

@@ -254,10 +254,25 @@ def _load_continuous_tracking_config() -> dict[str, Any]:
             "depth_reacquisition_timeout_sec must be between the target-loss "
             "timeout and 5.0 seconds"
         )
+    close_range_depth = float(
+        values.get("close_range_face_dropout_depth_m", 0.0)
+    )
+    close_range_timeout = float(
+        values.get("close_range_face_reacquisition_timeout_sec", 0.0)
+    )
+    if not lost_timeout <= close_range_timeout <= 5.0:
+        raise RuntimeError(
+            "close_range_face_reacquisition_timeout_sec must be between the "
+            "target-loss timeout and 5.0 seconds"
+        )
     minimum_depth = float(values.get("minimum_depth_m", 0.0))
     maximum_depth = float(values.get("maximum_depth_m", 0.0))
     if not 0.0 < minimum_depth < maximum_depth <= 4.0:
         raise RuntimeError("continuous mouth depth limits are invalid")
+    if not minimum_depth < close_range_depth < maximum_depth:
+        raise RuntimeError(
+            "close_range_face_dropout_depth_m must remain inside the sensor depth range"
+        )
     standoff_rate = float(values.get("maximum_standoff_rate_mps", 0.0))
     standoff_progress_error = float(values.get("standoff_progress_error_m", 0.0))
     standoff_final_tolerance = float(values.get("standoff_final_tolerance_m", 0.0))
@@ -339,7 +354,10 @@ def _active_search_cloud_gate_failures(
 def _continuous_stale_hold_policy(
     perception_status: dict[str, Any] | None,
     *,
+    last_valid_depth_m: float | None,
     lost_target_timeout_sec: float,
+    close_range_face_dropout_depth_m: float,
+    close_range_face_reacquisition_timeout_sec: float,
     depth_reacquisition_timeout_sec: float,
 ) -> dict[str, Any]:
     """Classify a zero-velocity target hold from fresh perception evidence."""
@@ -349,6 +367,15 @@ def _continuous_stale_hold_policy(
         detected_faces = int(status.get("detected_faces", 0))
     except (TypeError, ValueError):
         detected_faces = 0
+    try:
+        last_depth = float(last_valid_depth_m)
+    except (TypeError, ValueError):
+        last_depth = math.inf
+    close_range_dropout = bool(
+        reason == "no_face"
+        and math.isfinite(last_depth)
+        and 0.0 < last_depth <= float(close_range_face_dropout_depth_m)
+    )
     if reason == "invalid_depth" and detected_faces >= 1:
         return {
             "state": "DEPTH_TEMPORARILY_INVALID",
@@ -356,6 +383,17 @@ def _continuous_stale_hold_policy(
             "timeout_reason": "depth_reacquisition_timeout",
             "face_visible": True,
             "depth_valid": False,
+            "stale_target_motion_allowed": False,
+        }
+    if close_range_dropout:
+        return {
+            "state": "CLOSE_RANGE_FACE_DROPOUT_HOLD",
+            "timeout_sec": float(close_range_face_reacquisition_timeout_sec),
+            "timeout_reason": "close_range_face_reacquisition_timeout",
+            "face_visible": False,
+            "depth_valid": False,
+            "last_valid_depth_m": last_depth,
+            "stale_target_motion_allowed": False,
         }
     if reason == "no_face":
         return {
@@ -364,6 +402,7 @@ def _continuous_stale_hold_policy(
             "timeout_reason": "face_lost_timeout",
             "face_visible": False,
             "depth_valid": False,
+            "stale_target_motion_allowed": False,
         }
     return {
         "state": "TARGET_STALE_HOLD",
@@ -371,6 +410,7 @@ def _continuous_stale_hold_policy(
         "timeout_reason": "target_lost_timeout",
         "face_visible": None,
         "depth_valid": None,
+        "stale_target_motion_allowed": False,
     }
 
 
@@ -1110,6 +1150,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "accepted": False,
             "reason": "no_observation_received",
         }
+        self._continuous_last_valid_depth_m: float | None = None
         self._continuous_status_publisher = self.create_publisher(
             String,
             "/continuous_mouth_tracking/status",
@@ -1833,6 +1874,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "confidence": 1.0,
             "confidence_source": "accepted_mediapipe_rgbd_observation",
         }
+        if accepted:
+            self._continuous_last_valid_depth_m = depth
 
     @staticmethod
     def _search_waypoints_from_offsets(
@@ -5892,8 +5935,19 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     )
                     hold_policy = _continuous_stale_hold_policy(
                         perception_status,
+                        last_valid_depth_m=self._continuous_last_valid_depth_m,
                         lost_target_timeout_sec=float(
                             self._continuous_parameters["lost_target_timeout_sec"]
+                        ),
+                        close_range_face_dropout_depth_m=float(
+                            self._continuous_parameters[
+                                "close_range_face_dropout_depth_m"
+                            ]
+                        ),
+                        close_range_face_reacquisition_timeout_sec=float(
+                            self._continuous_parameters[
+                                "close_range_face_reacquisition_timeout_sec"
+                            ]
                         ),
                         depth_reacquisition_timeout_sec=float(
                             self._continuous_parameters[
@@ -5941,6 +5995,12 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                             "reacquisition_timeout_sec": hold_timeout,
                             "face_visible": hold_policy["face_visible"],
                             "depth_valid": hold_policy["depth_valid"],
+                            "last_valid_depth_m": hold_policy.get(
+                                "last_valid_depth_m"
+                            ),
+                            "stale_target_motion_allowed": hold_policy[
+                                "stale_target_motion_allowed"
+                            ],
                         }
                     )
                     if len(diagnostics) > 100:

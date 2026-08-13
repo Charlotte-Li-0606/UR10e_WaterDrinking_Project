@@ -14,6 +14,19 @@ from robot_layer.arm_ur10e.agent_server import real_feed_water_backend as backen
 
 
 class RealFeedWaterBackendTest(unittest.TestCase):
+    def test_preserved_base_y_backup_adapter_is_disabled(self) -> None:
+        script = backend.PROJECT_ROOT / "scripts/real_feed_water_integrated_base_y_backup.py"
+        completed = subprocess.run(
+            [sys.executable, str(script)],
+            cwd=backend.PROJECT_ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertEqual(2, completed.returncode)
+        self.assertIn("base-Y backup is disabled", completed.stderr)
+
     def test_continuous_tracking_selects_active_camera_ray_runner(self) -> None:
         command = backend._pipeline_command(
             execute=False,

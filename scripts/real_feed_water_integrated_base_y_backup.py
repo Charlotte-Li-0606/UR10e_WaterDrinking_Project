@@ -39,6 +39,7 @@ BACKUP_CONFIG = BACKUP_ROOT / "config" / "continuous_mouth_tracking.yaml"
 TRACKER_MODULE = "robot_layer.arm_ur10e.perception.continuous_mouth_tracker"
 CONTROLLER_MODULE = "robot_layer.arm_ur10e.control.continuous_servo_tracking"
 RUNNER_MODULE = "continuous_base_y_backup_real_feed_water_integrated"
+BACKUP_EXECUTION_ENABLED = False
 
 
 def _load_module(module_name: str, path: Path) -> ModuleType:
@@ -107,6 +108,33 @@ def load_backup_runner() -> ModuleType:
 
 
 def main() -> int:
+    if not BACKUP_EXECUTION_ENABLED:
+        reason = (
+            "the preserved base-Y backup is disabled; use the active "
+            "camera-ray tracking workflow"
+        )
+        report_path = _report_path_from_argv()
+        if report_path is not None:
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "success": False,
+                        "stage": "backup_tracking_disabled",
+                        "reason": reason,
+                        "execution_attempted": False,
+                        "execution_sent": False,
+                        "final_state": "refused",
+                        "continuous_tracking_implementation": "base_y_backup",
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        print(reason, file=sys.stderr)
+        return 2
     try:
         runner = load_backup_runner()
         return int(runner.main())

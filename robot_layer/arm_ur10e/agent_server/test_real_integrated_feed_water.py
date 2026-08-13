@@ -288,7 +288,10 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
                 "reason": "invalid_depth",
                 "valid_depth_samples": 0,
             },
+            last_valid_depth_m=0.30,
             lost_target_timeout_sec=1.0,
+            close_range_face_dropout_depth_m=0.20,
+            close_range_face_reacquisition_timeout_sec=3.0,
             depth_reacquisition_timeout_sec=2.0,
         )
 
@@ -297,11 +300,15 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertEqual("depth_reacquisition_timeout", policy["timeout_reason"])
         self.assertTrue(policy["face_visible"])
         self.assertFalse(policy["depth_valid"])
+        self.assertFalse(policy["stale_target_motion_allowed"])
 
-    def test_no_face_uses_shorter_face_loss_timeout(self) -> None:
+    def test_far_no_face_uses_shorter_face_loss_timeout(self) -> None:
         policy = _continuous_stale_hold_policy(
             {"detected": False, "reason": "no_face"},
+            last_valid_depth_m=0.30,
             lost_target_timeout_sec=1.0,
+            close_range_face_dropout_depth_m=0.20,
+            close_range_face_reacquisition_timeout_sec=3.0,
             depth_reacquisition_timeout_sec=2.0,
         )
 
@@ -309,6 +316,26 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertEqual(1.0, policy["timeout_sec"])
         self.assertEqual("face_lost_timeout", policy["timeout_reason"])
         self.assertFalse(policy["face_visible"])
+        self.assertFalse(policy["stale_target_motion_allowed"])
+
+    def test_close_range_no_face_waits_stationary_for_reacquisition(self) -> None:
+        policy = _continuous_stale_hold_policy(
+            {"detected": False, "reason": "no_face"},
+            last_valid_depth_m=0.164,
+            lost_target_timeout_sec=1.0,
+            close_range_face_dropout_depth_m=0.20,
+            close_range_face_reacquisition_timeout_sec=3.0,
+            depth_reacquisition_timeout_sec=2.0,
+        )
+
+        self.assertEqual("CLOSE_RANGE_FACE_DROPOUT_HOLD", policy["state"])
+        self.assertEqual(3.0, policy["timeout_sec"])
+        self.assertEqual(
+            "close_range_face_reacquisition_timeout",
+            policy["timeout_reason"],
+        )
+        self.assertEqual(0.164, policy["last_valid_depth_m"])
+        self.assertFalse(policy["stale_target_motion_allowed"])
 
     def test_octomap_rebuild_reports_actual_final_state_validity_change(self) -> None:
         comparison = _compare_final_state_validity(
