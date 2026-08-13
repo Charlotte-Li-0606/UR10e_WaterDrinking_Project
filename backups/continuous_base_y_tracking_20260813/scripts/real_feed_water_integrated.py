@@ -5440,6 +5440,24 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 state=decision.state.value,
             )
             if decision.complete:
+                if not decision.target.available:
+                    # A PoseStamped callback can complete during the spin that
+                    # reaches the acquisition deadline. Drain that single-slot
+                    # mailbox once and read the tracker again before declaring
+                    # NO_TARGET, so a fresh accepted sample at the timeout
+                    # boundary is not discarded. This never extends motion
+                    # authorization or permits a stale target.
+                    rclpy.spin_once(self, timeout_sec=0.0)
+                    final_now = time.monotonic()
+                    final_target = self._continuous_tracker.target(
+                        now_monotonic_sec=final_now
+                    )
+                    final_decision = acquirer.evaluate(
+                        final_target,
+                        now_monotonic_sec=final_now,
+                    )
+                    if final_target.available:
+                        decision = final_decision
                 break
         assert decision is not None
         return {
