@@ -18,7 +18,7 @@ loop.
    ray before Servo takes ownership.
    Recovery priority is Cartesian, Pilz, then OMPL.
 6. Use MoveIt Servo Twist commands continuously from staging through the 80 mm
-   camera-ray pre-mouth hold. Commands are bounded and filtered; raw MediaPipe
+   base_link -Y pre-mouth hold. Commands are bounded and filtered; raw MediaPipe
    points are never sent directly to Servo.
 7. Halt Servo before any recovery planner acquires motion ownership. Resume
    only after the prior planned execution completes and the target is fresh.
@@ -42,7 +42,7 @@ Parameters are in `config/continuous_mouth_tracking.yaml`. Important defaults:
 - finite close-range mouth depth is accepted from 50 mm instead of applying
   the former 150 mm policy cutoff. Zero, negative, NaN, empty, or otherwise
   unavailable depth remains invalid and never produces RGB-only motion;
-- final/provisional camera-ray standoff: 80/250 mm;
+- final/provisional base_link -Y standoff: 50/250 mm;
 - Servo recovery hysteresis: enter at 100 mm, exit at 60 mm;
 - during the initial approach, the coarse-staging convergence distance is not
   treated as mouth drift; bounded Servo commands close that gap while the

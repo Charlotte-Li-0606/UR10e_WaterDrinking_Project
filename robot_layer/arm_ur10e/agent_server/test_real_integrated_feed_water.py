@@ -68,10 +68,13 @@ from robot_layer.arm_ur10e.perception.continuous_mouth_tracker import (
 
 
 class RealIntegratedFeedWaterTest(unittest.TestCase):
-    def test_continuous_pose_target_executes_camera_ray_margin_branch(self) -> None:
+    def test_continuous_pose_target_uses_base_link_negative_y_axis(self) -> None:
         """Exercise the live-target branch that plan-only cannot reach without a face."""
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
-        node._continuous_parameters = {"maximum_tool_radius_m": 1.30}
+        node._continuous_parameters = {
+            "maximum_tool_radius_m": 1.30,
+            "pre_mouth_approach_axis_base_link": [0.0, -1.0, 0.0],
+        }
         node._tool0_pose = Mock(
             return_value={
                 "available": True,
@@ -118,6 +121,13 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertTrue(result["success"], result)
         straw_tip = np.asarray(result["straw_tip_position_m"], dtype=np.float64)
         self.assertAlmostEqual(0.25, float(np.linalg.norm(position - straw_tip)))
+        np.testing.assert_allclose(straw_tip - position, [0.0, -0.25, 0.0])
+        self.assertAlmostEqual(float(position[0]), float(straw_tip[0]))
+        self.assertAlmostEqual(float(position[2]), float(straw_tip[2]))
+        self.assertEqual(
+            "base_link_negative_y_axis",
+            result["pre_mouth_policy"],
+        )
         self.assertEqual(0.25, result["requested_standoff_m"])
 
     def test_approach_lateral_sign_relationship_rejects_opposite_motion(self) -> None:

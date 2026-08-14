@@ -78,9 +78,11 @@ from robot_layer.arm_ur10e.control.ros_servo_backend import RosServoCommandSink 
 from robot_layer.arm_ur10e.control.continuous_servo_tracking import (  # noqa: E402
     ContinuousServoConfig,
     ContinuousServoController,
+    CONTINUOUS_PRE_MOUTH_APPROACH_AXIS_BASE_LINK,
     MINIMUM_CAMERA_RAY_FORWARD_MARGIN_M,
     MotionCommandArbiter,
     MotionCommandOwner,
+    calibrated_axis_premouth_target,
     camera_ray_premouth_target,
     octomap_layer_status,
 )
@@ -285,6 +287,17 @@ def _load_continuous_tracking_config() -> dict[str, Any]:
     control_rate_hz = float(values.get("control_rate_hz", 0.0))
     if not 10.0 <= control_rate_hz <= 250.0:
         raise RuntimeError("control_rate_hz must remain within [10, 250] Hz")
+    try:
+        approach_axis = tuple(
+            float(value)
+            for value in values.get("pre_mouth_approach_axis_base_link", ())
+        )
+    except (TypeError, ValueError):
+        approach_axis = ()
+    if approach_axis != CONTINUOUS_PRE_MOUTH_APPROACH_AXIS_BASE_LINK:
+        raise RuntimeError(
+            "pre_mouth_approach_axis_base_link must remain [0, -1, 0]"
+        )
     return dict(values)
 
 
@@ -1118,6 +1131,10 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 ),
                 orientation_correction_gain=float(
                     continuous["orientation_correction_gain"]
+                ),
+                approach_axis_base_link=tuple(
+                    float(value)
+                    for value in continuous["pre_mouth_approach_axis_base_link"]
                 ),
                 control_gain=float(continuous["control_gain"]),
                 maximum_tool_radius_m=float(continuous["maximum_tool_radius_m"]),
@@ -5394,7 +5411,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         *,
         standoff_m: float,
     ) -> dict[str, Any]:
-        """Build a camera-ray target from the filtered selected mouth."""
+        """Build a base_link -Y target from the filtered selected mouth."""
         tool = self._tool0_pose()
         camera = self._frame_transform(BASE_FRAME, CAMERA_OPTICAL_FRAME)
         if not tool.get("available") or not camera.get("available"):
@@ -5412,12 +5429,17 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 raise ValueError(
                     "mouth is too close to the D435i for validated camera-ray standoff"
                 )
-            straw, tool0 = camera_ray_premouth_target(
+            straw, tool0 = calibrated_axis_premouth_target(
                 mouth_position_m=target.predicted_position_m,
-                camera_position_m=camera["position_m"],
                 tool_orientation_xyzw=tool["orientation_quat_xyzw"],
                 straw_tip_offset_tool0_m=STRAW_TIP_OFFSET_TOOL0_M,
                 standoff_m=float(standoff_m),
+                approach_axis_base_link=tuple(
+                    float(value)
+                    for value in self._continuous_parameters[
+                        "pre_mouth_approach_axis_base_link"
+                    ]
+                ),
             )
             tilt = _tool_vertical_tilt_rad(tool["orientation_quat_xyzw"])
         except (TypeError, ValueError, RuntimeError) as exc:
@@ -5447,6 +5469,10 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             ],
             "straw_tip_position_m": [float(value) for value in straw],
             "mouth_position_m": [float(value) for value in target.position_m],
+            "pre_mouth_offset_base_link_m": _subtract(
+                straw, target.predicted_position_m
+            ),
+            "pre_mouth_policy": "base_link_negative_y_axis",
             "standoff_m": float(standoff_m),
             "requested_standoff_m": float(standoff_m),
             "flange_vertical_axis_error_rad": float(tilt),
@@ -6226,7 +6252,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         float(value) for value in tool["orientation_quat_xyzw"]
                     ),
                     plan_only=False,
-                    reason="continuous_camera_ray_premouth_tracking",
+                    reason="continuous_base_link_negative_y_premouth_tracking",
                     linear_velocity_mps=decision.linear_velocity_mps,
                     angular_velocity_rps=decision.angular_velocity_rps,
                     preserve_orientation=True,

@@ -11,6 +11,7 @@ from .continuous_servo_tracking import (
     ContinuousServoController,
     MotionCommandArbiter,
     MotionCommandOwner,
+    calibrated_axis_premouth_target,
     camera_ray_premouth_target,
     octomap_layer_status,
     run_recovery_backends,
@@ -50,10 +51,9 @@ def _target(position=MOUTH, *, stable=True, available=True):
     )
 
 
-def _desired_tool(mouth=MOUTH, standoff=0.08):
-    _, tool = camera_ray_premouth_target(
+def _desired_tool(mouth=MOUTH, standoff=0.05):
+    _, tool = calibrated_axis_premouth_target(
         mouth_position_m=mouth,
-        camera_position_m=CAMERA_POSITION,
         tool_orientation_xyzw=FLANGE_DOWN_XYZW,
         straw_tip_offset_tool0_m=(0.110, 0.0, 0.0),
         standoff_m=standoff,
@@ -82,6 +82,20 @@ def test_camera_ray_target_retains_validated_standoff_and_tool_offset():
         standoff_m=0.08,
     )
     assert np.allclose(straw, (0.92, 0.0, 0.0))
+    assert np.allclose(tool + np.array((0.110, 0.0, 0.0)), straw)
+
+
+def test_continuous_target_is_exactly_50_mm_on_base_link_negative_y():
+    mouth = (-0.95, 0.25, 0.65)
+    straw, tool = calibrated_axis_premouth_target(
+        mouth_position_m=mouth,
+        tool_orientation_xyzw=FLANGE_DOWN_XYZW,
+        straw_tip_offset_tool0_m=(0.110, 0.0, 0.0),
+        standoff_m=0.05,
+    )
+
+    assert np.allclose(straw, (-0.95, 0.20, 0.65))
+    assert np.allclose(straw - np.asarray(mouth), (0.0, -0.05, 0.0))
     assert np.allclose(tool + np.array((0.110, 0.0, 0.0)), straw)
 
 
