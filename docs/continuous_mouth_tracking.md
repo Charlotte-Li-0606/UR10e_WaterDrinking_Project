@@ -45,6 +45,13 @@ Parameters are in `config/continuous_mouth_tracking.yaml`. Important defaults:
 - final/provisional front-facing tool0-local +Y standoff: 50/250 mm;
 - HOLD latches on entry, publishes zero velocity, pauses Servo, ignores later
   mouth-target updates for five seconds, and then invokes the guarded return;
+- while the wrist camera moves, RGB-D candidates are reprojected with the
+  image-timestamp TF before entering the base-link tracker; the same coordinate
+  path is active before initial workspace checking, which requires three
+  consistent samples rather than allowing one provisional depth frame to
+  decide reachability; HOLD uses the validated 50 mm standoff and 10 mm
+  Cartesian arrival tolerance without requiring the near-field three-sample
+  stability label;
 - Servo recovery hysteresis: enter at 100 mm, exit at 60 mm;
 - during the initial approach, the coarse-staging convergence distance is not
   treated as mouth drift; bounded Servo commands close that gap while the

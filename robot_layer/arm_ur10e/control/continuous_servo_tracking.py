@@ -432,9 +432,14 @@ class ContinuousServoController:
             gain=self.config.orientation_correction_gain,
             maximum_speed_rps=self.config.maximum_angular_speed_rps,
         )
+        # A fresh, accepted target is already confidence/depth bounded by the
+        # tracker.  Do not additionally require its short RGB-D history to be
+        # classified stable here: close-range depth jitter can make that flag
+        # provisional even when the straw is geometrically at the validated
+        # pre-mouth point.  The 50 mm standoff and 10 mm Cartesian arrival
+        # tolerance remain mandatory.
         hold_ready = bool(
-            target.stable
-            and abs(
+            abs(
                 self._commanded_standoff_m
                 - self.config.final_pre_mouth_standoff_m
             ) <= self.config.standoff_final_tolerance_m

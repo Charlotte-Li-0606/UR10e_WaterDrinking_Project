@@ -206,7 +206,16 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             )
         )
         node._continuous_tracker = Mock()
-        node._continuous_tracker.target.return_value = target
+        correction_active_during_target_read: list[bool] = []
+
+        def read_target(*, now_monotonic_sec: float) -> ContinuousMouthTarget:
+            del now_monotonic_sec
+            correction_active_during_target_read.append(
+                node._continuous_approach_correction_active
+            )
+            return target
+
+        node._continuous_tracker.target.side_effect = read_target
         node._live_ur_execution_state_failure = Mock(return_value=None)
         node._continuous_servo_status_snapshot = Mock(
             return_value={"success": True, "code": 0, "message": "No warnings"}
@@ -257,6 +266,13 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertTrue(result["hold_target_updates_ignored"])
         self.assertEqual(0, result["hold_target_reads_after_latch"])
         self.assertEqual(1, node._continuous_tracker.target.call_count)
+        self.assertEqual([True], correction_active_during_target_read)
+        self.assertFalse(node._continuous_approach_correction_active)
+        self.assertEqual(
+            "image_timestamp_rgbd_reprojection",
+            result["approach_coordinate_correction"]["mode"],
+        )
+        self.assertIsNotNone(result["last_valid_tracking_geometry"])
         sink.assert_not_called()
         sink.halt.assert_called()
         self.assertIn(
@@ -1518,7 +1534,15 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
 
     def test_continuous_mode_dispatches_before_legacy_workflow(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
-        node.run_continuous_integrated = Mock(return_value=(0, {"success": True}))
+        correction_active_during_dispatch: list[bool] = []
+
+        def run_continuous(**_kwargs):
+            correction_active_during_dispatch.append(
+                node._continuous_approach_correction_active
+            )
+            return 0, {"success": True}
+
+        node.run_continuous_integrated = Mock(side_effect=run_continuous)
 
         code, result = node.run_integrated(
             execute=False,
@@ -1532,6 +1556,12 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
 
         self.assertEqual(0, code)
         self.assertTrue(result["success"])
+        self.assertEqual([True], correction_active_during_dispatch)
+        self.assertFalse(node._continuous_approach_correction_active)
+        self.assertEqual(
+            "image_timestamp_rgbd_reprojection",
+            result["continuous_coordinate_correction"]["mode"],
+        )
         node.run_continuous_integrated.assert_called_once_with(
             execute=False,
             confirm_real_motion=False,
@@ -1540,6 +1570,61 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             hold_duration_sec=5.0,
             use_octomap=False,
         )
+
+    def test_initial_workspace_acquisition_waits_past_single_provisional_frame(
+        self,
+    ) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._continuous_parameters = {
+            "initial_target_acquisition_timeout_sec": 3.0,
+        }
+        point = np.asarray((-1.0, 0.25, 0.65), dtype=np.float64)
+
+        def target(*, stable: bool) -> ContinuousMouthTarget:
+            return ContinuousMouthTarget(
+                available=True,
+                position_m=point,
+                predicted_position_m=point,
+                velocity_mps=np.zeros(3),
+                source_timestamp_sec=1.0,
+                age_sec=0.01,
+                confidence=1.0,
+                target_id="center",
+                state=(
+                    ContinuousTrackingState.STABLE_TARGET
+                    if stable
+                    else ContinuousTrackingState.PROVISIONAL_TARGET
+                ),
+                provisional=not stable,
+                stable=stable,
+                sample_count=3 if stable else 1,
+                spread_m=0.001,
+                prediction_m=0.0,
+                reason=None,
+            )
+
+        node._continuous_tracker = Mock()
+        node._continuous_tracker.target.side_effect = [
+            target(stable=False),
+            target(stable=True),
+        ]
+        node._publish_continuous_diagnostics = Mock()
+        node._continuous_last_observation_update = {"accepted": True}
+
+        with (
+            patch("scripts.real_feed_water_integrated.rclpy.ok", return_value=True),
+            patch("scripts.real_feed_water_integrated.rclpy.spin_once"),
+            patch(
+                "scripts.real_feed_water_integrated.time.monotonic",
+                side_effect=[10.0, 10.01, 10.10, 10.11],
+            ),
+        ):
+            result = node._acquire_continuous_target(require_stable=True)
+
+        self.assertTrue(result["success"], result)
+        self.assertTrue(result["require_stable"])
+        self.assertEqual("STABLE_TARGET", result["state"])
+        self.assertEqual(2, node._continuous_tracker.target.call_count)
 
     def test_continuous_failure_after_sent_motion_requests_guarded_return(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)

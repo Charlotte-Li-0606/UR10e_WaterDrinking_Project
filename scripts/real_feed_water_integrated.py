@@ -85,6 +85,7 @@ from robot_layer.arm_ur10e.control.continuous_servo_tracking import (  # noqa: E
     calibrated_axis_premouth_target,
     camera_ray_premouth_target,
     octomap_layer_status,
+    rotate_vector_xyzw,
 )
 from robot_layer.arm_ur10e.agent_tools.planning_scene_manager import (  # noqa: E402
     PlanningSceneObstacleConfig,
@@ -1195,6 +1196,31 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             ),
         )
         self._continuous_latest_only_subscription_active = True
+
+    def _enable_continuous_image_time_coordinates(
+        self,
+        *,
+        reset_report: bool,
+    ) -> None:
+        """Use one image-time base_link coordinate path for continuous mode."""
+        if reset_report or not isinstance(
+            getattr(self, "_continuous_approach_correction_report", None),
+            dict,
+        ):
+            self._continuous_approach_correction_report = {
+                "active": True,
+                "mode": "image_timestamp_rgbd_reprojection",
+                "accepted_samples": 0,
+                "rejected_samples": 0,
+                "last_sample": None,
+            }
+        else:
+            self._continuous_approach_correction_report["active"] = True
+            self._continuous_approach_correction_report["mode"] = (
+                "image_timestamp_rgbd_reprojection"
+            )
+        self._continuous_approach_previous_selected_sample = None
+        self._continuous_approach_correction_active = True
 
     def _servo_status_callback(self, message: ServoStatus) -> None:
         self._latest_servo_status = message
@@ -5328,15 +5354,20 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             pose.pose.orientation.w = 1.0
             self._continuous_target_publisher.publish(pose)
 
-    def _acquire_continuous_target(self) -> dict[str, Any]:
-        """Accept a fresh valid target immediately, including provisional data."""
+    def _acquire_continuous_target(
+        self,
+        *,
+        require_stable: bool = False,
+    ) -> dict[str, Any]:
+        """Acquire a fresh target, optionally requiring a robust initial median."""
         self._continuous_tracker.reset(searching=True)
         started = time.monotonic()
+        timeout_sec = float(
+            self._continuous_parameters["initial_target_acquisition_timeout_sec"]
+        )
         acquirer = InitialTargetAcquirer(
             started_monotonic_sec=started,
-            timeout_sec=float(
-                self._continuous_parameters["initial_target_acquisition_timeout_sec"]
-            ),
+            timeout_sec=timeout_sec,
         )
         decision = None
         while rclpy.ok():
@@ -5348,6 +5379,28 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 target,
                 state=decision.state.value,
             )
+            if require_stable:
+                if target.available and target.stable:
+                    break
+                if now - started >= timeout_sec:
+                    return {
+                        "success": False,
+                        "state": target.state.value,
+                        "reason": (
+                            "stable_target_acquisition_timeout"
+                            if target.available
+                            else "no_valid_observation_after_acquisition_timeout"
+                        ),
+                        "active_search_required": not target.available,
+                        "elapsed_sec": now - started,
+                        "require_stable": True,
+                        "target": target,
+                        "target_report": self._continuous_target_report(target),
+                        "last_observation_update": dict(
+                            self._continuous_last_observation_update
+                        ),
+                    }
+                continue
             if decision.complete:
                 break
         assert decision is not None
@@ -5357,6 +5410,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "reason": decision.reason,
             "active_search_required": bool(decision.active_search_required),
             "elapsed_sec": time.monotonic() - started,
+            "require_stable": bool(require_stable),
             "target": decision.target,
             "target_report": self._continuous_target_report(decision.target),
             "last_observation_update": dict(
@@ -5815,7 +5869,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "servo_command_count": 0,
             "recovery_attempts": [],
             "maximum_target_error_m": 0.0,
+            "minimum_target_error_m": None,
             "maximum_target_displacement_m": 0.0,
+            "last_valid_tracking_geometry": None,
             "minimum_commanded_standoff_m": final_standoff,
             "maximum_commanded_standoff_m": final_standoff,
             "hold_duration_sec": float(hold_duration_sec),
@@ -5888,6 +5944,12 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             ),
             armed=True,
         )
+        # The standalone perception node intentionally prefers latest TF for
+        # stationary use.  During Servo the wrist camera is moving, so replace
+        # each candidate with an RGB-D reprojection using the image-time TF.
+        # This switch was previously left false, allowing camera motion to
+        # appear as mouth motion in base_link.
+        self._enable_continuous_image_time_coordinates(reset_report=False)
         started = time.monotonic()
         last_update = started
         hold_started: float | None = None
@@ -6078,6 +6140,16 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     if not math.isfinite(decision.target_error_m)
                     else float(decision.target_error_m),
                 )
+                if math.isfinite(decision.target_error_m):
+                    previous_minimum = report["minimum_target_error_m"]
+                    report["minimum_target_error_m"] = (
+                        float(decision.target_error_m)
+                        if previous_minimum is None
+                        else min(
+                            float(previous_minimum),
+                            float(decision.target_error_m),
+                        )
+                    )
                 report["maximum_target_displacement_m"] = max(
                     float(report["maximum_target_displacement_m"]),
                     float(decision.target_displacement_m),
@@ -6086,6 +6158,49 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     float(report["minimum_commanded_standoff_m"]),
                     float(decision.commanded_standoff_m),
                 )
+                current_tool0 = [float(value) for value in tool["position_m"]]
+                straw_tip_offset_base = rotate_vector_xyzw(
+                    tool["orientation_quat_xyzw"],
+                    STRAW_TIP_OFFSET_TOOL0_M,
+                )
+                current_straw_tip = _add(
+                    current_tool0,
+                    [float(value) for value in straw_tip_offset_base],
+                )
+                desired_tool0 = [
+                    float(value) for value in decision.desired_tool0_position_m
+                ]
+                report["last_valid_tracking_geometry"] = {
+                    "elapsed_sec": float(now - started),
+                    "source_timestamp_sec": float(target.source_timestamp_sec),
+                    "target_age_sec": float(target.age_sec),
+                    "target_stable": bool(target.stable),
+                    "target_provisional": bool(target.provisional),
+                    "filtered_mouth_position_m": [
+                        float(value) for value in target.position_m
+                    ],
+                    "predicted_mouth_position_m": [
+                        float(value) for value in target.predicted_position_m
+                    ],
+                    "desired_pre_mouth_straw_tip_position_m": [
+                        float(value)
+                        for value in decision.desired_straw_tip_position_m
+                    ],
+                    "current_straw_tip_position_m": [
+                        float(value) for value in current_straw_tip
+                    ],
+                    "current_tool0_position_m": current_tool0,
+                    "desired_tool0_position_m": desired_tool0,
+                    "tool0_error_vector_m": _subtract(
+                        desired_tool0,
+                        current_tool0,
+                    ),
+                    "target_error_m": float(decision.target_error_m),
+                    "commanded_standoff_m": float(
+                        decision.commanded_standoff_m
+                    ),
+                    "hold_ready": bool(decision.hold_ready),
+                }
                 report["maximum_commanded_standoff_m"] = max(
                     float(report["maximum_commanded_standoff_m"]),
                     float(decision.commanded_standoff_m),
@@ -6417,11 +6532,17 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 )
                 return 2, report
 
-        acquisition = self._acquire_continuous_target()
+        acquisition = self._acquire_continuous_target(require_stable=True)
         report["initial_target_acquisition"] = {
             key: value for key, value in acquisition.items() if key != "target"
         }
         if not acquisition.get("success"):
+            if not acquisition.get("active_search_required"):
+                report.update(
+                    stage="continuous_initial_target_unstable",
+                    reason=acquisition.get("reason"),
+                )
+                return 2, report
             search = self.active_search(
                 execute=execute,
                 confirm_real_motion=confirm_real_motion,
@@ -6436,7 +6557,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     reason=search.get("reason") or acquisition.get("reason"),
                 )
                 return 2, report
-            acquisition = self._acquire_continuous_target()
+            acquisition = self._acquire_continuous_target(require_stable=True)
             report["post_search_target_acquisition"] = {
                 key: value for key, value in acquisition.items() if key != "target"
             }
@@ -6706,16 +6827,24 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     "execution_attempted": False,
                     "execution_sent": False,
                 }
-            code, result = self.run_continuous_integrated(
-                execute=execute,
-                confirm_real_motion=confirm_real_motion,
-                allow_validated_camera_ray_execute=(
-                    allow_validated_camera_ray_execute
-                ),
-                no_execute=no_execute,
-                hold_duration_sec=hold_duration_sec,
-                use_octomap=use_octomap,
-            )
+            self._enable_continuous_image_time_coordinates(reset_report=True)
+            try:
+                code, result = self.run_continuous_integrated(
+                    execute=execute,
+                    confirm_real_motion=confirm_real_motion,
+                    allow_validated_camera_ray_execute=(
+                        allow_validated_camera_ray_execute
+                    ),
+                    no_execute=no_execute,
+                    hold_duration_sec=hold_duration_sec,
+                    use_octomap=use_octomap,
+                )
+                result.setdefault(
+                    "continuous_coordinate_correction",
+                    copy.deepcopy(self._continuous_approach_correction_report),
+                )
+            finally:
+                self._continuous_approach_correction_active = False
             # Cover every continuous-mode failure after outbound motion,
             # including search motion followed by a later refusal.  A stage
             # that already attempted guarded recovery is never retried here.

@@ -156,6 +156,23 @@ def test_provisional_target_moves_at_existing_reduced_speed_without_hold():
     assert not decision.hold_ready
 
 
+def test_fresh_provisional_target_can_latch_hold_at_exact_premouth_geometry():
+    controller = ContinuousServoController()
+    controller.reset(commanded_standoff_m=0.05)
+
+    decision = _update(
+        controller,
+        _target(stable=False),
+        _desired_tool(standoff=0.05),
+        dt=0.02,
+    )
+
+    assert decision.command_allowed
+    assert decision.target_error_m == 0.0
+    assert decision.hold_ready
+    assert decision.state == "HOLDING"
+
+
 def test_large_live_mouth_displacement_requests_bounded_recovery():
     controller = ContinuousServoController()
     _update(controller, _target(), _desired_tool())
