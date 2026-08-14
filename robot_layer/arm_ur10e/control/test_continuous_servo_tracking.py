@@ -14,6 +14,7 @@ from .continuous_servo_tracking import (
     calibrated_axis_premouth_target,
     camera_ray_premouth_target,
     octomap_layer_status,
+    rotate_vector_xyzw,
     run_recovery_backends,
     vertical_axis_angular_correction,
 )
@@ -85,18 +86,26 @@ def test_camera_ray_target_retains_validated_standoff_and_tool_offset():
     assert np.allclose(tool + np.array((0.110, 0.0, 0.0)), straw)
 
 
-def test_continuous_target_is_exactly_50_mm_on_base_link_negative_y():
+def test_continuous_target_is_exactly_50_mm_on_tool0_positive_y():
     mouth = (-0.95, 0.25, 0.65)
+    live_flange_down = (0.72116807, 0.69268808, -0.00916012, 0.00399217)
     straw, tool = calibrated_axis_premouth_target(
         mouth_position_m=mouth,
-        tool_orientation_xyzw=FLANGE_DOWN_XYZW,
+        tool_orientation_xyzw=live_flange_down,
         straw_tip_offset_tool0_m=(0.110, 0.0, 0.0),
         standoff_m=0.05,
     )
 
-    assert np.allclose(straw, (-0.95, 0.20, 0.65))
-    assert np.allclose(straw - np.asarray(mouth), (0.0, -0.05, 0.0))
-    assert np.allclose(tool + np.array((0.110, 0.0, 0.0)), straw)
+    expected_offset_base = rotate_vector_xyzw(
+        live_flange_down, (0.0, 0.05, 0.0)
+    )
+    straw_offset_base = straw - np.asarray(mouth)
+    assert np.allclose(straw_offset_base, expected_offset_base)
+    assert np.isclose(np.linalg.norm(straw_offset_base), 0.05)
+    assert np.allclose(
+        tool + rotate_vector_xyzw(live_flange_down, (0.110, 0.0, 0.0)),
+        straw,
+    )
 
 
 def test_acceleration_and_speed_limits_apply_to_cartesian_command():

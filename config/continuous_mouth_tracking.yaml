@@ -20,10 +20,10 @@ continuous_mouth_tracking:
   stable_max_spread_m: 0.025
   prediction_horizon_sec: 0.10
   maximum_prediction_m: 0.020
-  # Continuous tracking uses base_link -Y as the validated approach direction:
-  # pre_mouth = live_mouth + [0, -0.050, 0].
+  # Continuous tracking offsets the straw target 50 mm along tool0 local +Y;
+  # the live tool orientation rotates this vector into base_link.
   final_pre_mouth_standoff_m: 0.050
-  pre_mouth_approach_axis_base_link: [0.0, -1.0, 0.0]
+  pre_mouth_approach_axis_tool0: [0.0, 1.0, 0.0]
   coarse_staging_standoff_m: 0.250
   provisional_standoff_m: 0.250
   hold_entry_tolerance_m: 0.010

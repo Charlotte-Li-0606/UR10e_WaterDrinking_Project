@@ -65,21 +65,29 @@ from robot_layer.arm_ur10e.perception.continuous_mouth_tracker import (
     ContinuousMouthTracker,
     ContinuousTrackingState,
 )
+from robot_layer.arm_ur10e.control.continuous_servo_tracking import (
+    rotate_vector_xyzw,
+)
 
 
 class RealIntegratedFeedWaterTest(unittest.TestCase):
-    def test_continuous_pose_target_uses_base_link_negative_y_axis(self) -> None:
+    def test_continuous_pose_target_uses_front_facing_tool0_positive_y_axis(self) -> None:
         """Exercise the live-target branch that plan-only cannot reach without a face."""
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
         node._continuous_parameters = {
             "maximum_tool_radius_m": 1.30,
-            "pre_mouth_approach_axis_base_link": [0.0, -1.0, 0.0],
+            "pre_mouth_approach_axis_tool0": [0.0, 1.0, 0.0],
         }
         node._tool0_pose = Mock(
             return_value={
                 "available": True,
                 "position_m": [-0.30, 0.15, 0.80],
-                "orientation_quat_xyzw": [1.0, 0.0, 0.0, 0.0],
+                "orientation_quat_xyzw": [
+                    0.72116807,
+                    0.69268808,
+                    -0.00916012,
+                    0.00399217,
+                ],
             }
         )
         node._frame_transform = Mock(
@@ -121,11 +129,17 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertTrue(result["success"], result)
         straw_tip = np.asarray(result["straw_tip_position_m"], dtype=np.float64)
         self.assertAlmostEqual(0.25, float(np.linalg.norm(position - straw_tip)))
-        np.testing.assert_allclose(straw_tip - position, [0.0, -0.25, 0.0])
-        self.assertAlmostEqual(float(position[0]), float(straw_tip[0]))
-        self.assertAlmostEqual(float(position[2]), float(straw_tip[2]))
+        expected_offset = rotate_vector_xyzw(
+            [0.72116807, 0.69268808, -0.00916012, 0.00399217],
+            [0.0, 0.25, 0.0],
+        )
+        np.testing.assert_allclose(straw_tip - position, expected_offset)
+        np.testing.assert_allclose(
+            result["pre_mouth_offset_tool0_m"],
+            [0.0, 0.25, 0.0],
+        )
         self.assertEqual(
-            "base_link_negative_y_axis",
+            "tool0_positive_y_front_facing_axis",
             result["pre_mouth_policy"],
         )
         self.assertEqual(0.25, result["requested_standoff_m"])

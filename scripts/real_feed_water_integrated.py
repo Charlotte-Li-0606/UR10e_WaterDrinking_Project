@@ -78,7 +78,7 @@ from robot_layer.arm_ur10e.control.ros_servo_backend import RosServoCommandSink 
 from robot_layer.arm_ur10e.control.continuous_servo_tracking import (  # noqa: E402
     ContinuousServoConfig,
     ContinuousServoController,
-    CONTINUOUS_PRE_MOUTH_APPROACH_AXIS_BASE_LINK,
+    CONTINUOUS_PRE_MOUTH_APPROACH_AXIS_TOOL0,
     MINIMUM_CAMERA_RAY_FORWARD_MARGIN_M,
     MotionCommandArbiter,
     MotionCommandOwner,
@@ -290,13 +290,13 @@ def _load_continuous_tracking_config() -> dict[str, Any]:
     try:
         approach_axis = tuple(
             float(value)
-            for value in values.get("pre_mouth_approach_axis_base_link", ())
+            for value in values.get("pre_mouth_approach_axis_tool0", ())
         )
     except (TypeError, ValueError):
         approach_axis = ()
-    if approach_axis != CONTINUOUS_PRE_MOUTH_APPROACH_AXIS_BASE_LINK:
+    if approach_axis != CONTINUOUS_PRE_MOUTH_APPROACH_AXIS_TOOL0:
         raise RuntimeError(
-            "pre_mouth_approach_axis_base_link must remain [0, -1, 0]"
+            "pre_mouth_approach_axis_tool0 must remain [0, +1, 0]"
         )
     return dict(values)
 
@@ -1132,9 +1132,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 orientation_correction_gain=float(
                     continuous["orientation_correction_gain"]
                 ),
-                approach_axis_base_link=tuple(
+                approach_axis_tool0=tuple(
                     float(value)
-                    for value in continuous["pre_mouth_approach_axis_base_link"]
+                    for value in continuous["pre_mouth_approach_axis_tool0"]
                 ),
                 control_gain=float(continuous["control_gain"]),
                 maximum_tool_radius_m=float(continuous["maximum_tool_radius_m"]),
@@ -5411,7 +5411,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         *,
         standoff_m: float,
     ) -> dict[str, Any]:
-        """Build a base_link -Y target from the filtered selected mouth."""
+        """Build a physically front-facing tool0-local +Y mouth target."""
         tool = self._tool0_pose()
         camera = self._frame_transform(BASE_FRAME, CAMERA_OPTICAL_FRAME)
         if not tool.get("available") or not camera.get("available"):
@@ -5434,10 +5434,10 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 tool_orientation_xyzw=tool["orientation_quat_xyzw"],
                 straw_tip_offset_tool0_m=STRAW_TIP_OFFSET_TOOL0_M,
                 standoff_m=float(standoff_m),
-                approach_axis_base_link=tuple(
+                approach_axis_tool0=tuple(
                     float(value)
                     for value in self._continuous_parameters[
-                        "pre_mouth_approach_axis_base_link"
+                        "pre_mouth_approach_axis_tool0"
                     ]
                 ),
             )
@@ -5472,7 +5472,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "pre_mouth_offset_base_link_m": _subtract(
                 straw, target.predicted_position_m
             ),
-            "pre_mouth_policy": "base_link_negative_y_axis",
+            "pre_mouth_offset_tool0_m": [0.0, float(standoff_m), 0.0],
+            "pre_mouth_policy": "tool0_positive_y_front_facing_axis",
             "standoff_m": float(standoff_m),
             "requested_standoff_m": float(standoff_m),
             "flange_vertical_axis_error_rad": float(tilt),
@@ -6252,7 +6253,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         float(value) for value in tool["orientation_quat_xyzw"]
                     ),
                     plan_only=False,
-                    reason="continuous_base_link_negative_y_premouth_tracking",
+                    reason="continuous_tool0_positive_y_premouth_tracking",
                     linear_velocity_mps=decision.linear_velocity_mps,
                     angular_velocity_rps=decision.angular_velocity_rps,
                     preserve_orientation=True,
