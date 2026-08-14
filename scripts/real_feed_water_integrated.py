@@ -5825,6 +5825,12 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "target_reacquisition_count": 0,
             "depth_invalid_zero_velocity_cycles": 0,
             "maximum_depth_invalid_age_sec": 0.0,
+            "hold_policy": "latched_stationary_ignore_mouth_updates",
+            "hold_latched": False,
+            "hold_target_updates_ignored": False,
+            "hold_target_reads_after_latch": 0,
+            "hold_zero_velocity_command_batches": 0,
+            "hold_servo_pause": None,
             "octomap": octomap,
         }
         # Planning and executing the coarse staging trajectory can take several
@@ -5942,6 +5948,18 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         report["stop_reason"] = "continuous_state_collision"
                         report["collision_state_validity"] = latest_state_validity
                         break
+                # HOLD is a latched stationary state. Once entered, do not
+                # read the mouth-target mailbox again: perception may continue
+                # publishing, but it cannot move or reset the held pose. Servo
+                # was explicitly zeroed and paused at the transition; only the
+                # robot/controller and collision watchdogs above remain active.
+                if hold_started is not None:
+                    report["hold_target_updates_ignored"] = True
+                    if now - hold_started >= float(hold_duration_sec):
+                        report["success"] = True
+                        report["stop_reason"] = "hold_duration_complete"
+                        break
+                    continue
                 target = self._continuous_tracker.target(now_monotonic_sec=now)
                 if not target.available and target.reason in {
                     "target_stale_grace",
@@ -6247,6 +6265,31 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     last_update = time.monotonic()
                     hold_started = None
                     continue
+                if decision.hold_ready:
+                    # Enter the five-second dwell without sending the small
+                    # residual tracking command from this cycle. The scaled
+                    # joint controller holds the last stationary setpoint.
+                    sink.halt()
+                    report["hold_zero_velocity_command_batches"] += 1
+                    hold_pause = self._set_continuous_servo_active(False)
+                    report["hold_servo_pause"] = hold_pause
+                    if not hold_pause.get("success"):
+                        report["stop_reason"] = (
+                            hold_pause.get("reason")
+                            or "Servo could not be paused for stationary hold"
+                        )
+                        break
+                    hold_started = now
+                    report["hold_latched"] = True
+                    report["hold_entry_tool0_pose"] = copy.deepcopy(tool)
+                    report["hold_entry_straw_tip_position_m"] = [
+                        float(value)
+                        for value in decision.desired_straw_tip_position_m
+                    ]
+                    report["hold_entry_target_error_m"] = float(
+                        decision.target_error_m
+                    )
+                    continue
                 request = MotionRequest(
                     target_position=decision.desired_tool0_position_m,
                     target_orientation_xyzw=tuple(
@@ -6260,15 +6303,6 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 )
                 sink(request)
                 report["servo_command_count"] += 1
-                if decision.hold_ready:
-                    if hold_started is None:
-                        hold_started = now
-                    if now - hold_started >= float(hold_duration_sec):
-                        report["success"] = True
-                        report["stop_reason"] = "hold_duration_complete"
-                        break
-                else:
-                    hold_started = None
         finally:
             sink.halt()
             self._set_continuous_servo_active(False)

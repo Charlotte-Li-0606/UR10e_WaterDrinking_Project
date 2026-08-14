@@ -43,6 +43,8 @@ Parameters are in `config/continuous_mouth_tracking.yaml`. Important defaults:
   the former 150 mm policy cutoff. Zero, negative, NaN, empty, or otherwise
   unavailable depth remains invalid and never produces RGB-only motion;
 - final/provisional front-facing tool0-local +Y standoff: 50/250 mm;
+- HOLD latches on entry, publishes zero velocity, pauses Servo, ignores later
+  mouth-target updates for five seconds, and then invokes the guarded return;
 - Servo recovery hysteresis: enter at 100 mm, exit at 60 mm;
 - during the initial approach, the coarse-staging convergence distance is not
   treated as mouth drift; bounded Servo commands close that gap while the

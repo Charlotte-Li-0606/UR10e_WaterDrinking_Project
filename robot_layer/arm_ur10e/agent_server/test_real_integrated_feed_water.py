@@ -66,6 +66,8 @@ from robot_layer.arm_ur10e.perception.continuous_mouth_tracker import (
     ContinuousTrackingState,
 )
 from robot_layer.arm_ur10e.control.continuous_servo_tracking import (
+    ContinuousServoDecision,
+    MotionCommandArbiter,
     rotate_vector_xyzw,
 )
 
@@ -143,6 +145,124 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             result["pre_mouth_policy"],
         )
         self.assertEqual(0.25, result["requested_standoff_m"])
+
+    def test_continuous_hold_latches_and_never_reads_mouth_target_again(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._continuous_parameters = {
+            "final_pre_mouth_standoff_m": 0.05,
+            "state_validity_check_period_sec": 0.10,
+            "control_rate_hz": 250.0,
+            "servo_twist_topic": "/servo_node/delta_twist_cmds",
+            "maximum_linear_speed_mps": 0.02,
+            "maximum_angular_speed_rps": 0.15,
+        }
+        position = np.asarray((-1.0, 0.25, 0.65), dtype=np.float64)
+        target = ContinuousMouthTarget(
+            available=True,
+            position_m=position,
+            predicted_position_m=position,
+            velocity_mps=np.zeros(3),
+            source_timestamp_sec=1.0,
+            age_sec=0.01,
+            confidence=1.0,
+            target_id="center",
+            state=ContinuousTrackingState.STABLE_TARGET,
+            provisional=False,
+            stable=True,
+            sample_count=3,
+            spread_m=0.001,
+            prediction_m=0.0,
+            reason=None,
+        )
+        node._acquire_continuous_target = Mock(
+            return_value={"success": True, "state": "STABLE_TARGET", "target": target}
+        )
+        node._execution_state_failures = Mock(return_value=[])
+        valid_state = {"available": True, "valid": True, "contacts": []}
+        node._search_start_state_validity = Mock(return_value=valid_state)
+        node._set_continuous_servo_active = Mock(
+            side_effect=lambda active: {"success": True, "active": active}
+        )
+        node._continuous_motion_arbiter = MotionCommandArbiter()
+        node._continuous_servo_controller = Mock()
+        node._continuous_servo_controller.update.return_value = (
+            ContinuousServoDecision(
+                command_allowed=True,
+                linear_velocity_mps=(0.001, 0.0, 0.0),
+                angular_velocity_rps=(0.0, 0.0, 0.0),
+                desired_tool0_position_m=(-0.95, 0.15, 0.65),
+                desired_straw_tip_position_m=(-0.95, 0.25, 0.65),
+                target_error_m=0.005,
+                target_displacement_m=0.0,
+                commanded_standoff_m=0.05,
+                requested_standoff_m=0.05,
+                standoff_transition_active=False,
+                state="HOLDING",
+                hold_ready=True,
+                recovery_required=False,
+                fallback_reason=None,
+                safety_stop_reason=None,
+                speed_limit_mps=0.02,
+            )
+        )
+        node._continuous_tracker = Mock()
+        node._continuous_tracker.target.return_value = target
+        node._live_ur_execution_state_failure = Mock(return_value=None)
+        node._continuous_servo_status_snapshot = Mock(
+            return_value={"success": True, "code": 0, "message": "No warnings"}
+        )
+        tool_pose = {
+            "available": True,
+            "position_m": [-0.95, 0.15, 0.65],
+            "orientation_quat_xyzw": [0.70710678, 0.70710678, 0.0, 0.0],
+        }
+        node._tool0_pose = Mock(return_value=tool_pose)
+        node._frame_transform = Mock(
+            return_value={"available": True, "position_m": [-0.4, 0.2, 0.75]}
+        )
+        node._publish_continuous_diagnostics = Mock()
+        node._continuous_last_observation_update = {}
+        node._continuous_approach_correction_report = {}
+        node._continuous_approach_correction_active = False
+        node.latest_mouth_status = {}
+        sink = Mock()
+        sink.armed = True
+        monotonic_value = [0.0]
+
+        def advancing_monotonic() -> float:
+            monotonic_value[0] += 1.0
+            return monotonic_value[0]
+
+        with (
+            patch(
+                "scripts.real_feed_water_integrated.RosServoCommandSink",
+                return_value=sink,
+            ),
+            patch("scripts.real_feed_water_integrated.rclpy.ok", return_value=True),
+            patch("scripts.real_feed_water_integrated.rclpy.spin_once"),
+            patch(
+                "scripts.real_feed_water_integrated.time.monotonic",
+                side_effect=advancing_monotonic,
+            ),
+        ):
+            result = node._continuous_servo_approach_and_hold(
+                hold_duration_sec=5.0,
+                confirm_real_motion=True,
+                octomap={"use_octomap": False},
+            )
+
+        self.assertTrue(result["success"], result)
+        self.assertEqual("hold_duration_complete", result["stop_reason"])
+        self.assertTrue(result["hold_latched"])
+        self.assertTrue(result["hold_target_updates_ignored"])
+        self.assertEqual(0, result["hold_target_reads_after_latch"])
+        self.assertEqual(1, node._continuous_tracker.target.call_count)
+        sink.assert_not_called()
+        sink.halt.assert_called()
+        self.assertIn(
+            False,
+            [call.args[0] for call in node._set_continuous_servo_active.call_args_list],
+        )
 
     def test_approach_lateral_sign_relationship_rejects_opposite_motion(self) -> None:
         relationship = _approach_lateral_sign_relationship(
