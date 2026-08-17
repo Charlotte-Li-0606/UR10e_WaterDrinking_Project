@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import unittest
 from types import SimpleNamespace
@@ -31,6 +32,7 @@ from scripts.real_active_search_plan import RealActiveSearchPlan
 from scripts.real_feed_water_integrated import (
     DEFAULT_PREMOUTH_HOLD_SEC,
     MAX_EXECUTION_TARGET_DRIFT_M,
+    PLANNING_SCENE_FRESH_NODE_DISCOVERY_TIMEOUT_SEC,
     SEARCH_ALLOWED_PLANNING_TIME_SEC,
     SEARCH_PLANNER,
     SEARCH_PLANNING_PIPELINE,
@@ -44,7 +46,9 @@ from scripts.real_feed_water_integrated import (
     _approach_pixel_depth_to_base,
     _approach_lateral_sign_relationship,
     _compare_final_state_validity,
+    _conservative_premouth_hold_eligibility,
     _continuous_stale_hold_policy,
+    _continuous_recovery_has_collision_evidence,
     _load_initial_position_config,
     _orientation_after_local_tool_z_rotation,
     _recorded_tool_pose_in_base_link,
@@ -73,6 +77,52 @@ from robot_layer.arm_ur10e.control.continuous_servo_tracking import (
 
 
 class RealIntegratedFeedWaterTest(unittest.TestCase):
+    def test_continuous_diagnostics_publishes_collision_operator_warning(
+        self,
+    ) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._continuous_target_report = Mock(return_value={"available": False})
+        node._continuous_status_publisher = Mock()
+        node._continuous_target_publisher = Mock()
+
+        node._publish_continuous_diagnostics(
+            SimpleNamespace(available=False),
+            state="SAFETY_STOPPED",
+            safety_stop_reason="collision-blocked local recovery",
+            operator_warning="Collision may happen",
+            collision_warning=True,
+        )
+
+        message = node._continuous_status_publisher.publish.call_args.args[0]
+        status = json.loads(message.data)
+        self.assertEqual("SAFETY_STOPPED", status["state"])
+        self.assertEqual("Collision may happen", status["operator_warning"])
+        self.assertTrue(status["collision_warning"])
+        node._continuous_target_publisher.publish.assert_not_called()
+
+    def test_continuous_recovery_detects_structured_collision_evidence(self) -> None:
+        self.assertTrue(
+            _continuous_recovery_has_collision_evidence(
+                {
+                    "attempts": [
+                        {
+                            "backend": "cartesian",
+                            "plan": {
+                                "reason": "Cartesian path is incomplete or collision-blocked"
+                            },
+                        }
+                    ]
+                },
+                None,
+            )
+        )
+        self.assertFalse(
+            _continuous_recovery_has_collision_evidence(
+                {"reason": "controller state unavailable"},
+                None,
+            )
+        )
+
     def test_continuous_pose_target_uses_front_facing_tool0_positive_y_axis(self) -> None:
         """Exercise the live-target branch that plan-only cannot reach without a face."""
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
@@ -150,6 +200,11 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
         node._continuous_parameters = {
             "final_pre_mouth_standoff_m": 0.05,
+            "conservative_hold_commanded_standoff_max_m": 0.13,
+            "conservative_hold_actual_standoff_max_m": 0.17,
+            "conservative_hold_outward_error_max_m": 0.035,
+            "conservative_hold_transverse_tolerance_m": 0.01,
+            "conservative_hold_confirmation_sec": 0.50,
             "state_validity_check_period_sec": 0.10,
             "control_rate_hz": 250.0,
             "servo_twist_topic": "/servo_node/delta_twist_cmds",
@@ -269,7 +324,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertEqual([True], correction_active_during_target_read)
         self.assertFalse(node._continuous_approach_correction_active)
         self.assertEqual(
-            "image_timestamp_rgbd_reprojection",
+            "image_timestamp_rgbd_reprojection_with_bounded_tf_catchup",
             result["approach_coordinate_correction"]["mode"],
         )
         self.assertIsNotNone(result["last_valid_tracking_geometry"])
@@ -279,6 +334,47 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             False,
             [call.args[0] for call in node._set_continuous_servo_active.call_args_list],
         )
+
+    def test_conservative_hold_accepts_recorded_farther_only_terminal_geometry(
+        self,
+    ) -> None:
+        result = _conservative_premouth_hold_eligibility(
+            mouth_position_m=[-1.0020675, 0.1189045, 0.651822],
+            current_straw_tip_position_m=[-0.84360954, 0.11766736, 0.65060069],
+            tool_orientation_xyzw=[
+                0.72118148,
+                0.69274618,
+                0.00002433,
+                0.00000382,
+            ],
+            commanded_standoff_m=0.12525431,
+            final_standoff_m=0.05,
+            commanded_standoff_max_m=0.13,
+            actual_standoff_max_m=0.17,
+            outward_error_max_m=0.035,
+            transverse_tolerance_m=0.01,
+        )
+
+        self.assertTrue(result["eligible"], result)
+        self.assertGreaterEqual(result["actual_signed_standoff_m"], 0.05)
+        self.assertFalse(result["closer_than_50mm_permitted"])
+
+    def test_conservative_hold_rejects_position_closer_than_50mm(self) -> None:
+        # With this flange-down orientation, tool0 +Y is base-link +X.
+        result = _conservative_premouth_hold_eligibility(
+            mouth_position_m=[-1.0, 0.12, 0.65],
+            current_straw_tip_position_m=[-0.96, 0.12, 0.65],
+            tool_orientation_xyzw=[0.70710678, 0.70710678, 0.0, 0.0],
+            commanded_standoff_m=0.05,
+            final_standoff_m=0.05,
+            commanded_standoff_max_m=0.13,
+            actual_standoff_max_m=0.17,
+            outward_error_max_m=0.035,
+            transverse_tolerance_m=0.01,
+        )
+
+        self.assertFalse(result["eligible"], result)
+        self.assertLess(result["actual_signed_standoff_m"], 0.05)
 
     def test_approach_lateral_sign_relationship_rejects_opposite_motion(self) -> None:
         relationship = _approach_lateral_sign_relationship(
@@ -358,6 +454,56 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             0.005,
             moved["position_m"][1] - first["position_m"][1],
             places=6,
+        )
+
+    def test_coordinate_catchup_selects_newest_frame_with_available_exact_tf(
+        self,
+    ) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._continuous_pending_coordinate_payloads = []
+        attempts: dict[float, int] = {}
+
+        def correct(payload):
+            stamp = float(payload["stamp_sec"])
+            attempts[stamp] = attempts.get(stamp, 0) + 1
+            if stamp == 2.0 or attempts[stamp] == 1:
+                return None, {
+                    "accepted": False,
+                    "reason": (
+                        "approach_image_timestamp_tf_unavailable:"
+                        "ExtrapolationException:lookup would require "
+                        "extrapolation into the future"
+                    ),
+                }
+            return {**payload, "corrected": True}, {
+                "accepted": True,
+                "reason": "approach_image_timestamp_reprojection_applied",
+                "source_timestamp_sec": stamp,
+                "samples": [],
+            }
+
+        node._correct_continuous_approach_payload = Mock(side_effect=correct)
+
+        first, first_report = (
+            node._correct_latest_available_continuous_payload(
+                {"stamp_sec": 1.0, "candidates": []}
+            )
+        )
+        selected, selected_report = (
+            node._correct_latest_available_continuous_payload(
+                {"stamp_sec": 2.0, "candidates": []}
+            )
+        )
+
+        self.assertIsNone(first)
+        self.assertTrue(first_report["deferred"])
+        self.assertEqual(1, first_report["pending_frame_count"])
+        self.assertEqual(1.0, selected["stamp_sec"])
+        self.assertTrue(selected_report["selected_from_deferred_frame"])
+        self.assertEqual(1, selected_report["pending_frame_count"])
+        self.assertEqual(
+            2.0,
+            node._continuous_pending_coordinate_payloads[0]["stamp_sec"],
         )
 
     @staticmethod
@@ -1559,7 +1705,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertEqual([True], correction_active_during_dispatch)
         self.assertFalse(node._continuous_approach_correction_active)
         self.assertEqual(
-            "image_timestamp_rgbd_reprojection",
+            "image_timestamp_rgbd_reprojection_with_bounded_tf_catchup",
             result["continuous_coordinate_correction"]["mode"],
         )
         node.run_continuous_integrated.assert_called_once_with(
@@ -1571,7 +1717,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             use_octomap=False,
         )
 
-    def test_initial_workspace_acquisition_waits_past_single_provisional_frame(
+    def test_initial_workspace_acquisition_accepts_first_fresh_provisional_frame(
         self,
     ) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
@@ -1604,10 +1750,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             )
 
         node._continuous_tracker = Mock()
-        node._continuous_tracker.target.side_effect = [
-            target(stable=False),
-            target(stable=True),
-        ]
+        node._continuous_tracker.target.side_effect = [target(stable=False)]
         node._publish_continuous_diagnostics = Mock()
         node._continuous_last_observation_update = {"accepted": True}
 
@@ -1616,15 +1759,19 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
             patch("scripts.real_feed_water_integrated.rclpy.spin_once"),
             patch(
                 "scripts.real_feed_water_integrated.time.monotonic",
-                side_effect=[10.0, 10.01, 10.10, 10.11],
+                side_effect=[10.0, 10.01, 10.02],
             ),
         ):
-            result = node._acquire_continuous_target(require_stable=True)
+            result = node._acquire_continuous_target()
 
         self.assertTrue(result["success"], result)
-        self.assertTrue(result["require_stable"])
-        self.assertEqual("STABLE_TARGET", result["state"])
-        self.assertEqual(2, node._continuous_tracker.target.call_count)
+        self.assertFalse(result["require_stable"])
+        self.assertEqual(
+            "fresh_valid_provisional_or_stable",
+            result["acceptance_policy"],
+        )
+        self.assertEqual("PROVISIONAL_TARGET", result["state"])
+        self.assertEqual(1, node._continuous_tracker.target.call_count)
 
     def test_continuous_failure_after_sent_motion_requests_guarded_return(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
@@ -1953,6 +2100,14 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertEqual(2, scene["discovery_attempts"])
         self.assertEqual(["current_scene_object"], objects)
         spin_once.assert_called_once()
+
+    def test_planning_scene_fresh_node_discovery_window_covers_dds_startup(
+        self,
+    ) -> None:
+        self.assertGreaterEqual(
+            PLANNING_SCENE_FRESH_NODE_DISCOVERY_TIMEOUT_SEC,
+            10.0,
+        )
 
     def test_planning_scene_discovery_still_refuses_a_persistent_miss(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)

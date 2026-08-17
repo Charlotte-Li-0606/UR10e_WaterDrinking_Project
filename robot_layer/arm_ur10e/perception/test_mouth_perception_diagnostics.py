@@ -9,10 +9,30 @@ import numpy as np
 from .mouth_perception_node import (
     MouthPerceptionNode,
     _displacement_scale_diagnostic,
+    _operator_warning_from_tracking_status,
 )
 
 
 class MouthPerceptionDiagnosticTests(unittest.TestCase):
+    def test_collision_warning_is_rendered_as_a_safety_stop(self) -> None:
+        lines = _operator_warning_from_tracking_status(
+            '{"collision_warning": true, "operator_warning": "Collision may happen"}'
+        )
+
+        self.assertEqual(
+            ("Collision may happen", "HOLD not reached - guarded return only"),
+            lines,
+        )
+
+    def test_nonwarning_or_malformed_status_clears_overlay(self) -> None:
+        self.assertEqual(
+            (),
+            _operator_warning_from_tracking_status(
+                '{"collision_warning": false, "operator_warning": "ignored"}'
+            ),
+        )
+        self.assertEqual((), _operator_warning_from_tracking_status("not-json"))
+
     def test_recorded_close_range_ratio_is_reproduced(self) -> None:
         result = _displacement_scale_diagnostic(
             camera_translation_m=0.5103177365,

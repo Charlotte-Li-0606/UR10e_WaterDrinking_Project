@@ -140,7 +140,7 @@ def test_static_mouth_reaches_hold_without_segmented_pauses():
     assert decision.target_error_m <= 0.01
 
 
-def test_provisional_target_moves_at_existing_reduced_speed_without_hold():
+def test_provisional_target_keeps_one_continuous_speed_limit_without_hold():
     controller = ContinuousServoController()
     desired = _desired_tool(standoff=0.25)
     decision = _update(
@@ -151,9 +151,39 @@ def test_provisional_target_moves_at_existing_reduced_speed_without_hold():
     )
 
     assert decision.command_allowed
-    assert decision.speed_limit_mps == 0.010
-    assert np.linalg.norm(decision.linear_velocity_mps) <= 0.010000001
+    assert decision.speed_limit_mps == 0.020
+    assert np.linalg.norm(decision.linear_velocity_mps) <= 0.020000001
     assert not decision.hold_ready
+
+
+def test_default_tracking_duration_allows_measured_45_second_approach():
+    controller = ContinuousServoController()
+    desired = _desired_tool(standoff=0.25)
+
+    decision = _update(
+        controller,
+        _target(),
+        desired + np.array([0.02, 0.0, 0.0]),
+        elapsed=45.1,
+    )
+
+    assert decision.command_allowed
+    assert decision.safety_stop_reason is None
+
+
+def test_default_tracking_duration_remains_bounded_at_60_seconds():
+    controller = ContinuousServoController()
+    desired = _desired_tool(standoff=0.25)
+
+    decision = _update(
+        controller,
+        _target(),
+        desired + np.array([0.02, 0.0, 0.0]),
+        elapsed=60.1,
+    )
+
+    assert not decision.command_allowed
+    assert decision.safety_stop_reason == "tracking_duration_limit"
 
 
 def test_fresh_provisional_target_can_latch_hold_at_exact_premouth_geometry():

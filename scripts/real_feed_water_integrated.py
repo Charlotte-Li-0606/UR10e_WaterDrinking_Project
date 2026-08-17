@@ -175,6 +175,32 @@ TRACKING_TARGET_MAX_AGE_SEC = 0.75
 TRACKING_MAX_DISPLACEMENT_M = 0.06
 TRACKING_MAX_LINEAR_SPEED_MPS = 0.02
 TRACKING_MAX_LINEAR_ACCELERATION_MPS2 = 0.10
+
+
+def _continuous_recovery_has_collision_evidence(*values: Any) -> bool:
+    """Recognize explicit collision evidence in structured recovery results."""
+    pending = list(values)
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            pending.extend(value.values())
+        elif isinstance(value, (list, tuple)):
+            pending.extend(value)
+        elif isinstance(value, str) and "collision" in value.lower():
+            return True
+    return False
+
+
+# Raw perception frames may arrive slightly ahead of the wrist-camera TF
+# stream.  Retain only a short catch-up window; this is not a motion-command
+# queue and every accepted correction still replaces the tracker's one latest
+# target.
+CONTINUOUS_IMAGE_TIME_PENDING_FRAME_LIMIT = 12
+# A freshly created real-workflow node can take more than four seconds to
+# discover a long-running MoveGroup service on this host under camera and
+# controller load.  This remains a bounded pre-motion wait and never bypasses
+# the PlanningScene requirement.
+PLANNING_SCENE_FRESH_NODE_DISCOVERY_TIMEOUT_SEC = 10.0
 # Continuous recovery is a local mouth-following correction, not permission
 # for OMPL to choose a remote IK branch.  These limits are checked against the
 # complete planned trajectory before it can be cached or executed.
@@ -251,6 +277,21 @@ def _load_continuous_tracking_config() -> dict[str, Any]:
         raise RuntimeError(
             "target/lost timeouts must satisfy 0.10 <= target < lost <= 2.0 seconds"
         )
+    tf_catchup_timeout = float(
+        values.get("image_time_tf_catchup_timeout_sec", 0.0)
+    )
+    if not target_timeout <= tf_catchup_timeout <= lost_timeout:
+        raise RuntimeError(
+            "image_time_tf_catchup_timeout_sec must remain between the "
+            "target and lost-target timeouts"
+        )
+    pending_frame_limit = int(
+        values.get("image_time_tf_pending_frame_limit", 0)
+    )
+    if not 1 <= pending_frame_limit <= 30:
+        raise RuntimeError(
+            "image_time_tf_pending_frame_limit must remain within [1, 30]"
+        )
     depth_timeout = float(values.get("depth_reacquisition_timeout_sec", 0.0))
     if not lost_timeout <= depth_timeout <= 5.0:
         raise RuntimeError(
@@ -285,9 +326,50 @@ def _load_continuous_tracking_config() -> dict[str, Any]:
         raise RuntimeError("standoff progress error is outside the local tracking range")
     if not 0.0 < standoff_final_tolerance <= 0.01:
         raise RuntimeError("standoff final tolerance must be within (0, 0.01] m")
+    conservative_commanded_max = float(
+        values.get("conservative_hold_commanded_standoff_max_m", 0.0)
+    )
+    conservative_actual_max = float(
+        values.get("conservative_hold_actual_standoff_max_m", 0.0)
+    )
+    conservative_outward_max = float(
+        values.get("conservative_hold_outward_error_max_m", 0.0)
+    )
+    conservative_transverse = float(
+        values.get("conservative_hold_transverse_tolerance_m", 0.0)
+    )
+    conservative_confirmation = float(
+        values.get("conservative_hold_confirmation_sec", 0.0)
+    )
+    final_standoff = float(values["final_pre_mouth_standoff_m"])
+    if not final_standoff <= conservative_commanded_max <= 0.15:
+        raise RuntimeError(
+            "conservative commanded standoff must remain between final and 0.15 m"
+        )
+    if not conservative_commanded_max <= conservative_actual_max <= 0.18:
+        raise RuntimeError(
+            "conservative actual standoff must remain between commanded and 0.18 m"
+        )
+    if not 0.0 < conservative_outward_max <= 0.04:
+        raise RuntimeError(
+            "conservative outward error must remain within (0, 0.04] m"
+        )
+    if not 0.0 < conservative_transverse <= float(values["hold_entry_tolerance_m"]):
+        raise RuntimeError(
+            "conservative transverse tolerance must not exceed nominal hold tolerance"
+        )
+    if not 0.25 <= conservative_confirmation <= 2.0:
+        raise RuntimeError(
+            "conservative hold confirmation must remain within [0.25, 2.0] seconds"
+        )
     control_rate_hz = float(values.get("control_rate_hz", 0.0))
     if not 10.0 <= control_rate_hz <= 250.0:
         raise RuntimeError("control_rate_hz must remain within [10, 250] Hz")
+    tracking_duration = float(values.get("maximum_tracking_duration_sec", 0.0))
+    if not 15.0 <= tracking_duration <= 60.0:
+        raise RuntimeError(
+            "maximum_tracking_duration_sec must remain within [15, 60] seconds"
+        )
     try:
         approach_axis = tuple(
             float(value)
@@ -349,6 +431,69 @@ def _approach_pixel_depth_to_base(
         "cy_px": cy,
         "base_y_per_horizontal_pixel_m": float(one_pixel_x_base[1]),
         "base_y_per_horizontal_pixel_mm": 1000.0 * float(one_pixel_x_base[1]),
+    }
+
+
+def _conservative_premouth_hold_eligibility(
+    *,
+    mouth_position_m: list[float],
+    current_straw_tip_position_m: list[float],
+    tool_orientation_xyzw: list[float],
+    commanded_standoff_m: float,
+    final_standoff_m: float,
+    commanded_standoff_max_m: float,
+    actual_standoff_max_m: float,
+    outward_error_max_m: float,
+    transverse_tolerance_m: float,
+) -> dict[str, Any]:
+    """Recognize a confirmed, farther-only pre-mouth terminal position."""
+    mouth = [float(value) for value in mouth_position_m]
+    straw = [float(value) for value in current_straw_tip_position_m]
+    if len(mouth) != 3 or len(straw) != 3:
+        raise ValueError("mouth and straw positions must contain XYZ")
+    axis = [
+        float(value)
+        for value in rotate_vector_xyzw(
+            tool_orientation_xyzw,
+            CONTINUOUS_PRE_MOUTH_APPROACH_AXIS_TOOL0,
+        )
+    ]
+    axis_norm = _norm(axis)
+    if axis_norm < 1.0e-9:
+        raise ValueError("pre-mouth approach axis is invalid")
+    axis = [value / axis_norm for value in axis]
+    mouth_to_straw = _subtract(straw, mouth)
+    actual_standoff = sum(
+        value * axis_value
+        for value, axis_value in zip(mouth_to_straw, axis)
+    )
+    transverse_vector = [
+        value - actual_standoff * axis_value
+        for value, axis_value in zip(mouth_to_straw, axis)
+    ]
+    transverse_error = _norm(transverse_vector)
+    outward_error = actual_standoff - float(commanded_standoff_m)
+    eligible = bool(
+        float(commanded_standoff_m) <= float(commanded_standoff_max_m)
+        and actual_standoff >= float(final_standoff_m)
+        and actual_standoff <= float(actual_standoff_max_m)
+        and outward_error >= -1.0e-6
+        and outward_error <= float(outward_error_max_m)
+        and transverse_error <= float(transverse_tolerance_m)
+    )
+    return {
+        "eligible": eligible,
+        "policy": "farther_only_near_field_completion",
+        "commanded_standoff_m": float(commanded_standoff_m),
+        "actual_signed_standoff_m": actual_standoff,
+        "outward_error_m": outward_error,
+        "transverse_error_m": transverse_error,
+        "minimum_actual_standoff_m": float(final_standoff_m),
+        "maximum_commanded_standoff_m": float(commanded_standoff_max_m),
+        "maximum_actual_standoff_m": float(actual_standoff_max_m),
+        "maximum_outward_error_m": float(outward_error_max_m),
+        "maximum_transverse_error_m": float(transverse_tolerance_m),
+        "closer_than_50mm_permitted": False,
     }
 
 
@@ -1155,8 +1300,12 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "active": False,
             "accepted_samples": 0,
             "rejected_samples": 0,
+            "deferred_samples": 0,
+            "dropped_pending_frames": 0,
+            "maximum_pending_frames": 0,
             "last_sample": None,
         }
+        self._continuous_pending_coordinate_payloads: list[dict[str, Any]] = []
         self._continuous_approach_previous_selected_sample: dict[str, Any] | None = None
         self._d435i_camera_info_subscription = self.create_subscription(
             CameraInfo,
@@ -1209,16 +1358,35 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         ):
             self._continuous_approach_correction_report = {
                 "active": True,
-                "mode": "image_timestamp_rgbd_reprojection",
+                "mode": "image_timestamp_rgbd_reprojection_with_bounded_tf_catchup",
                 "accepted_samples": 0,
                 "rejected_samples": 0,
+                "deferred_samples": 0,
+                "dropped_pending_frames": 0,
+                "maximum_pending_frames": 0,
+                "pending_frame_limit": CONTINUOUS_IMAGE_TIME_PENDING_FRAME_LIMIT,
                 "last_sample": None,
             }
         else:
             self._continuous_approach_correction_report["active"] = True
             self._continuous_approach_correction_report["mode"] = (
-                "image_timestamp_rgbd_reprojection"
+                "image_timestamp_rgbd_reprojection_with_bounded_tf_catchup"
             )
+            self._continuous_approach_correction_report.setdefault(
+                "deferred_samples", 0
+            )
+            self._continuous_approach_correction_report.setdefault(
+                "dropped_pending_frames", 0
+            )
+            self._continuous_approach_correction_report.setdefault(
+                "maximum_pending_frames", 0
+            )
+            self._continuous_approach_correction_report[
+                "pending_frame_limit"
+            ] = CONTINUOUS_IMAGE_TIME_PENDING_FRAME_LIMIT
+        # A tracking session never carries raw frames across acquisition,
+        # staging, or Servo activation boundaries.
+        self._continuous_pending_coordinate_payloads = []
         self._continuous_approach_previous_selected_sample = None
         self._continuous_approach_correction_active = True
 
@@ -1244,7 +1412,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 self.get_clock().now().nanoseconds * 1.0e-9 - source_stamp
             )
             maximum_source_age_sec = float(
-                self._continuous_parameters["target_timeout_sec"]
+                self._continuous_parameters[
+                    "image_time_tf_catchup_timeout_sec"
+                ]
             )
             if source_age_sec > maximum_source_age_sec:
                 raise ValueError(
@@ -1342,6 +1512,87 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "camera_orientation_base_xyzw": camera_orientation,
             "samples": sample_reports,
         }
+
+    @staticmethod
+    def _continuous_coordinate_correction_is_future_tf(
+        correction: dict[str, Any],
+    ) -> bool:
+        """Return whether an exact image-time transform may arrive shortly."""
+        reason = str(correction.get("reason", "")).lower()
+        return bool(
+            not correction.get("accepted")
+            and "approach_image_timestamp_tf_unavailable" in reason
+            and "future" in reason
+        )
+
+    def _correct_latest_available_continuous_payload(
+        self,
+        payload: dict[str, Any],
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        """Use the newest frame whose exact TF exists, deferring only TF-future frames.
+
+        The bounded list contains raw perception observations, not robot
+        commands.  A successful correction is still delivered to the existing
+        single latest-target tracker and supersedes its previous target.
+        """
+        pending = list(
+            getattr(self, "_continuous_pending_coordinate_payloads", [])
+        )
+        pending.append(copy.deepcopy(payload))
+        pending_frame_limit = int(
+            getattr(self, "_continuous_parameters", {}).get(
+                "image_time_tf_pending_frame_limit",
+                CONTINUOUS_IMAGE_TIME_PENDING_FRAME_LIMIT,
+            )
+        )
+        overflow = max(
+            0, len(pending) - pending_frame_limit
+        )
+        if overflow:
+            pending = pending[overflow:]
+
+        future_indices: set[int] = set()
+        newest_failure: dict[str, Any] | None = None
+        for index in range(len(pending) - 1, -1, -1):
+            corrected, correction = self._correct_continuous_approach_payload(
+                pending[index]
+            )
+            if newest_failure is None:
+                newest_failure = correction
+            if corrected is not None:
+                # Keep only newer frames that are waiting for their exact TF.
+                retained = [
+                    pending[newer_index]
+                    for newer_index in sorted(future_indices)
+                    if newer_index > index
+                ]
+                self._continuous_pending_coordinate_payloads = retained
+                result = dict(correction)
+                result.update(
+                    {
+                        "selected_from_deferred_frame": index < len(pending) - 1,
+                        "pending_frame_count": len(retained),
+                        "overflow_dropped_frame_count": overflow,
+                    }
+                )
+                return corrected, result
+            if self._continuous_coordinate_correction_is_future_tf(correction):
+                future_indices.add(index)
+
+        retained = [pending[index] for index in sorted(future_indices)]
+        self._continuous_pending_coordinate_payloads = retained
+        result = dict(newest_failure or {
+            "accepted": False,
+            "reason": "approach_coordinate_correction_unavailable",
+        })
+        result.update(
+            {
+                "deferred": bool(retained),
+                "pending_frame_count": len(retained),
+                "overflow_dropped_frame_count": overflow,
+            }
+        )
+        return None, result
 
     def _fresh_explicit_no_face_evidence(
         self,
@@ -1487,7 +1738,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
     def _planning_scene_geometry_with_discovery(
         self,
         *,
-        timeout_sec: float = 4.0,
+        timeout_sec: float = PLANNING_SCENE_FRESH_NODE_DISCOVERY_TIMEOUT_SEC,
     ) -> tuple[dict[str, Any], list[Any]]:
         """Bound fresh-node discovery before declaring PlanningScene unavailable."""
         started = time.monotonic()
@@ -1792,6 +2043,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
     def _mouth_candidates_callback(self, message: String) -> None:
         """Feed the identity-locked candidate into the continuous filter."""
         selected_message = message
+        observation_payload: dict[str, Any] | None = None
         if self._continuous_approach_correction_active:
             try:
                 raw_payload = json.loads(message.data)
@@ -1803,12 +2055,36 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 corrected_payload = None
             else:
                 corrected_payload, correction = (
-                    self._correct_continuous_approach_payload(raw_payload)
+                    self._correct_latest_available_continuous_payload(raw_payload)
                 )
             self._continuous_approach_correction_report["active"] = True
             self._continuous_approach_correction_report["last_sample"] = correction
-            counter = "accepted_samples" if correction.get("accepted") else "rejected_samples"
+            if correction.get("accepted"):
+                counter = "accepted_samples"
+            elif correction.get("deferred"):
+                counter = "deferred_samples"
+            else:
+                counter = "rejected_samples"
+            self._continuous_approach_correction_report.setdefault(counter, 0)
             self._continuous_approach_correction_report[counter] += 1
+            dropped = int(correction.get("overflow_dropped_frame_count", 0))
+            self._continuous_approach_correction_report.setdefault(
+                "dropped_pending_frames", 0
+            )
+            self._continuous_approach_correction_report[
+                "dropped_pending_frames"
+            ] += dropped
+            pending_count = int(correction.get("pending_frame_count", 0))
+            self._continuous_approach_correction_report[
+                "maximum_pending_frames"
+            ] = max(
+                int(
+                    self._continuous_approach_correction_report.get(
+                        "maximum_pending_frames", 0
+                    )
+                ),
+                pending_count,
+            )
             if corrected_payload is None:
                 self._continuous_last_observation_update = {
                     "accepted": False,
@@ -1816,8 +2092,14 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     "approach_coordinate_correction": correction,
                 }
                 return
+            observation_payload = corrected_payload
             selected_message = String()
             selected_message.data = json.dumps(corrected_payload, sort_keys=True)
+        else:
+            try:
+                observation_payload = json.loads(message.data)
+            except (TypeError, json.JSONDecodeError):
+                observation_payload = None
         super()._mouth_candidates_callback(selected_message)
         now = time.monotonic()
         state = self.target_tracker.current_state(max_age_sec=1.0, now_monotonic=now)
@@ -1828,8 +2110,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             }
             return
         try:
-            payload = json.loads(message.data)
-            source_stamp = float(payload["stamp_sec"])
+            if observation_payload is None:
+                raise ValueError("selected observation payload is unavailable")
+            source_stamp = float(observation_payload["stamp_sec"])
             selected_index = int(state["selected_candidate_index"])
             visible = state["visible_candidates"]
             depth = float(visible[selected_index]["depth_m"])
@@ -5323,6 +5606,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         standoff_transition_active: bool | None = None,
         fallback_reason: str | None = None,
         safety_stop_reason: str | None = None,
+        operator_warning: str | None = None,
+        collision_warning: bool = False,
         octomap: dict[str, Any] | None = None,
     ) -> None:
         """Publish the latest local tracking state without network calls."""
@@ -5338,6 +5623,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 "standoff_transition_active": standoff_transition_active,
                 "fallback_reason": fallback_reason,
                 "safety_stop_reason": safety_stop_reason,
+                "operator_warning": operator_warning,
+                "collision_warning": bool(collision_warning),
                 "octomap": octomap,
             }
         )
@@ -5354,12 +5641,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             pose.pose.orientation.w = 1.0
             self._continuous_target_publisher.publish(pose)
 
-    def _acquire_continuous_target(
-        self,
-        *,
-        require_stable: bool = False,
-    ) -> dict[str, Any]:
-        """Acquire a fresh target, optionally requiring a robust initial median."""
+    def _acquire_continuous_target(self) -> dict[str, Any]:
+        """Accept the first fresh valid target, including provisional data."""
         self._continuous_tracker.reset(searching=True)
         started = time.monotonic()
         timeout_sec = float(
@@ -5379,28 +5662,6 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 target,
                 state=decision.state.value,
             )
-            if require_stable:
-                if target.available and target.stable:
-                    break
-                if now - started >= timeout_sec:
-                    return {
-                        "success": False,
-                        "state": target.state.value,
-                        "reason": (
-                            "stable_target_acquisition_timeout"
-                            if target.available
-                            else "no_valid_observation_after_acquisition_timeout"
-                        ),
-                        "active_search_required": not target.available,
-                        "elapsed_sec": now - started,
-                        "require_stable": True,
-                        "target": target,
-                        "target_report": self._continuous_target_report(target),
-                        "last_observation_update": dict(
-                            self._continuous_last_observation_update
-                        ),
-                    }
-                continue
             if decision.complete:
                 break
         assert decision is not None
@@ -5410,7 +5671,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "reason": decision.reason,
             "active_search_required": bool(decision.active_search_required),
             "elapsed_sec": time.monotonic() - started,
-            "require_stable": bool(require_stable),
+            "require_stable": False,
+            "acceptance_policy": "fresh_valid_provisional_or_stable",
             "target": decision.target,
             "target_report": self._continuous_target_report(decision.target),
             "last_observation_update": dict(
@@ -5872,7 +6134,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "minimum_target_error_m": None,
             "maximum_target_displacement_m": 0.0,
             "last_valid_tracking_geometry": None,
-            "minimum_commanded_standoff_m": final_standoff,
+            "minimum_commanded_standoff_m": None,
             "maximum_commanded_standoff_m": final_standoff,
             "hold_duration_sec": float(hold_duration_sec),
             "stop_reason": None,
@@ -5887,6 +6149,11 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "hold_target_reads_after_latch": 0,
             "hold_zero_velocity_command_batches": 0,
             "hold_servo_pause": None,
+            "hold_entry_mode": None,
+            "completion_status": "incomplete",
+            "recovered_warnings": [],
+            "conservative_hold_last_eligibility": None,
+            "conservative_hold_maximum_confirmation_sec": 0.0,
             "octomap": octomap,
         }
         # Planning and executing the coarse staging trajectory can take several
@@ -5953,6 +6220,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         started = time.monotonic()
         last_update = started
         hold_started: float | None = None
+        conservative_hold_candidate_started: float | None = None
         diagnostics: list[dict[str, Any]] = []
         validity_period_sec = float(
             self._continuous_parameters["state_validity_check_period_sec"]
@@ -6020,6 +6288,11 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     if now - hold_started >= float(hold_duration_sec):
                         report["success"] = True
                         report["stop_reason"] = "hold_duration_complete"
+                        report["completion_status"] = (
+                            "success_with_warning"
+                            if report["recovered_warnings"]
+                            else "success"
+                        )
                         break
                     continue
                 target = self._continuous_tracker.target(now_monotonic_sec=now)
@@ -6034,6 +6307,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     self._continuous_servo_controller.pause_for_reacquisition()
                     last_update = now
                     hold_started = None
+                    conservative_hold_candidate_started = None
                     stale_target_hold_active = True
                     perception_status = (
                         dict(self.latest_mouth_status)
@@ -6154,9 +6428,14 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     float(report["maximum_target_displacement_m"]),
                     float(decision.target_displacement_m),
                 )
-                report["minimum_commanded_standoff_m"] = min(
-                    float(report["minimum_commanded_standoff_m"]),
-                    float(decision.commanded_standoff_m),
+                prior_minimum_standoff = report["minimum_commanded_standoff_m"]
+                report["minimum_commanded_standoff_m"] = (
+                    float(decision.commanded_standoff_m)
+                    if prior_minimum_standoff is None
+                    else min(
+                        float(prior_minimum_standoff),
+                        float(decision.commanded_standoff_m),
+                    )
                 )
                 current_tool0 = [float(value) for value in tool["position_m"]]
                 straw_tip_offset_base = rotate_vector_xyzw(
@@ -6170,6 +6449,75 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 desired_tool0 = [
                     float(value) for value in decision.desired_tool0_position_m
                 ]
+                conservative_eligibility = (
+                    _conservative_premouth_hold_eligibility(
+                        mouth_position_m=[
+                            float(value)
+                            for value in target.predicted_position_m
+                        ],
+                        current_straw_tip_position_m=[
+                            float(value) for value in current_straw_tip
+                        ],
+                        tool_orientation_xyzw=[
+                            float(value)
+                            for value in tool["orientation_quat_xyzw"]
+                        ],
+                        commanded_standoff_m=float(
+                            decision.commanded_standoff_m
+                        ),
+                        final_standoff_m=final_standoff,
+                        commanded_standoff_max_m=float(
+                            self._continuous_parameters[
+                                "conservative_hold_commanded_standoff_max_m"
+                            ]
+                        ),
+                        actual_standoff_max_m=float(
+                            self._continuous_parameters[
+                                "conservative_hold_actual_standoff_max_m"
+                            ]
+                        ),
+                        outward_error_max_m=float(
+                            self._continuous_parameters[
+                                "conservative_hold_outward_error_max_m"
+                            ]
+                        ),
+                        transverse_tolerance_m=float(
+                            self._continuous_parameters[
+                                "conservative_hold_transverse_tolerance_m"
+                            ]
+                        ),
+                    )
+                )
+                if conservative_eligibility["eligible"]:
+                    if conservative_hold_candidate_started is None:
+                        conservative_hold_candidate_started = now
+                    conservative_confirmation_elapsed = max(
+                        0.0, now - conservative_hold_candidate_started
+                    )
+                else:
+                    conservative_hold_candidate_started = None
+                    conservative_confirmation_elapsed = 0.0
+                conservative_eligibility["confirmation_elapsed_sec"] = (
+                    conservative_confirmation_elapsed
+                )
+                conservative_eligibility["required_confirmation_sec"] = float(
+                    self._continuous_parameters[
+                        "conservative_hold_confirmation_sec"
+                    ]
+                )
+                conservative_hold_ready = bool(
+                    conservative_eligibility["eligible"]
+                    and conservative_confirmation_elapsed
+                    >= conservative_eligibility["required_confirmation_sec"]
+                )
+                conservative_eligibility["hold_ready"] = conservative_hold_ready
+                report["conservative_hold_last_eligibility"] = copy.deepcopy(
+                    conservative_eligibility
+                )
+                report["conservative_hold_maximum_confirmation_sec"] = max(
+                    float(report["conservative_hold_maximum_confirmation_sec"]),
+                    float(conservative_confirmation_elapsed),
+                )
                 report["last_valid_tracking_geometry"] = {
                     "elapsed_sec": float(now - started),
                     "source_timestamp_sec": float(target.source_timestamp_sec),
@@ -6200,6 +6548,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         decision.commanded_standoff_m
                     ),
                     "hold_ready": bool(decision.hold_ready),
+                    "conservative_hold": copy.deepcopy(
+                        conservative_eligibility
+                    ),
                 }
                 report["maximum_commanded_standoff_m"] = max(
                     float(report["maximum_commanded_standoff_m"]),
@@ -6338,6 +6689,39 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                             or (recovery_execution or {}).get("reason")
                             or "continuous recovery failed"
                         )
+                        collision_warning = (
+                            _continuous_recovery_has_collision_evidence(
+                                recovery_plan,
+                                recovery_execution,
+                            )
+                        )
+                        if collision_warning:
+                            report["operator_warning"] = "Collision may happen"
+                            report["collision_warning_published"] = True
+                            report["hold_latched"] = False
+                            report["failure_action"] = (
+                                "motion_stopped_then_guarded_return_if_gates_pass"
+                            )
+                            self._publish_continuous_diagnostics(
+                                current_target,
+                                state="SAFETY_STOPPED",
+                                target_error_m=decision.target_error_m,
+                                target_displacement_m=(
+                                    decision.target_displacement_m
+                                ),
+                                commanded_standoff_m=(
+                                    decision.commanded_standoff_m
+                                ),
+                                requested_standoff_m=(
+                                    decision.requested_standoff_m
+                                ),
+                                standoff_transition_active=False,
+                                fallback_reason=decision.fallback_reason,
+                                safety_stop_reason=report["stop_reason"],
+                                operator_warning="Collision may happen",
+                                collision_warning=True,
+                                octomap=octomap,
+                            )
                         break
                     # Planning/execution blocks perception callbacks. Discard
                     # that pre-recovery epoch and wait for the first newly
@@ -6380,7 +6764,14 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     last_update = time.monotonic()
                     hold_started = None
                     continue
-                if decision.hold_ready:
+                hold_entry_mode = (
+                    "nominal_50mm_geometry"
+                    if decision.hold_ready
+                    else "conservative_farther_only_near_field_completion"
+                    if conservative_hold_ready
+                    else None
+                )
+                if hold_entry_mode is not None:
                     # Enter the five-second dwell without sending the small
                     # residual tracking command from this cycle. The scaled
                     # joint controller holds the last stationary setpoint.
@@ -6396,14 +6787,36 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                         break
                     hold_started = now
                     report["hold_latched"] = True
+                    report["hold_entry_mode"] = hold_entry_mode
                     report["hold_entry_tool0_pose"] = copy.deepcopy(tool)
                     report["hold_entry_straw_tip_position_m"] = [
+                        float(value) for value in current_straw_tip
+                    ]
+                    report["hold_entry_desired_straw_tip_position_m"] = [
                         float(value)
                         for value in decision.desired_straw_tip_position_m
                     ]
                     report["hold_entry_target_error_m"] = float(
                         decision.target_error_m
                     )
+                    if conservative_hold_ready and not decision.hold_ready:
+                        warning = {
+                            "code": "conservative_premouth_completion",
+                            "recovered": True,
+                            "original_condition": (
+                                "nominal_10mm_target_error_not_reached"
+                            ),
+                            "target_error_m": float(
+                                decision.target_error_m
+                            ),
+                            "geometry": copy.deepcopy(
+                                conservative_eligibility
+                            ),
+                            "motion_policy": (
+                                "stationary_hold_then_guarded_return"
+                            ),
+                        }
+                        report["recovered_warnings"].append(warning)
                     continue
                 request = MotionRequest(
                     target_position=decision.desired_tool0_position_m,
@@ -6532,17 +6945,11 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 )
                 return 2, report
 
-        acquisition = self._acquire_continuous_target(require_stable=True)
+        acquisition = self._acquire_continuous_target()
         report["initial_target_acquisition"] = {
             key: value for key, value in acquisition.items() if key != "target"
         }
         if not acquisition.get("success"):
-            if not acquisition.get("active_search_required"):
-                report.update(
-                    stage="continuous_initial_target_unstable",
-                    reason=acquisition.get("reason"),
-                )
-                return 2, report
             search = self.active_search(
                 execute=execute,
                 confirm_real_motion=confirm_real_motion,
@@ -6557,7 +6964,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     reason=search.get("reason") or acquisition.get("reason"),
                 )
                 return 2, report
-            acquisition = self._acquire_continuous_target(require_stable=True)
+            acquisition = self._acquire_continuous_target()
             report["post_search_target_acquisition"] = {
                 key: value for key, value in acquisition.items() if key != "target"
             }
@@ -6784,6 +7191,10 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             stage="continuous_tracking_returned_initial_position",
             reason=None,
             final_state="initial_position",
+            completion_status=servo.get("completion_status", "success"),
+            recovered_warnings=copy.deepcopy(
+                servo.get("recovered_warnings", [])
+            ),
         )
         return 0, report
 

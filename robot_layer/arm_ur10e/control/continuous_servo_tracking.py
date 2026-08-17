@@ -73,7 +73,7 @@ class ContinuousServoConfig:
     control_gain: float = 0.8
     maximum_tool_radius_m: float = 1.30
     maximum_flange_tilt_deg: float = 5.0
-    maximum_tracking_duration_sec: float = 45.0
+    maximum_tracking_duration_sec: float = 60.0
     approach_axis_tool0: tuple[float, float, float] = (
         CONTINUOUS_PRE_MOUTH_APPROACH_AXIS_TOOL0
     )
@@ -100,6 +100,10 @@ class ContinuousServoConfig:
             raise ValueError("maximum acceleration must be positive")
         if self.maximum_angular_speed_rps <= 0.0:
             raise ValueError("maximum angular speed must be positive")
+        if not 15.0 <= self.maximum_tracking_duration_sec <= 60.0:
+            raise ValueError(
+                "maximum tracking duration must remain within [15, 60] seconds"
+            )
         if self.orientation_correction_gain <= 0.0:
             raise ValueError("orientation correction gain must be positive")
         axis = np.asarray(self.approach_axis_tool0, dtype=np.float64)
@@ -409,11 +413,10 @@ class ContinuousServoController:
         if float(np.linalg.norm(tool_target)) > self.config.maximum_tool_radius_m:
             return self._stop("tool_workspace_radius_limit")
 
-        speed_limit = (
-            self.config.provisional_linear_speed_mps
-            if target.provisional
-            else self.config.maximum_linear_speed_mps
-        )
+        # Do not change physical Cartesian speed when the short perception
+        # history toggles between provisional and stable. Acceleration and the
+        # established real maximum remain enforced below.
+        speed_limit = self.config.maximum_linear_speed_mps
         # MoveIt Servo already applies its collision-proximity scaling before
         # executing this bounded command. Do not stack a second 75% slowdown
         # in the application layer; hard halt codes are still rejected above.

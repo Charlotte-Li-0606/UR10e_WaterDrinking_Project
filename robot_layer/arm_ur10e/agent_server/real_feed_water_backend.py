@@ -300,6 +300,8 @@ def _tool_report(
         "controller_result": execution_result,
         "hold_duration_sec": hold_duration_sec,
         "hold_completed": bool(hold_result.get("completed")),
+        "completion_status": pipeline.get("completion_status"),
+        "recovered_warnings": pipeline.get("recovered_warnings", []),
         "pre_mouth_hold": hold_result,
         "mouth_tracking_during_execution": bool(
             integrated.get("mouth_tracking_during_execution")

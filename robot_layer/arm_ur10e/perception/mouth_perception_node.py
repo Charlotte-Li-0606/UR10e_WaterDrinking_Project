@@ -51,6 +51,7 @@ class NodeOptions:
     base_frame: str
     debug_image_topic: str
     status_topic: str
+    continuous_status_topic: str
     mount_calibration_status: str
     model_path: Path
     sync_slop_sec: float
@@ -64,6 +65,20 @@ class NodeOptions:
     max_tf_age_sec: float
     max_faces: int
     mouth_landmarks: tuple[int, ...]
+
+
+def _operator_warning_from_tracking_status(payload: str) -> tuple[str, ...]:
+    """Return the safety-stop rows requested by the tracking runner."""
+    try:
+        status = json.loads(payload)
+    except (json.JSONDecodeError, TypeError):
+        return ()
+    if not isinstance(status, dict) or status.get("collision_warning") is not True:
+        return ()
+    warning = status.get("operator_warning")
+    if not isinstance(warning, str) or not warning.strip():
+        return ()
+    return (warning.strip(), "HOLD not reached - guarded return only")
 
 
 def _rotation_matrix(transform: TransformStamped) -> np.ndarray:
@@ -235,6 +250,13 @@ class MouthPerceptionNode(Node):
             if options.debug_image_topic
             else None
         )
+        self._continuous_operator_warning_lines: tuple[str, ...] = ()
+        self._continuous_status_subscription = self.create_subscription(
+            String,
+            options.continuous_status_topic,
+            self._continuous_status_callback,
+            qos,
+        )
 
         self._rgb_sub = message_filters.Subscriber(self, Image, options.rgb_topic, qos_profile=qos)
         self._depth_sub = message_filters.Subscriber(self, Image, options.depth_topic, qos_profile=qos)
@@ -291,6 +313,12 @@ class MouthPerceptionNode(Node):
         message = String()
         message.data = json.dumps(status, sort_keys=True)
         self._status_publisher.publish(message)
+
+    def _continuous_status_callback(self, message: String) -> None:
+        """Latch the latest integrated-tracking warning into the debug image."""
+        self._continuous_operator_warning_lines = (
+            _operator_warning_from_tracking_status(message.data)
+        )
 
     @staticmethod
     def _format_xyz(label: str, value: Sequence[float] | None) -> str:
@@ -403,7 +431,12 @@ class MouthPerceptionNode(Node):
             u, v = (int(round(value)) for value in mouth_pixel)
             cv2.circle(image, (u, v), 4, (0, 0, 255), 1)
             cv2.drawMarker(image, (u, v), (0, 255, 0), cv2.MARKER_CROSS, 9, 1)
-        lines = [text, *self._debug_coordinate_lines(mouth_base_position)]
+        warning_lines = list(self._continuous_operator_warning_lines)
+        lines = [
+            *warning_lines,
+            text,
+            *self._debug_coordinate_lines(mouth_base_position),
+        ]
         # Keep the diagnostic overlay readable without covering most of a
         # reduced-resolution camera preview.  At 640x480 this stays close to
         # the original size; smaller streams use a compact font and spacing.
@@ -429,7 +462,15 @@ class MouthPerceptionNode(Node):
                 origin,
                 cv2.FONT_HERSHEY_SIMPLEX,
                 font_scale,
-                (255, 255, 255) if index == 0 else (0, 255, 255),
+                (
+                    (0, 0, 255)
+                    if index < len(warning_lines)
+                    else (
+                        (255, 255, 255)
+                        if index == len(warning_lines)
+                        else (0, 255, 255)
+                    )
+                ),
                 1,
             )
         output = self._bridge.cv2_to_imgmsg(image, encoding="bgr8")
@@ -873,6 +914,10 @@ def _parse_options(argv: Sequence[str] | None = None) -> tuple[NodeOptions, list
     parser.add_argument("--base-frame", default="base_link")
     parser.add_argument("--debug-image-topic", default="/mouth_detection/debug_image")
     parser.add_argument("--status-topic", default="/mouth_detection/status")
+    parser.add_argument(
+        "--continuous-status-topic",
+        default="/continuous_mouth_tracking/status",
+    )
     parser.add_argument("--mount-calibration-status", default="unknown")
     parser.add_argument("--model-path", type=Path, default=default_model)
     parser.add_argument("--sync-slop-sec", type=float, default=0.08)
@@ -901,6 +946,7 @@ def _parse_options(argv: Sequence[str] | None = None) -> tuple[NodeOptions, list
         base_frame=parsed.base_frame,
         debug_image_topic=parsed.debug_image_topic,
         status_topic=parsed.status_topic,
+        continuous_status_topic=parsed.continuous_status_topic,
         mount_calibration_status=parsed.mount_calibration_status,
         model_path=parsed.model_path,
         sync_slop_sec=parsed.sync_slop_sec,

@@ -1,6 +1,11 @@
 continuous_mouth_tracking:
   initial_target_acquisition_timeout_sec: 3.0
   target_timeout_sec: 0.30
+  # Exact image-time TF can trail the RGB-D stream by roughly 0.5 s under the
+  # measured real controller/camera load. Raw frames are retained only for
+  # this bounded transform catch-up; they are never queued as motion commands.
+  image_time_tf_catchup_timeout_sec: 0.75
+  image_time_tf_pending_frame_limit: 12
   # Hold zero velocity through brief full-target loss, then abort.
   lost_target_timeout_sec: 1.00
   # MediaPipe can briefly report no_face when the wrist camera reaches a
@@ -27,6 +32,15 @@ continuous_mouth_tracking:
   coarse_staging_standoff_m: 0.250
   provisional_standoff_m: 0.250
   hold_entry_tolerance_m: 0.010
+  # A close-range detector bias may leave the physical straw at the
+  # operator-validated point while the target still reports an outward-only
+  # residual. This fallback can end approach only farther than the 50 mm
+  # minimum, with tight transverse error and a continuous confirmation dwell.
+  conservative_hold_commanded_standoff_max_m: 0.130
+  conservative_hold_actual_standoff_max_m: 0.170
+  conservative_hold_outward_error_max_m: 0.035
+  conservative_hold_transverse_tolerance_m: 0.010
+  conservative_hold_confirmation_sec: 0.50
   hold_duration_sec: 5.0
 
   servo_tracking_max_error_m: 0.10
@@ -35,13 +49,19 @@ continuous_mouth_tracking:
   maximum_standoff_rate_mps: 0.010
   standoff_progress_error_m: 0.030
   standoff_final_tolerance_m: 0.001
-  maximum_tracking_duration_sec: 45.0
+  # The measured staging-to-hold approach can need more than 45 s when MoveIt
+  # Servo's collision-proximity scaling is active. Keep a bounded 60 s session;
+  # all per-cycle collision, freshness, workspace, and robot-state gates remain
+  # authoritative throughout it.
+  maximum_tracking_duration_sec: 60.0
   state_validity_check_period_sec: 0.10
   # Match the active MoveIt Servo publish period (0.004 s). Perception may
   # update more slowly; the controller always reuses only its newest target.
   control_rate_hz: 250.0
   maximum_linear_speed_mps: 0.020
-  provisional_linear_speed_mps: 0.010
+  # Do not switch Cartesian speed when the short RGB-D history changes between
+  # provisional and stable; acceleration limiting remains active.
+  provisional_linear_speed_mps: 0.020
   maximum_linear_acceleration_mps2: 0.10
   maximum_angular_speed_rps: 0.15
   orientation_correction_gain: 1.0
