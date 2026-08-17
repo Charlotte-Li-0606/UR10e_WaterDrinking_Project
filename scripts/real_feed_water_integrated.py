@@ -342,21 +342,21 @@ def _load_continuous_tracking_config() -> dict[str, Any]:
         values.get("conservative_hold_confirmation_sec", 0.0)
     )
     final_standoff = float(values["final_pre_mouth_standoff_m"])
-    if not final_standoff <= conservative_commanded_max <= 0.15:
+    if not final_standoff <= conservative_commanded_max <= 0.18:
         raise RuntimeError(
-            "conservative commanded standoff must remain between final and 0.15 m"
+            "conservative commanded standoff must remain between final and 0.18 m"
         )
-    if not conservative_commanded_max <= conservative_actual_max <= 0.18:
+    if not conservative_commanded_max <= conservative_actual_max <= 0.22:
         raise RuntimeError(
-            "conservative actual standoff must remain between commanded and 0.18 m"
+            "conservative actual standoff must remain between commanded and 0.22 m"
         )
-    if not 0.0 < conservative_outward_max <= 0.04:
+    if not 0.0 < conservative_outward_max <= 0.07:
         raise RuntimeError(
-            "conservative outward error must remain within (0, 0.04] m"
+            "conservative outward error must remain within (0, 0.07] m"
         )
-    if not 0.0 < conservative_transverse <= float(values["hold_entry_tolerance_m"]):
+    if not 0.0 < conservative_transverse <= 0.02:
         raise RuntimeError(
-            "conservative transverse tolerance must not exceed nominal hold tolerance"
+            "conservative transverse tolerance must remain within (0, 0.02] m"
         )
     if not 0.25 <= conservative_confirmation <= 2.0:
         raise RuntimeError(

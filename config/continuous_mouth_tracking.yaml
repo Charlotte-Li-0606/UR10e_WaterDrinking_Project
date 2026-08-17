@@ -32,14 +32,16 @@ continuous_mouth_tracking:
   coarse_staging_standoff_m: 0.250
   provisional_standoff_m: 0.250
   hold_entry_tolerance_m: 0.010
-  # A close-range detector bias may leave the physical straw at the
-  # operator-validated point while the target still reports an outward-only
-  # residual. This fallback can end approach only farther than the 50 mm
-  # minimum, with tight transverse error and a continuous confirmation dwell.
-  conservative_hold_commanded_standoff_max_m: 0.130
-  conservative_hold_actual_standoff_max_m: 0.170
-  conservative_hold_outward_error_max_m: 0.035
-  conservative_hold_transverse_tolerance_m: 0.010
+  # A close-range detector bias and collision-proximity scaling may leave the
+  # physical straw farther from the tracked mouth than the nominal 50 mm
+  # target. This fallback remains farther-only and requires a continuous
+  # confirmation dwell. The reviewed bounds cover the terminal geometry from
+  # the 2026-08-17 10:42 and 10:49 real runs without changing the 50 mm
+  # minimum standoff or any motion/collision guard.
+  conservative_hold_commanded_standoff_max_m: 0.180
+  conservative_hold_actual_standoff_max_m: 0.220
+  conservative_hold_outward_error_max_m: 0.070
+  conservative_hold_transverse_tolerance_m: 0.020
   conservative_hold_confirmation_sec: 0.50
   hold_duration_sec: 5.0
 

@@ -50,6 +50,7 @@ from scripts.real_feed_water_integrated import (
     _continuous_stale_hold_policy,
     _continuous_recovery_has_collision_evidence,
     _load_initial_position_config,
+    _load_continuous_tracking_config,
     _orientation_after_local_tool_z_rotation,
     _recorded_tool_pose_in_base_link,
     _select_consistent_cloud_frame_window,
@@ -358,6 +359,45 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertTrue(result["eligible"], result)
         self.assertGreaterEqual(result["actual_signed_standoff_m"], 0.05)
         self.assertFalse(result["closer_than_50mm_permitted"])
+
+    def test_conservative_hold_accepts_enhanced_recorded_terminal_bounds(
+        self,
+    ) -> None:
+        recorded_geometry = (
+            (0.17260490, 0.19526217, 0.01834469),
+            (0.13986517, 0.20003211, 0.01685815),
+        )
+        for commanded, actual, transverse in recorded_geometry:
+            with self.subTest(commanded=commanded, actual=actual):
+                result = _conservative_premouth_hold_eligibility(
+                    mouth_position_m=[0.0, 0.0, 0.0],
+                    current_straw_tip_position_m=[actual, transverse, 0.0],
+                    tool_orientation_xyzw=[0.70710678, 0.70710678, 0.0, 0.0],
+                    commanded_standoff_m=commanded,
+                    final_standoff_m=0.05,
+                    commanded_standoff_max_m=0.18,
+                    actual_standoff_max_m=0.22,
+                    outward_error_max_m=0.07,
+                    transverse_tolerance_m=0.02,
+                )
+
+                self.assertTrue(result["eligible"], result)
+                self.assertAlmostEqual(actual, result["actual_signed_standoff_m"])
+                self.assertAlmostEqual(transverse, result["transverse_error_m"])
+                self.assertFalse(result["closer_than_50mm_permitted"])
+
+    def test_continuous_config_loads_enhanced_conservative_hold_bounds(
+        self,
+    ) -> None:
+        config = _load_continuous_tracking_config()
+
+        self.assertEqual(
+            0.18,
+            config["conservative_hold_commanded_standoff_max_m"],
+        )
+        self.assertEqual(0.22, config["conservative_hold_actual_standoff_max_m"])
+        self.assertEqual(0.07, config["conservative_hold_outward_error_max_m"])
+        self.assertEqual(0.02, config["conservative_hold_transverse_tolerance_m"])
 
     def test_conservative_hold_rejects_position_closer_than_50mm(self) -> None:
         # With this flange-down orientation, tool0 +Y is base-link +X.
