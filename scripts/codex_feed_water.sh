@@ -25,6 +25,32 @@ if [ ! -x "${PYTHON_BIN}" ] || ! "${PYTHON_BIN}" -c 'import rclpy' >/dev/null 2>
   PYTHON_BIN=python3
 fi
 
+# Serialize every plan/execution request. A busy lock means a current canonical
+# workflow is still alive, so a new caller must refuse instead of interrupting
+# an active real-motion session.
+EXECUTION_LOCK="/tmp/ur_drinking_project_feed_water_execution.lock"
+exec 9>"${EXECUTION_LOCK}"
+if ! flock -n 9; then
+  printf '%s\n' \
+    '{"success":false,"stage":"feed_water_process_lock","reason":"another canonical feed-water workflow is still active; new execution refused","execution_attempted":false,"execution_sent":false}' >&2
+  exit 2
+fi
+
+EXECUTION_REQUESTED=false
+for argument in "$@"; do
+  if [ "${argument}" = "--execute" ]; then
+    EXECUTION_REQUESTED=true
+    break
+  fi
+done
+
+# A previous launcher can be terminated externally after spawning a child.
+# Once the lock is ours, retire only exact orphaned workflow runners before a
+# new real execution. Never match the long-running robot/MoveIt/Servo stack.
+if [ "${EXECUTION_REQUESTED}" = true ]; then
+  "${PYTHON_BIN}" "${PROJECT_DIR}/scripts/feed_water_process_guard.py" >&2
+fi
+
 # This entrypoint is intentionally real-only. Simulation remains available
 # through the preserved OpenClaw compatibility scripts, but Codex never infers
 # or inherits the backend from a long-running gateway process.

@@ -106,8 +106,11 @@ The implementation uses the installed Jazzy MoveIt Servo configuration:
 
 The mouth-perception debug image subscribes to the diagnostic state. A
 collision-related recovery refusal latches the operator warning into the rqt
-image until the tracking runner publishes a later non-warning status. The
-guarded return still runs only if its independent scene, controller,
+image while the guarded return is in progress. Immediately after that return
+is independently verified at `initial_position`, the tracking runner publishes
+`GUARDED_RETURN_COMPLETE` with `collision_warning=false`, which removes the
+overlay. If the return or its verification fails, the warning remains visible.
+The guarded return still runs only if its independent scene, controller,
 orientation, collision, and target checks pass.
 
 Servo outputs `trajectory_msgs/JointTrajectory` to the existing

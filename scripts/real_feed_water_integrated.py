@@ -370,6 +370,9 @@ def _load_continuous_tracking_config() -> dict[str, Any]:
         raise RuntimeError(
             "maximum_tracking_duration_sec must remain within [15, 60] seconds"
         )
+    control_gain = float(values.get("control_gain", 0.0))
+    if not 0.0 < control_gain <= 1.2:
+        raise RuntimeError("control_gain must remain within (0, 1.2]")
     try:
         approach_axis = tuple(
             float(value)
@@ -2795,12 +2798,25 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             and return_result.get("success")
             and verification.get("at_initial_position")
         )
+        warning_clear = (
+            self._clear_continuous_collision_warning_after_guarded_return(
+                verification=verification,
+            )
+            if success
+            else {
+                "success": False,
+                "published": False,
+                "guarded_return_verified": False,
+                "reason": "guarded return was not verified; safety overlay preserved",
+            }
+        )
         report.update(
             {
                 "success": success,
                 "attempted": True,
                 "return_result": return_result,
                 "post_return_initial_position": verification,
+                "operator_warning_clear": warning_clear,
                 "execution_sent": bool(return_result.get("execution_sent")),
                 "reason": None
                 if success
@@ -5640,6 +5656,56 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             pose.pose.position.z = float(target.predicted_position_m[2])
             pose.pose.orientation.w = 1.0
             self._continuous_target_publisher.publish(pose)
+
+    def _clear_continuous_collision_warning_after_guarded_return(
+        self,
+        *,
+        verification: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Clear the rqt safety overlay only after a verified guarded return."""
+        report: dict[str, Any] = {
+            "success": False,
+            "published": False,
+            "topic": "/continuous_mouth_tracking/status",
+            "guarded_return_verified": bool(
+                verification.get("available")
+                and verification.get("at_initial_position")
+            ),
+        }
+        if not report["guarded_return_verified"]:
+            report["reason"] = (
+                verification.get("reason")
+                or "guarded return was not verified at initial_position"
+            )
+            return report
+        publisher = getattr(self, "_continuous_status_publisher", None)
+        if publisher is None:
+            report["reason"] = "continuous tracking status publisher is unavailable"
+            return report
+
+        status = String()
+        status.data = json.dumps(
+            {
+                "state": "GUARDED_RETURN_COMPLETE",
+                "final_state": "initial_position",
+                "guarded_return_verified": True,
+                "operator_warning": None,
+                "collision_warning": False,
+                "safety_stop_reason": None,
+            },
+            sort_keys=True,
+        )
+        publisher.publish(status)
+        report.update(
+            {
+                "success": True,
+                "published": True,
+                "reason": None,
+                "state": "GUARDED_RETURN_COMPLETE",
+                "collision_warning": False,
+            }
+        )
+        return report
 
     def _acquire_continuous_target(self) -> dict[str, Any]:
         """Accept the first fresh valid target, including provisional data."""

@@ -9,6 +9,7 @@ import unittest
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 ENTRYPOINT = PROJECT_ROOT / "scripts" / "codex_feed_water.sh"
 DIRECT_RUNNER = PROJECT_ROOT / "scripts" / "run_feed_water_real_direct.py"
+PROCESS_GUARD = PROJECT_ROOT / "scripts" / "feed_water_process_guard.py"
 PROJECT_INSTRUCTIONS = PROJECT_ROOT / "AGENTS.md"
 CODEX_SKILL = Path("/home/dase-hw101/.codex/skills/feed-water-ur10e/SKILL.md")
 OPENCLAW_ENTRYPOINT = PROJECT_ROOT / "scripts" / "openclaw_feeding_tool.sh"
@@ -23,6 +24,29 @@ class CodexFeedWaterEntrypointTest(unittest.TestCase):
         self.assertNotIn("openclaw_feeding_tool.sh", content)
         self.assertNotIn("ensure_ur10e_feeding_sim.sh", content)
         self.assertTrue(DIRECT_RUNNER.is_file())
+
+    def test_codex_route_serializes_and_clears_only_stale_workflow_runners(
+        self,
+    ) -> None:
+        entrypoint = ENTRYPOINT.read_text(encoding="utf-8")
+        guard = PROCESS_GUARD.read_text(encoding="utf-8")
+
+        self.assertIn("flock -n 9", entrypoint)
+        self.assertIn("feed_water_process_guard.py", entrypoint)
+        self.assertIn('"--execute"', entrypoint)
+        self.assertTrue(PROCESS_GUARD.is_file())
+        self.assertIn("real_feed_water_integrated.py", guard)
+        self.assertIn("run_feed_water_real_direct.py", guard)
+        self.assertIn("feeding_safe_tool_runner.py", guard)
+        self.assertIn("real_mouth_tracking_servo.py", guard)
+        self.assertNotIn("pkill", guard)
+        self.assertNotIn("SIGKILL", guard)
+
+        standalone_tracking = (
+            PROJECT_ROOT / "scripts" / "real_mouth_tracking_servo.py"
+        ).read_text(encoding="utf-8")
+        self.assertIn("WORKFLOW_LOCK_PATH", standalone_tracking)
+        self.assertIn("LOCK_EX | fcntl.LOCK_NB", standalone_tracking)
 
     def test_codex_instructions_gate_execution_and_keep_plan_only(self) -> None:
         instructions = PROJECT_INSTRUCTIONS.read_text(encoding="utf-8")

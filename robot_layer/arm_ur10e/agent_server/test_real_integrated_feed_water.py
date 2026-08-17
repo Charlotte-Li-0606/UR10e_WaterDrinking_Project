@@ -101,6 +101,41 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertTrue(status["collision_warning"])
         node._continuous_target_publisher.publish.assert_not_called()
 
+    def test_verified_guarded_return_clears_rqt_collision_warning(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._continuous_status_publisher = Mock()
+
+        result = node._clear_continuous_collision_warning_after_guarded_return(
+            verification={"available": True, "at_initial_position": True},
+        )
+
+        self.assertTrue(result["success"])
+        self.assertTrue(result["published"])
+        message = node._continuous_status_publisher.publish.call_args.args[0]
+        status = json.loads(message.data)
+        self.assertEqual("GUARDED_RETURN_COMPLETE", status["state"])
+        self.assertEqual("initial_position", status["final_state"])
+        self.assertTrue(status["guarded_return_verified"])
+        self.assertIsNone(status["operator_warning"])
+        self.assertFalse(status["collision_warning"])
+        self.assertIsNone(status["safety_stop_reason"])
+
+    def test_unverified_guarded_return_preserves_rqt_collision_warning(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._continuous_status_publisher = Mock()
+
+        result = node._clear_continuous_collision_warning_after_guarded_return(
+            verification={
+                "available": True,
+                "at_initial_position": False,
+                "reason": "live joints are not at initial_position",
+            },
+        )
+
+        self.assertFalse(result["success"])
+        self.assertFalse(result["published"])
+        node._continuous_status_publisher.publish.assert_not_called()
+
     def test_continuous_recovery_detects_structured_collision_evidence(self) -> None:
         self.assertTrue(
             _continuous_recovery_has_collision_evidence(
@@ -398,6 +433,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertEqual(0.22, config["conservative_hold_actual_standoff_max_m"])
         self.assertEqual(0.07, config["conservative_hold_outward_error_max_m"])
         self.assertEqual(0.02, config["conservative_hold_transverse_tolerance_m"])
+        self.assertEqual(1.2, config["control_gain"])
 
     def test_conservative_hold_rejects_position_closer_than_50mm(self) -> None:
         # With this flange-down orientation, tool0 +Y is base-link +X.
@@ -2574,8 +2610,11 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
                 },
             )
         )
-        node._current_initial_position_status = Mock(
-            return_value={"available": True, "at_initial_position": True}
+        verification = {"available": True, "at_initial_position": True}
+        node._current_initial_position_status = Mock(return_value=verification)
+        warning_clear = {"success": True, "published": True}
+        node._clear_continuous_collision_warning_after_guarded_return = Mock(
+            return_value=warning_clear
         )
 
         result = node._attempt_failure_recovery_return(
@@ -2587,10 +2626,14 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertTrue(result["attempted"])
         self.assertEqual("initial_position", result["final_state"])
+        self.assertIs(warning_clear, result["operator_warning_clear"])
         node.return_to_initial_position.assert_called_once_with(
             execute=True,
             confirm_real_motion=True,
             preserve_current_human_scene=True,
+        )
+        node._clear_continuous_collision_warning_after_guarded_return.assert_called_once_with(
+            verification=verification,
         )
 
     def test_active_search_failure_requests_recovery_when_motion_was_sent(self) -> None:

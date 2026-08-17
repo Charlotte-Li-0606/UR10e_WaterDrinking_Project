@@ -72,6 +72,19 @@
 
 ## Real-motion authorization
 
+- Before every new canonical request, `scripts/codex_feed_water.sh` must hold
+  the project single-workflow lock. A busy lock means a current workflow is
+  active: refuse the new request and never terminate that live session.
+- Before each new real execution, run the canonical stale-process guard. It may
+  stop only exact orphaned project workflow runners (`run_feed_water_real_direct.py`,
+  the feed-water `feeding_safe_tool_runner.py`, `real_feed_water_integrated.py`,
+  and `real_mouth_tracking_servo.py`), using SIGINT first and bounded SIGTERM
+  fallback. If any survives, refuse execution. Never match or stop the UR
+  driver, controller manager, MoveIt, Servo, camera, perception, target tracker,
+  or RQT processes.
+- The standalone real mouth-tracking runner must use the same lock, so it and a
+  feed-water workflow can never own Servo or MoveIt concurrently.
+
 - A standalone user-directed request to drink or be fed water authorizes one
   guarded execution. Invoke exactly one fresh request:
 

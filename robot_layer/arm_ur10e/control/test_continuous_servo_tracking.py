@@ -122,6 +122,25 @@ def test_acceleration_and_speed_limits_apply_to_cartesian_command():
     assert np.linalg.norm(decision.linear_velocity_mps) <= 0.020000001
 
 
+def test_enhanced_gain_tracks_small_motion_faster_below_same_speed_cap():
+    controller = ContinuousServoController(
+        ContinuousServoConfig(
+            control_gain=1.2,
+            standoff_progress_error_m=0.005,
+        )
+    )
+    desired = _desired_tool(standoff=0.25)
+    decision = _update(
+        controller,
+        _target(),
+        desired - np.array((0.01, 0.0, 0.0)),
+        dt=0.20,
+    )
+
+    assert np.isclose(np.linalg.norm(decision.linear_velocity_mps), 0.012)
+    assert decision.speed_limit_mps == 0.020
+
+
 def test_static_mouth_reaches_hold_without_segmented_pauses():
     controller = ContinuousServoController()
     tool = _desired_tool() - np.array((0.08, 0.0, 0.0))

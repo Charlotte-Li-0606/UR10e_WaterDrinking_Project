@@ -67,7 +67,12 @@ continuous_mouth_tracking:
   maximum_linear_acceleration_mps2: 0.10
   maximum_angular_speed_rps: 0.15
   orientation_correction_gain: 1.0
-  control_gain: 0.8
+  # The last three real tracked runs delivered accepted mouth coordinates at
+  # 8.26-10.83 Hz. At the unchanged 20 mm/s Servo cap, the tool can move only
+  # 1.85-2.42 mm between accepted coordinates. A 1.2 /s proportional gain
+  # reaches that cap at 16.7 mm error, improving small-motion responsiveness
+  # without changing collision scaling, acceleration, or maximum speed.
+  control_gain: 1.2
   maximum_tool_radius_m: 1.30
   maximum_flange_tilt_deg: 5.0
 

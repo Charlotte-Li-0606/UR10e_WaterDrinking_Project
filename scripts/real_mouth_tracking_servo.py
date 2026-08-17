@@ -9,6 +9,7 @@ two explicit command-line confirmations before it can publish a twist.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import math
 import os
@@ -32,6 +33,18 @@ from robot_layer.arm_ur10e.control.ros_servo_backend import RosServoCommandSink
 
 
 MAX_SPEED_SLIDER_PERCENT = 30.0
+WORKFLOW_LOCK_PATH = "/tmp/ur_drinking_project_feed_water_execution.lock"
+
+
+def _acquire_workflow_lock():
+    """Refuse overlap with a canonical feed-water or tracking execution."""
+    handle = open(WORKFLOW_LOCK_PATH, "a+", encoding="utf-8")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        return None
+    return handle
 
 
 class RealMouthTrackingServo(Node):
@@ -262,8 +275,27 @@ def _parse_args(argv=None):
     return parsed, ros_args
 
 
-def main(argv=None) -> None:
+def main(argv=None) -> int:
     parsed, ros_args = _parse_args(argv)
+    workflow_lock = _acquire_workflow_lock() if parsed.execute else None
+    if parsed.execute and workflow_lock is None:
+        print(
+            json.dumps(
+                {
+                    "success": False,
+                    "stage": "feed_water_process_lock",
+                    "reason": (
+                        "another canonical feed-water or tracking workflow is "
+                        "still active; new tracking execution refused"
+                    ),
+                    "execution_attempted": False,
+                    "execution_sent": False,
+                },
+                sort_keys=True,
+            ),
+            flush=True,
+        )
+        return 2
     rclpy.init(args=ros_args)
     node = RealMouthTrackingServo(execute=parsed.execute,
                                   max_duration_sec=parsed.max_duration)
@@ -282,7 +314,10 @@ def main(argv=None) -> None:
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()
+        if workflow_lock is not None:
+            workflow_lock.close()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
