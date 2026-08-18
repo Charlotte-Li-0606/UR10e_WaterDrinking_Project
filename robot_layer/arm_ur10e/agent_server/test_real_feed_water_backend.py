@@ -80,7 +80,7 @@ class RealFeedWaterBackendTest(unittest.TestCase):
             "final_state": "refused",
         }
 
-        def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
             report_argument = command.index("--report-file") + 1
             Path(command[report_argument]).write_text(
                 json.dumps(pipeline), encoding="utf-8"
@@ -160,7 +160,7 @@ class RealFeedWaterBackendTest(unittest.TestCase):
             },
         }
 
-        def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
             report_argument = command.index("--report-file") + 1
             Path(command[report_argument]).write_text(json.dumps(pipeline), encoding="utf-8")
             self.assertEqual(
@@ -180,6 +180,8 @@ class RealFeedWaterBackendTest(unittest.TestCase):
             self.assertEqual("0.3", command[velocity_argument])
             self.assertEqual("0.3", command[acceleration_argument])
             self.assertEqual("5.0", command[hold_argument])
+            self.assertIs(subprocess.PIPE, kwargs["stdout"])
+            self.assertIsNone(kwargs["stderr"])
             return subprocess.CompletedProcess(command, 0, "", "")
 
         with tempfile.TemporaryDirectory() as directory, patch.object(

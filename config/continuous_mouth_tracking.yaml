@@ -48,7 +48,7 @@ continuous_mouth_tracking:
   servo_tracking_max_error_m: 0.10
   servo_replan_enter_m: 0.10
   servo_replan_exit_m: 0.06
-  maximum_standoff_rate_mps: 0.010
+  maximum_standoff_rate_mps: 0.020
   standoff_progress_error_m: 0.030
   standoff_final_tolerance_m: 0.001
   # The measured staging-to-hold approach can need more than 45 s when MoveIt

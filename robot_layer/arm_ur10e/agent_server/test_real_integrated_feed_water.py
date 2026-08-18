@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import io
 import json
 import math
 import unittest
+from contextlib import redirect_stderr
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -49,6 +51,7 @@ from scripts.real_feed_water_integrated import (
     _conservative_premouth_hold_eligibility,
     _continuous_stale_hold_policy,
     _continuous_recovery_has_collision_evidence,
+    _emit_stage_progress,
     _load_initial_position_config,
     _load_continuous_tracking_config,
     _orientation_after_local_tool_z_rotation,
@@ -78,6 +81,24 @@ from robot_layer.arm_ur10e.control.continuous_servo_tracking import (
 
 
 class RealIntegratedFeedWaterTest(unittest.TestCase):
+    def test_stage_progress_is_machine_readable_and_operator_visible(self) -> None:
+        output = io.StringIO()
+
+        with redirect_stderr(output):
+            _emit_stage_progress(
+                "cartesian_adjustment",
+                detail="servo_target_displacement_limit",
+            )
+
+        event = json.loads(output.getvalue())
+        self.assertEqual("feed_water_stage", event["event"])
+        self.assertEqual("cartesian_adjustment", event["stage"])
+        self.assertEqual("in_progress", event["status"])
+        self.assertEqual(
+            "servo_target_displacement_limit",
+            event["detail"],
+        )
+
     def test_continuous_diagnostics_publishes_collision_operator_warning(
         self,
     ) -> None:
@@ -434,6 +455,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertEqual(0.07, config["conservative_hold_outward_error_max_m"])
         self.assertEqual(0.02, config["conservative_hold_transverse_tolerance_m"])
         self.assertEqual(1.2, config["control_gain"])
+        self.assertEqual(0.02, config["maximum_standoff_rate_mps"])
 
     def test_conservative_hold_rejects_position_closer_than_50mm(self) -> None:
         # With this flange-down orientation, tool0 +Y is base-link +X.

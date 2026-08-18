@@ -61,7 +61,7 @@ class ContinuousServoConfig:
     servo_tracking_max_error_m: float = 0.10
     servo_replan_enter_m: float = 0.10
     servo_replan_exit_m: float = 0.06
-    maximum_standoff_rate_mps: float = 0.010
+    maximum_standoff_rate_mps: float = 0.020
     standoff_progress_error_m: float = 0.030
     standoff_final_tolerance_m: float = 0.001
     hold_entry_tolerance_m: float = 0.010

@@ -46,6 +46,23 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+
+def _emit_stage_progress(
+    stage: str,
+    *,
+    status: str = "in_progress",
+    detail: str | None = None,
+) -> None:
+    """Emit one machine-readable operator-visible workflow transition."""
+    payload: dict[str, Any] = {
+        "event": "feed_water_stage",
+        "stage": str(stage),
+        "status": str(status),
+    }
+    if detail:
+        payload["detail"] = str(detail)
+    print(json.dumps(payload, sort_keys=True), file=sys.stderr, flush=True)
+
 import rclpy  # noqa: E402
 from builtin_interfaces.msg import Time as TimeMsg  # noqa: E402
 from geometry_msgs.msg import Pose, PoseStamped  # noqa: E402
@@ -6369,6 +6386,8 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     # Never advance toward a stale mouth pose.  Keep Servo as
                     # the sole command owner, publish an explicit zero command,
                     # and allow a bounded, reason-specific window to reacquire.
+                    if not stale_target_hold_active:
+                        _emit_stage_progress("target_reacquisition_hold")
                     sink.publish_zero()
                     self._continuous_servo_controller.pause_for_reacquisition()
                     last_update = now
@@ -6459,6 +6478,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 if target.available and stale_target_hold_active:
                     report["target_reacquisition_count"] += 1
                     stale_target_hold_active = False
+                    _emit_stage_progress("continuous_servo_tracking")
                 tool = self._tool0_pose()
                 camera = self._frame_transform(BASE_FRAME, CAMERA_OPTICAL_FRAME)
                 if not tool.get("available") or not camera.get("available"):
@@ -6662,6 +6682,13 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     report["stop_reason"] = decision.safety_stop_reason
                     break
                 if decision.recovery_required:
+                    _emit_stage_progress(
+                        "cartesian_adjustment",
+                        detail=str(
+                            decision.fallback_reason
+                            or "local_recovery_required"
+                        ),
+                    )
                     sink.halt()
                     self._set_continuous_servo_active(False)
                     self._continuous_motion_arbiter.release(MotionCommandOwner.SERVO)
@@ -6838,6 +6865,10 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                     else None
                 )
                 if hold_entry_mode is not None:
+                    _emit_stage_progress(
+                        "premouth_hold",
+                        detail=hold_entry_mode,
+                    )
                     # Enter the five-second dwell without sending the small
                     # residual tracking command from this cycle. The scaled
                     # joint controller holds the last stationary setpoint.
@@ -6935,6 +6966,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         use_octomap: bool,
     ) -> tuple[int, dict[str, Any]]:
         """Run the separate continuous-Servo feed-water workflow."""
+        _emit_stage_progress("continuous_tracking_initialization")
         self._use_latest_only_continuous_mouth_candidates()
         report: dict[str, Any] = {
             "success": False,
@@ -6975,6 +7007,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             report.update(stage="hold_duration_validation", reason="hold duration is invalid")
             return 2, report
 
+        _emit_stage_progress("tool_collision_geometry")
         combined = self._apply_combined_tool_collision_geometry()
         report["combined_tool_collision_geometry"] = combined
         if not combined.get("success"):
@@ -6983,12 +7016,14 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 reason=combined.get("reason"),
             )
             return 2, report
+        _emit_stage_progress("initial_position_check")
         initial_before = self._current_initial_position_status()
         report["initial_position_before"] = initial_before
         if not initial_before.get("available"):
             report.update(stage="initial_position_entry_check", reason=initial_before.get("reason"))
             return 2, report
         if not initial_before.get("at_initial_position"):
+            _emit_stage_progress("preflight_guarded_return")
             code, preflight_return = self.return_to_initial_position(
                 execute=execute,
                 confirm_real_motion=confirm_real_motion,
@@ -7011,11 +7046,13 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 )
                 return 2, report
 
+        _emit_stage_progress("mouth_target_acquisition")
         acquisition = self._acquire_continuous_target()
         report["initial_target_acquisition"] = {
             key: value for key, value in acquisition.items() if key != "target"
         }
         if not acquisition.get("success"):
+            _emit_stage_progress("active_search")
             search = self.active_search(
                 execute=execute,
                 confirm_real_motion=confirm_real_motion,
@@ -7041,6 +7078,10 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 )
                 return 2, report
         target = acquisition["target"]
+        _emit_stage_progress(
+            "mouth_target_acquired",
+            detail=str(target.state.value),
+        )
         report["detected_mouth_pose"] = {
             "frame_id": BASE_FRAME,
             "position_m": [float(value) for value in target.position_m],
@@ -7055,6 +7096,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 failures=readiness,
             )
             return 2, report
+        _emit_stage_progress("planning_scene_validation")
         scene = self._apply_multi_person_planning_scene(snapshot)
         report["fixed_planning_scene"] = scene
         if not scene.get("success"):
@@ -7088,6 +7130,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             )
             return 2, report
 
+        _emit_stage_progress("premouth_target_validation")
         final_target = self._continuous_pose_target(
             target,
             standoff_m=float(self._continuous_parameters["final_pre_mouth_standoff_m"]),
@@ -7145,6 +7188,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             )
         report["octomap"] = octomap
 
+        _emit_stage_progress("coarse_staging_target")
         staging = self._continuous_pose_target(
             target,
             standoff_m=float(self._continuous_parameters["coarse_staging_standoff_m"]),
@@ -7153,12 +7197,14 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         if not staging.get("success"):
             report.update(stage="coarse_staging_target", reason=staging.get("reason"))
             return 2, report
+        _emit_stage_progress("coarse_staging_plan")
         staging_plan = self._continuous_plan_with_fallback(staging)
         report["coarse_staging_plan"] = staging_plan
         if not staging_plan.get("success"):
             report.update(stage="coarse_staging_plan", reason=staging_plan.get("reason"))
             return 2, report
         if not execute:
+            _emit_stage_progress("plan_only_return_validation")
             return_validation_code, return_validation = self.return_to_initial_position(
                 execute=False,
                 confirm_real_motion=False,
@@ -7179,6 +7225,10 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             )
             return (0 if report["success"] else 2), report
 
+        _emit_stage_progress(
+            "coarse_staging_execution",
+            detail=str(staging_plan.get("selected_backend") or "unknown"),
+        )
         staging_execution = self._execute_continuous_planned_trajectory(
             confirm_real_motion=confirm_real_motion
         )
@@ -7199,6 +7249,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             )
             return 2, report
         try:
+            _emit_stage_progress("continuous_servo_tracking")
             servo = self._continuous_servo_approach_and_hold(
                 hold_duration_sec=float(hold_duration_sec),
                 confirm_real_motion=confirm_real_motion,
@@ -7240,6 +7291,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 failure_recovery_return=recovery,
             )
             return 2, report
+        _emit_stage_progress("guarded_return_to_initial_position")
         return_code, return_result = self.return_to_initial_position(
             execute=True,
             confirm_real_motion=confirm_real_motion,
@@ -7262,6 +7314,10 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 servo.get("recovered_warnings", [])
             ),
         )
+        _emit_stage_progress(
+            "continuous_tracking_returned_initial_position",
+            status="completed",
+        )
         return 0, report
 
     def run_integrated(
@@ -7276,6 +7332,17 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         use_octomap: bool = False,
         hold_duration_sec: float = DEFAULT_PREMOUTH_HOLD_SEC,
     ) -> tuple[int, dict[str, Any]]:
+        _emit_stage_progress(
+            "workflow_dispatch",
+            detail=(
+                "continuous_tracking"
+                if continuous_mouth_tracking
+                else "legacy_segmented_tracking"
+                if track_mouth_during_execution
+                else "frozen_target"
+            ),
+        )
+        _emit_stage_progress("previous_session_collision_geometry_reset")
         session_scene_reset = (
             self._ensure_previous_session_collision_geometry_reset()
         )
@@ -8029,6 +8096,7 @@ def main() -> int:
         "final_state": "refused",
     }
     try:
+        _emit_stage_progress("pipeline_initialization")
         rclpy.init()
         rclpy_initialized = True
         node = RealIntegratedFeedWater(
@@ -8108,6 +8176,11 @@ def main() -> int:
             except Exception:
                 traceback.print_exc(file=sys.stderr)
     report = json.dumps(_jsonable(result), indent=2, sort_keys=True)
+    _emit_stage_progress(
+        str(result.get("stage") or "pipeline_complete"),
+        status="completed" if result.get("success") else "refused",
+        detail=None if result.get("success") else str(result.get("reason") or "refused"),
+    )
     print(report, flush=True)
     if args.report_file is not None:
         args.report_file.parent.mkdir(parents=True, exist_ok=True)

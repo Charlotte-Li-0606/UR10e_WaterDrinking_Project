@@ -141,6 +141,17 @@ def test_enhanced_gain_tracks_small_motion_faster_below_same_speed_cap():
     assert decision.speed_limit_mps == 0.020
 
 
+def test_default_standoff_transition_uses_full_servo_speed_ceiling():
+    controller = ContinuousServoController()
+    tool = _desired_tool(standoff=0.25)
+
+    decision = _update(controller, _target(), tool, dt=0.20)
+
+    assert np.isclose(decision.commanded_standoff_m, 0.246)
+    assert decision.speed_limit_mps == 0.020
+    assert np.linalg.norm(decision.linear_velocity_mps) <= 0.020000001
+
+
 def test_static_mouth_reaches_hold_without_segmented_pauses():
     controller = ContinuousServoController()
     tool = _desired_tool() - np.array((0.08, 0.0, 0.0))

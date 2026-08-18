@@ -467,7 +467,11 @@ def run_real_feed_water(
             cwd=PROJECT_ROOT,
             env=child_environment,
             text=True,
-            capture_output=True,
+            # Keep the final JSON stdout bounded for report parsing while
+            # allowing structured stage transitions on stderr to reach the
+            # operator immediately.
+            stdout=subprocess.PIPE,
+            stderr=None,
             timeout=PIPELINE_TIMEOUT_SECONDS,
             check=False,
         )
