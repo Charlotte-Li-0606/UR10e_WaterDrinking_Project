@@ -1,0 +1,119 @@
+{
+  "checks": {
+    "camera_tf": {
+      "available": true,
+      "child_frame": "d435i_color_optical_frame",
+      "orientation_quat_xyzw": [
+        -0.71206868,
+        -0.08780941,
+        0.09533743,
+        0.69004237
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.55974752,
+        1.08356201,
+        0.54969002
+      ]
+    },
+    "controllers": {
+      "available": true,
+      "joint_state_broadcaster_active": true,
+      "scaled_joint_trajectory_controller_active": true
+    },
+    "current_straw_tip_pose": {
+      "frame_id": "base_link",
+      "orientation_quat_xyzw": [
+        0.67247306,
+        0.74011039,
+        -0.00327697,
+        -0.00242238
+      ],
+      "position_m": [
+        -0.56351958,
+        1.12328804,
+        0.56440673
+      ]
+    },
+    "execute_trajectory_available": null,
+    "joint_state": {
+      "complete": true,
+      "expected_joint_count": 6,
+      "received": true,
+      "received_expected_joint_count": 6
+    },
+    "mount_calibration": {
+      "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+      "metrics": null,
+      "status": "provisional"
+    },
+    "mouth_pose": {
+      "available": false,
+      "perception_status": {
+        "detected": false,
+        "latest_received_age_sec": 0.0955827,
+        "reason": "no_face"
+      },
+      "reason": "no /detected_mouth_pose messages received in 1.0 seconds; /mouth_detection/status reports no_face"
+    },
+    "move_group_available": true,
+    "required_nodes": {
+      "controller_manager_exists": true,
+      "move_group_exists": true
+    },
+    "speed_slider_percent": 15.0,
+    "tool0_pose": {
+      "available": true,
+      "child_frame": "tool0",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.67247306,
+        0.74011039,
+        -0.00327697,
+        -0.00242238
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.55300927,
+        1.01379135,
+        0.56449712
+      ]
+    },
+    "ur_base_tf": {
+      "available": true,
+      "child_frame": "base_link",
+      "orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        1.0,
+        -0.0
+      ],
+      "parent_frame": "base",
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "execution_disabled": true,
+  "execution_sent": false,
+  "failures": [
+    "no /detected_mouth_pose messages received in 1.0 seconds; /mouth_detection/status reports no_face"
+  ],
+  "feeding_vector_input": [
+    1.0,
+    0.0,
+    0.0
+  ],
+  "feeding_vector_normalized": [
+    1.0,
+    0.0,
+    0.0
+  ],
+  "feeding_vector_sign": "plus",
+  "mode": "check",
+  "premouth_policy": "camera-ray",
+  "safe_distance_m": 0.05,
+  "success": false
+}

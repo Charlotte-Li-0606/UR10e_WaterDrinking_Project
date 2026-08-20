@@ -1,0 +1,30 @@
+{
+  "execution_attempted": false,
+  "execution_sent": false,
+  "mode": "execute",
+  "previous_session_collision_geometry_reset": {
+    "collision_bypassed": false,
+    "execution_sent": false,
+    "performed": true,
+    "planning_scene_before": {
+      "allowed_collision_exceptions_added": false,
+      "available": false,
+      "discovery_attempts": 4,
+      "discovery_elapsed_sec": 4.00877188,
+      "discovery_timeout_sec": 4.0,
+      "human_collision_objects_preserved": false,
+      "reason": "/get_planning_scene is unavailable"
+    },
+    "reason": "/get_planning_scene is unavailable",
+    "scope": {
+      "combined_attached_tool_removed": false,
+      "dynamic_octomap": true,
+      "managed_human_world_objects": true,
+      "unmanaged_world_objects_removed": false
+    },
+    "success": false
+  },
+  "reason": "/get_planning_scene is unavailable",
+  "stage": "previous_session_collision_geometry_reset",
+  "success": false
+}

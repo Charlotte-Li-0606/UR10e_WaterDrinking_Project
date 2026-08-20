@@ -1,0 +1,1933 @@
+{
+  "active_search": {
+    "adaptive_distance_policy_m": {
+      "backward": [
+        0.04,
+        0.03,
+        0.02
+      ],
+      "directional": [
+        0.05,
+        0.04,
+        0.03,
+        0.02
+      ],
+      "skip_if_all_bounded_candidates_fail": true
+    },
+    "camera_extrinsic_applied": true,
+    "checks": {
+      "camera_mount_match": {
+        "configured": {
+          "rpy_rad": [
+            3.0678492,
+            -0.00514696,
+            -1.46519711
+          ],
+          "translation_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        },
+        "live": {
+          "available": true,
+          "child_frame": "d435i_link",
+          "orientation_quat_xyzw": [
+            0.74286778,
+            -0.6684175,
+            -0.02274236,
+            0.02912556
+          ],
+          "parent_frame": "tool0",
+          "position_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        },
+        "matches": true,
+        "maximum_rotation_error_deg": 0.5,
+        "maximum_translation_error_m": 0.001,
+        "reason": null,
+        "rotation_error_deg": 0.0,
+        "rotation_error_rad": 0.0,
+        "translation_error_m": 0.0
+      },
+      "camera_tf": {
+        "available": true,
+        "child_frame": "d435i_color_optical_frame",
+        "orientation_quat_xyzw": [
+          0.4928308,
+          0.52027804,
+          -0.48884906,
+          -0.49744864
+        ],
+        "parent_frame": "base_link",
+        "position_m": [
+          -0.17155659,
+          0.21826012,
+          0.56441944
+        ]
+      },
+      "controllers": {
+        "available": true,
+        "joint_state_broadcaster_active": true,
+        "scaled_joint_trajectory_controller_active": true
+      },
+      "current_straw_tip_pose": {
+        "frame_id": "base_link",
+        "orientation_quat_xyzw": [
+          0.66578483,
+          0.74591324,
+          -0.00512215,
+          0.01782581
+        ],
+        "position_m": [
+          -0.17640667,
+          0.25832657,
+          0.57786327
+        ]
+      },
+      "execute_trajectory_available": null,
+      "joint_state": {
+        "complete": true,
+        "expected_joint_count": 6,
+        "received": true,
+        "received_expected_joint_count": 6
+      },
+      "mount_calibration": {
+        "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+        "corrected_physical_profile": true,
+        "metrics": {
+          "captured_at": "2026-07-23T15:45:00+08:00",
+          "limitation": "One physical approach direction plus the upright-image constraint fixes the axis convention, but a three-marker solve is still required for metrology-grade 6-DoF verification.",
+          "method": "manual_physical_axis_alignment",
+          "preserved_tool0_to_optical_center_m": [
+            0.07011388,
+            5.789e-05,
+            0.01478767
+          ],
+          "rollback_tool0_to_d435i_link": {
+            "note": "Legacy simulation-derived provisional transform",
+            "rpy_rad": [
+              -3.14159265,
+              -0.027969,
+              -0.153885
+            ],
+            "translation_m": [
+              0.072299,
+              0.014823,
+              0.015
+            ]
+          },
+          "rotation_determinant": 1.0,
+          "rotation_orthogonality_error": 0.0,
+          "target_camera_optical_axes_in_base_link": {
+            "+X_image_right": [
+              0.0,
+              1.0,
+              0.0
+            ],
+            "+Y_image_down": [
+              0.0,
+              0.0,
+              -1.0
+            ],
+            "+Z_depth_forward": [
+              -1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "status": "provisional",
+        "tool0_to_d435i_link": {
+          "rpy_rad": [
+            3.0678492,
+            -0.00514696,
+            -1.46519711
+          ],
+          "translation_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        }
+      },
+      "mouth_pose": {
+        "available": false,
+        "identity_locked": false,
+        "identity_unsafe": false,
+        "perception_status": {
+          "detected": false,
+          "latest_received_age_sec": 0.07514861,
+          "reason": "no_face"
+        },
+        "reason": "no mouth-candidate message has been received; /mouth_detection/status reports no_face",
+        "sample_duration_sec": 1.0,
+        "stable": false,
+        "target_selection": "center"
+      },
+      "move_group_available": true,
+      "required_nodes": {
+        "controller_manager_exists": true,
+        "move_group_exists": true
+      },
+      "robot_mode": 7,
+      "robot_mode_running": true,
+      "robot_program_running": true,
+      "safety_mode": 1,
+      "safety_mode_normal": true,
+      "speed_slider_percent": 60.0,
+      "tool0_pose": {
+        "available": true,
+        "child_frame": "tool0",
+        "link_name": "tool0",
+        "orientation_quat_xyzw": [
+          0.66578483,
+          0.74591324,
+          -0.00512215,
+          0.01782581
+        ],
+        "parent_frame": "base_link",
+        "position_m": [
+          -0.16399585,
+          0.14909076,
+          0.58153876
+        ]
+      },
+      "tool0_to_camera_link_tf": {
+        "available": true,
+        "child_frame": "d435i_link",
+        "orientation_quat_xyzw": [
+          0.74286778,
+          -0.6684175,
+          -0.02274236,
+          0.02912556
+        ],
+        "parent_frame": "tool0",
+        "position_m": [
+          0.08492189,
+          0.00172131,
+          0.01390208
+        ]
+      },
+      "ur_base_tf": {
+        "available": true,
+        "child_frame": "base_link",
+        "orientation_quat_xyzw": [
+          0.0,
+          0.0,
+          1.0,
+          -0.0
+        ],
+        "parent_frame": "base",
+        "position_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "elapsed_sec": 15.00036988,
+    "execute": true,
+    "intermediate_flange_orientation_unconstrained": true,
+    "maximum_time_sec": 15.0,
+    "position_only_search_goals": true,
+    "reason": "selected mouth was not found within the bounded 15-second search; skipped unreachable candidates: scan_left: UNCONSTRAINED_SEARCH_PLAN_FAILED; scan_right: UNCONSTRAINED_SEARCH_PLAN_FAILED; scan_up: UNCONSTRAINED_SEARCH_PLAN_FAILED; scan_down: UNCONSTRAINED_SEARCH_PLAN_FAILED",
+    "rotation_search_enabled": false,
+    "search_direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+    "search_order": [
+      "backward_wide",
+      "scan_left",
+      "scan_right",
+      "scan_up",
+      "scan_down"
+    ],
+    "search_steps": [
+      {
+        "adaptive_candidate_index": 0,
+        "adaptive_scale_applied": false,
+        "camera_extrinsic_applied": true,
+        "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+        "execution_result": {
+          "candidate_detected": false,
+          "error_code": 1,
+          "error_message": "",
+          "execution_attempted": true,
+          "result_status": 4,
+          "stage": "search_execute",
+          "success": true
+        },
+        "failure_diagnostic": null,
+        "final_tool0_orientation_quat_xyzw": [
+          -0.05817346,
+          0.65641469,
+          0.53569116,
+          0.5279873
+        ],
+        "final_tool0_position_error_m": 0.00214525,
+        "goal_orientation_constraint": false,
+        "intermediate_flange_orientation_unconstrained": true,
+        "name": "backward_wide",
+        "offset_camera_optical_m": [
+          0.0,
+          0.0,
+          -0.04
+        ],
+        "offset_from_origin_m": [
+          0.03997852,
+          0.00073435,
+          0.00108572
+        ],
+        "offset_initial_tool0_m": [
+          -0.00381763,
+          0.03981614,
+          -0.00031753
+        ],
+        "orientation_path_constraint": false,
+        "plan_result": {
+          "error_code": 1,
+          "error_message": "",
+          "execution_sent": false,
+          "goal_orientation_constraint": false,
+          "intermediate_flange_orientation_unconstrained": true,
+          "orientation_path_constraint": false,
+          "planned_trajectory": {
+            "duration_sec": 2.75476003,
+            "joint_names": [
+              "shoulder_pan_joint",
+              "shoulder_lift_joint",
+              "elbow_joint",
+              "wrist_1_joint",
+              "wrist_2_joint",
+              "wrist_3_joint"
+            ],
+            "points": 29
+          },
+          "planner": "ompl/RRTConnect",
+          "planning_time_sec": 0.04208605,
+          "position_goal_constraint": true,
+          "stage": "search_plan_only",
+          "success": true
+        },
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": null,
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "backward_wide",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.03997852,
+              0.00073435,
+              0.00108572
+            ],
+            "offset_initial_tool0_m": [
+              -0.00381763,
+              0.03981614,
+              -0.00031753
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 1,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": 2.75476003,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 29
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.04208605,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": true
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.04001818,
+            "target_tool0_position_m": [
+              -0.12401734,
+              0.14982512,
+              0.58262447
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.61423053
+          }
+        ],
+        "position_goal_constraint": true,
+        "segment_distance_m": 0.04001818,
+        "stationary_joint_state": {
+          "maximum_allowed_joint_speed_rad_sec": 0.01,
+          "maximum_joint_speed_rad_sec": 0.0,
+          "stationary_sample_count": 2,
+          "success": true
+        },
+        "target_tool0_position_m": [
+          -0.12401734,
+          0.14982512,
+          0.58262447
+        ],
+        "target_tool0_radius_from_ur_base_m": 0.61423053
+      },
+      {
+        "camera_extrinsic_applied": true,
+        "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+        "failure_diagnostic": {
+          "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+          "deadline_remaining_sec": 7.74458657,
+          "goal_orientation_constraint": false,
+          "intermediate_flange_orientation_unconstrained": true,
+          "orientation_path_constraint": false,
+          "planner": "ompl/RRTConnect",
+          "position_goal_constraint": true,
+          "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+          "target": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "orientation_quat_xyzw": [
+              -0.05817346,
+              0.65641469,
+              0.53569116,
+              0.5279873
+            ],
+            "position_m": [
+              -0.12363083,
+              0.12984166,
+              0.5819088
+            ]
+          }
+        },
+        "name": "scan_left",
+        "offset_camera_optical_m": [
+          -0.05,
+          0.0,
+          -0.04
+        ],
+        "offset_from_origin_m": [
+          0.04094478,
+          -0.04922428,
+          -0.00070346
+        ],
+        "offset_initial_tool0_m": [
+          -0.05347843,
+          0.03508151,
+          0.0030571
+        ],
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.76190184,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05817346,
+                  0.65641469,
+                  0.53569116,
+                  0.5279873
+                ],
+                "position_m": [
+                  -0.12305107,
+                  0.09986648,
+                  0.5808353
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_left",
+            "offset_camera_optical_m": [
+              -0.05,
+              0.0,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.04094478,
+              -0.04922428,
+              -0.00070346
+            ],
+            "offset_initial_tool0_m": [
+              -0.05347843,
+              0.03508151,
+              0.0030571
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.05061225,
+            "target_tool0_position_m": [
+              -0.12305107,
+              0.09986648,
+              0.5808353
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.60206688
+          },
+          {
+            "adaptive_candidate_index": 1,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.75649195,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05817346,
+                  0.65641469,
+                  0.53569116,
+                  0.5279873
+                ],
+                "position_m": [
+                  -0.12324432,
+                  0.10985821,
+                  0.58119313
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_left",
+            "offset_camera_optical_m": [
+              -0.04,
+              0.0,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.04075153,
+              -0.03923255,
+              -0.00034562
+            ],
+            "offset_initial_tool0_m": [
+              -0.04354627,
+              0.03602843,
+              0.00238217
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.04062266,
+            "target_tool0_position_m": [
+              -0.12324432,
+              0.10985821,
+              0.58119313
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.60418825
+          },
+          {
+            "adaptive_candidate_index": 2,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.75056733,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05817346,
+                  0.65641469,
+                  0.53569116,
+                  0.5279873
+                ],
+                "position_m": [
+                  -0.12343758,
+                  0.11984994,
+                  0.58155097
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_left",
+            "offset_camera_optical_m": [
+              -0.03,
+              0.0,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.04055828,
+              -0.02924083,
+              1.221e-05
+            ],
+            "offset_initial_tool0_m": [
+              -0.03361411,
+              0.03697536,
+              0.00170725
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.03063985,
+            "target_tool0_position_m": [
+              -0.12343758,
+              0.11984994,
+              0.58155097
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.60646712
+          },
+          {
+            "adaptive_candidate_index": 3,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.74458657,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05817346,
+                  0.65641469,
+                  0.53569116,
+                  0.5279873
+                ],
+                "position_m": [
+                  -0.12363083,
+                  0.12984166,
+                  0.5819088
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_left",
+            "offset_camera_optical_m": [
+              -0.02,
+              0.0,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.04036502,
+              -0.0192491,
+              0.00037005
+            ],
+            "offset_initial_tool0_m": [
+              -0.02368195,
+              0.03792229,
+              0.00103232
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.02067368,
+            "target_tool0_position_m": [
+              -0.12363083,
+              0.12984166,
+              0.5819088
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.60890171
+          }
+        ],
+        "skipped": true,
+        "target_tool0_position_m": [
+          -0.12305107,
+          0.09986648,
+          0.5808353
+        ]
+      },
+      {
+        "camera_extrinsic_applied": true,
+        "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+        "failure_diagnostic": {
+          "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+          "deadline_remaining_sec": 7.72096834,
+          "goal_orientation_constraint": false,
+          "intermediate_flange_orientation_unconstrained": true,
+          "orientation_path_constraint": false,
+          "planner": "ompl/RRTConnect",
+          "position_goal_constraint": true,
+          "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+          "target": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "orientation_quat_xyzw": [
+              -0.05824683,
+              0.65656314,
+              0.53522468,
+              0.52826764
+            ],
+            "position_m": [
+              -0.12440384,
+              0.16980857,
+              0.58334014
+            ]
+          }
+        },
+        "name": "scan_right",
+        "offset_camera_optical_m": [
+          0.05,
+          0.0,
+          -0.04
+        ],
+        "offset_from_origin_m": [
+          0.03901225,
+          0.05069299,
+          0.00287489
+        ],
+        "offset_initial_tool0_m": [
+          0.04584317,
+          0.04455077,
+          -0.00369217
+        ],
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.73789369,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05824683,
+                  0.65656314,
+                  0.53522468,
+                  0.52826764
+                ],
+                "position_m": [
+                  -0.1249836,
+                  0.19978375,
+                  0.58441364
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_right",
+            "offset_camera_optical_m": [
+              0.05,
+              0.0,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.03901225,
+              0.05069299,
+              0.00287489
+            ],
+            "offset_initial_tool0_m": [
+              0.04584317,
+              0.04455077,
+              -0.00369217
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.04951817,
+            "target_tool0_position_m": [
+              -0.1249836,
+              0.19978375,
+              0.58441364
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.63013789
+          },
+          {
+            "adaptive_candidate_index": 1,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.73217464,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05824683,
+                  0.65656314,
+                  0.53522468,
+                  0.52826764
+                ],
+                "position_m": [
+                  -0.12479035,
+                  0.18979202,
+                  0.58405581
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_right",
+            "offset_camera_optical_m": [
+              0.04,
+              0.0,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.03920551,
+              0.04070126,
+              0.00251705
+            ],
+            "offset_initial_tool0_m": [
+              0.03591101,
+              0.04360384,
+              -0.00301724
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.03952843,
+            "target_tool0_position_m": [
+              -0.12479035,
+              0.18979202,
+              0.58405581
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.62666964
+          },
+          {
+            "adaptive_candidate_index": 2,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.72622523,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05824683,
+                  0.65656314,
+                  0.53522468,
+                  0.52826764
+                ],
+                "position_m": [
+                  -0.12459709,
+                  0.1798003,
+                  0.58369798
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_right",
+            "offset_camera_optical_m": [
+              0.03,
+              0.0,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.03939876,
+              0.03070953,
+              0.00215922
+            ],
+            "offset_initial_tool0_m": [
+              0.02597885,
+              0.04265692,
+              -0.00234231
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.02954563,
+            "target_tool0_position_m": [
+              -0.12459709,
+              0.1798003,
+              0.58369798
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.62334253
+          },
+          {
+            "adaptive_candidate_index": 3,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.72096834,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05824683,
+                  0.65656314,
+                  0.53522468,
+                  0.52826764
+                ],
+                "position_m": [
+                  -0.12440384,
+                  0.16980857,
+                  0.58334014
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_right",
+            "offset_camera_optical_m": [
+              0.02,
+              0.0,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.03959201,
+              0.02071781,
+              0.00180138
+            ],
+            "offset_initial_tool0_m": [
+              0.01604669,
+              0.04170999,
+              -0.00166739
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.01958039,
+            "target_tool0_position_m": [
+              -0.12440384,
+              0.16980857,
+              0.58334014
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.62015884
+          }
+        ],
+        "skipped": true,
+        "target_tool0_position_m": [
+          -0.1249836,
+          0.19978375,
+          0.58441364
+        ]
+      },
+      {
+        "camera_extrinsic_applied": true,
+        "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+        "failure_diagnostic": {
+          "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+          "deadline_remaining_sec": 7.68969703,
+          "goal_orientation_constraint": false,
+          "intermediate_flange_orientation_unconstrained": true,
+          "orientation_path_constraint": false,
+          "planner": "ompl/RRTConnect",
+          "position_goal_constraint": true,
+          "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+          "target": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "orientation_quat_xyzw": [
+              -0.05824683,
+              0.65656314,
+              0.53522468,
+              0.52826764
+            ],
+            "position_m": [
+              -0.12454661,
+              0.14909934,
+              0.60260429
+            ]
+          }
+        },
+        "name": "scan_up",
+        "offset_camera_optical_m": [
+          0.0,
+          -0.05,
+          -0.04
+        ],
+        "offset_from_origin_m": [
+          0.03865534,
+          -0.00108009,
+          0.05103526
+        ],
+        "offset_initial_tool0_m": [
+          -0.00713916,
+          0.03909984,
+          -0.05020194
+        ],
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.71058317,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05824683,
+                  0.65656314,
+                  0.53522468,
+                  0.52826764
+                ],
+                "position_m": [
+                  -0.12534051,
+                  0.14801068,
+                  0.63257402
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_up",
+            "offset_camera_optical_m": [
+              0.0,
+              -0.05,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.03865534,
+              -0.00108009,
+              0.05103526
+            ],
+            "offset_initial_tool0_m": [
+              -0.00713916,
+              0.03909984,
+              -0.05020194
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.04836256,
+            "target_tool0_position_m": [
+              -0.12534051,
+              0.14801068,
+              0.63257402
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.66163985
+          },
+          {
+            "adaptive_candidate_index": 1,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.70362401,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05824683,
+                  0.65656314,
+                  0.53522468,
+                  0.52826764
+                ],
+                "position_m": [
+                  -0.12507587,
+                  0.14837357,
+                  0.62258411
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_up",
+            "offset_camera_optical_m": [
+              0.0,
+              -0.04,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.03891998,
+              -0.0007172,
+              0.04104535
+            ],
+            "offset_initial_tool0_m": [
+              -0.00647485,
+              0.0392431,
+              -0.04022506
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.03836675,
+            "target_tool0_position_m": [
+              -0.12507587,
+              0.14837357,
+              0.62258411
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.65212703
+          },
+          {
+            "adaptive_candidate_index": 2,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.69688082,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05824683,
+                  0.65656314,
+                  0.53522468,
+                  0.52826764
+                ],
+                "position_m": [
+                  -0.12481124,
+                  0.14873645,
+                  0.6125942
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_up",
+            "offset_camera_optical_m": [
+              0.0,
+              -0.03,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.03918461,
+              -0.00035431,
+              0.03105544
+            ],
+            "offset_initial_tool0_m": [
+              -0.00581055,
+              0.03938636,
+              -0.03024818
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.02837388,
+            "target_tool0_position_m": [
+              -0.12481124,
+              0.14873645,
+              0.6125942
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.642629
+          },
+          {
+            "adaptive_candidate_index": 3,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.68969703,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05824683,
+                  0.65656314,
+                  0.53522468,
+                  0.52826764
+                ],
+                "position_m": [
+                  -0.12454661,
+                  0.14909934,
+                  0.60260429
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_up",
+            "offset_camera_optical_m": [
+              0.0,
+              -0.02,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.03944925,
+              8.58e-06,
+              0.02106553
+            ],
+            "offset_initial_tool0_m": [
+              -0.00514624,
+              0.03952962,
+              -0.0202713
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.01838877,
+            "target_tool0_position_m": [
+              -0.12454661,
+              0.14909934,
+              0.60260429
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.63314643
+          }
+        ],
+        "skipped": true,
+        "target_tool0_position_m": [
+          -0.12534051,
+          0.14801068,
+          0.63257402
+        ]
+      },
+      {
+        "camera_extrinsic_applied": true,
+        "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+        "failure_diagnostic": {
+          "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+          "deadline_remaining_sec": 7.66735191,
+          "goal_orientation_constraint": false,
+          "intermediate_flange_orientation_unconstrained": true,
+          "orientation_path_constraint": false,
+          "planner": "ompl/RRTConnect",
+          "position_goal_constraint": true,
+          "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+          "target": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "orientation_quat_xyzw": [
+              -0.05824683,
+              0.65656314,
+              0.53522468,
+              0.52826764
+            ],
+            "position_m": [
+              -0.12348807,
+              0.15055089,
+              0.56264465
+            ]
+          }
+        },
+        "name": "scan_down",
+        "offset_camera_optical_m": [
+          0.0,
+          0.05,
+          -0.04
+        ],
+        "offset_from_origin_m": [
+          0.04130169,
+          0.00254879,
+          -0.04886383
+        ],
+        "offset_initial_tool0_m": [
+          -0.00049609,
+          0.04053244,
+          0.04956687
+        ],
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.68267449,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05824683,
+                  0.65656314,
+                  0.53522468,
+                  0.52826764
+                ],
+                "position_m": [
+                  -0.12269416,
+                  0.15163956,
+                  0.53267493
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_down",
+            "offset_camera_optical_m": [
+              0.0,
+              0.05,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.04130169,
+              0.00254879,
+              -0.04886383
+            ],
+            "offset_initial_tool0_m": [
+              -0.00049609,
+              0.04053244,
+              0.04956687
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.05166851,
+            "target_tool0_position_m": [
+              -0.12269416,
+              0.15163956,
+              0.53267493
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.56726624
+          },
+          {
+            "adaptive_candidate_index": 1,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.67620473,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05824683,
+                  0.65656314,
+                  0.53522468,
+                  0.52826764
+                ],
+                "position_m": [
+                  -0.1229588,
+                  0.15127667,
+                  0.54266484
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_down",
+            "offset_camera_optical_m": [
+              0.0,
+              0.04,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.04103706,
+              0.00218591,
+              -0.03887392
+            ],
+            "offset_initial_tool0_m": [
+              -0.0011604,
+              0.04038918,
+              0.03958999
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.04167212,
+            "target_tool0_position_m": [
+              -0.1229588,
+              0.15127667,
+              0.54266484
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.57661826
+          },
+          {
+            "adaptive_candidate_index": 2,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.6711145,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05824683,
+                  0.65656314,
+                  0.53522468,
+                  0.52826764
+                ],
+                "position_m": [
+                  -0.12322343,
+                  0.15091378,
+                  0.55265474
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_down",
+            "offset_camera_optical_m": [
+              0.0,
+              0.03,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.04077242,
+              0.00182302,
+              -0.02888401
+            ],
+            "offset_initial_tool0_m": [
+              -0.0018247,
+              0.04024592,
+              0.02961311
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.031678,
+            "target_tool0_position_m": [
+              -0.12322343,
+              0.15091378,
+              0.55265474
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.58599168
+          },
+          {
+            "adaptive_candidate_index": 3,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+              "deadline_remaining_sec": 7.66735191,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planner": "ompl/RRTConnect",
+              "position_goal_constraint": true,
+              "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  -0.05824683,
+                  0.65656314,
+                  0.53522468,
+                  0.52826764
+                ],
+                "position_m": [
+                  -0.12348807,
+                  0.15055089,
+                  0.56264465
+                ]
+              }
+            },
+            "goal_orientation_constraint": false,
+            "intermediate_flange_orientation_unconstrained": true,
+            "name": "scan_down",
+            "offset_camera_optical_m": [
+              0.0,
+              0.02,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.04050779,
+              0.00146013,
+              -0.0188941
+            ],
+            "offset_initial_tool0_m": [
+              -0.00248901,
+              0.04010266,
+              0.01963623
+            ],
+            "orientation_path_constraint": false,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "intermediate_flange_orientation_unconstrained": true,
+              "orientation_path_constraint": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planner": "ompl/RRTConnect",
+              "planning_time_sec": 0.0,
+              "position_goal_constraint": true,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "position_goal_constraint": true,
+            "segment_distance_m": 0.02168931,
+            "target_tool0_position_m": [
+              -0.12348807,
+              0.15055089,
+              0.56264465
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.59538549
+          }
+        ],
+        "skipped": true,
+        "target_tool0_position_m": [
+          -0.12269416,
+          0.15163956,
+          0.53267493
+        ]
+      }
+    ],
+    "selected_mouth": {
+      "available": false,
+      "identity_locked": false,
+      "identity_unsafe": false,
+      "reason": "no mouth-candidate message has been received",
+      "stable": false,
+      "target_selection": "center"
+    },
+    "skipped_search_waypoints": [
+      {
+        "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+        "name": "scan_left",
+        "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline"
+      },
+      {
+        "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+        "name": "scan_right",
+        "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline"
+      },
+      {
+        "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+        "name": "scan_up",
+        "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline"
+      },
+      {
+        "classification": "UNCONSTRAINED_SEARCH_PLAN_FAILED",
+        "name": "scan_down",
+        "reason": "OMPL could not generate a collision-free route to the position-only search goal before the bounded deadline"
+      }
+    ],
+    "stage": "active_search_timeout",
+    "success": false,
+    "target_selection": "center",
+    "trajectory_sent": true,
+    "translation_only": false
+  },
+  "dynamic_octomap_readiness": {
+    "execution_mode": true,
+    "failures": [],
+    "filtered_cloud": {
+      "active": true,
+      "age_sec": 5.412e-05,
+      "frame_id": "d435i_color_optical_frame",
+      "height": 1,
+      "maximum_age_sec": 0.75,
+      "point_count": 4436,
+      "topic": "/wrist_rgbd/filtered_cloud",
+      "width": 4436
+    },
+    "move_group_parameters": {
+      "allow_trajectory_execution": true,
+      "available": true,
+      "octomap_resolution_m": 0.03,
+      "sensors": [
+        "wrist_rgbd_pointcloud"
+      ]
+    },
+    "raw_cloud": {
+      "active": true,
+      "age_sec": 0.00037472,
+      "frame_id": "d435i_color_optical_frame",
+      "height": 1,
+      "maximum_age_sec": 0.75,
+      "point_count": 4529,
+      "topic": "/wrist_rgbd/points",
+      "width": 4529
+    },
+    "success": true
+  },
+  "execution_attempted": true,
+  "execution_sent": true,
+  "integrated_real_feed_water": {
+    "active_search": true,
+    "active_search_camera_extrinsic_applied": true,
+    "active_search_direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+    "active_search_intermediate_flange_orientation_unconstrained": true,
+    "active_search_order": [
+      "backward_wide",
+      "scan_left",
+      "scan_right",
+      "scan_up",
+      "scan_down"
+    ],
+    "adaptive_search_distances_m": {
+      "backward": [
+        0.04,
+        0.03,
+        0.02
+      ],
+      "directional": [
+        0.05,
+        0.04,
+        0.03,
+        0.02
+      ],
+      "skip_unreachable_direction": true
+    },
+    "combined_static_and_dynamic_scene_checks": true,
+    "detour_final_goal_orientation_constraint": true,
+    "direct_clear_path_first": true,
+    "dynamic_obstacle_avoidance": true,
+    "multi_target_identity_lock": true,
+    "position_only_active_search_goals": true,
+    "rotation_search_enabled": false,
+    "same_target_replanning": true,
+    "target_selection": "center",
+    "translation_only_search": false,
+    "unconstrained_intermediate_detour_after_direct_rejection": true,
+    "wait_for_clear": false
+  },
+  "mode": "execute",
+  "reason": "selected mouth was not found within the bounded 15-second search; skipped unreachable candidates: scan_left: UNCONSTRAINED_SEARCH_PLAN_FAILED; scan_right: UNCONSTRAINED_SEARCH_PLAN_FAILED; scan_up: UNCONSTRAINED_SEARCH_PLAN_FAILED; scan_down: UNCONSTRAINED_SEARCH_PLAN_FAILED",
+  "stage": "active_search",
+  "success": false
+}

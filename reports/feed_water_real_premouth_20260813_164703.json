@@ -1,0 +1,9 @@
+{
+  "execution_attempted": null,
+  "execution_sent": null,
+  "execution_state_unknown": true,
+  "final_state": "refused",
+  "reason": "NameError: name 'MINIMUM_CAMERA_RAY_FORWARD_MARGIN_M' is not defined",
+  "stage": "pipeline_exception",
+  "success": false
+}

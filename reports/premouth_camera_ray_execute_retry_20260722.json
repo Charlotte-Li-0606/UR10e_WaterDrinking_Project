@@ -1,0 +1,106 @@
+{
+  "checks": {
+    "camera_tf": {
+      "available": true,
+      "child_frame": "d435i_color_optical_frame",
+      "orientation_quat_xyzw": [
+        -0.71227371,
+        -0.08864684,
+        0.09656755,
+        0.68955247
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.50949953,
+        0.5506843,
+        0.63275838
+      ]
+    },
+    "controllers": {
+      "available": null,
+      "inspection": "skipped in plan mode; controller state is checked only immediately before execution"
+    },
+    "current_straw_tip_pose": {
+      "frame_id": "base_link",
+      "orientation_quat_xyzw": [
+        0.6713903,
+        0.7410906,
+        -0.0038383,
+        -0.00224766
+      ],
+      "position_m": [
+        -0.51335885,
+        0.59041034,
+        0.64747328
+      ]
+    },
+    "execute_trajectory_available": null,
+    "joint_state": {
+      "complete": true,
+      "expected_joint_count": 6,
+      "received": true,
+      "received_expected_joint_count": 6
+    },
+    "mount_calibration": {
+      "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+      "metrics": null,
+      "status": "provisional"
+    },
+    "mouth_pose": {
+      "available": false,
+      "reason": "mouth pose is stale (over 1.0 s old)",
+      "received_count": 17
+    },
+    "move_group_available": true,
+    "required_nodes": {
+      "controller_manager_exists": true,
+      "move_group_exists": true
+    },
+    "speed_slider_percent": 0.0,
+    "tool0_pose": {
+      "available": true,
+      "child_frame": "tool0",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.6713903,
+        0.7410906,
+        -0.0038383,
+        -0.00224766
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.50252825,
+        0.48094501,
+        0.64767376
+      ]
+    },
+    "ur_base_tf": {
+      "available": true,
+      "child_frame": "base_link",
+      "orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        1.0,
+        -0.0
+      ],
+      "parent_frame": "base",
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "execution_attempted": false,
+  "execution_disabled": false,
+  "execution_sent": false,
+  "failures": [
+    "mouth pose is stale (over 1.0 s old)"
+  ],
+  "frozen_detected_mouth_pose": null,
+  "frozen_target_policy": "The five-second stable mouth-pose mean is frozen before planning; no perception updates are consumed during motion.",
+  "mode": "execute",
+  "reason": "the fresh MoveIt plan failed",
+  "stage": "pre_execution_plan",
+  "success": false
+}

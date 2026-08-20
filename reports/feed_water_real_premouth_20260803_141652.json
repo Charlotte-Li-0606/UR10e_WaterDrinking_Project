@@ -1,0 +1,1311 @@
+{
+  "active_search": {
+    "adaptive_distance_policy_m": {
+      "backward": [
+        0.04,
+        0.03,
+        0.02
+      ],
+      "directional": [
+        0.05,
+        0.04,
+        0.03,
+        0.02
+      ],
+      "skip_if_all_bounded_candidates_fail": true
+    },
+    "camera_extrinsic_applied": true,
+    "checks": {
+      "camera_mount_match": {
+        "configured": {
+          "rpy_rad": [
+            3.0678492,
+            -0.00514696,
+            -1.46519711
+          ],
+          "translation_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        },
+        "live": {
+          "available": true,
+          "child_frame": "d435i_link",
+          "orientation_quat_xyzw": [
+            0.74286778,
+            -0.6684175,
+            -0.02274236,
+            0.02912556
+          ],
+          "parent_frame": "tool0",
+          "position_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        },
+        "matches": true,
+        "maximum_rotation_error_deg": 0.5,
+        "maximum_translation_error_m": 0.001,
+        "reason": null,
+        "rotation_error_deg": 0.0,
+        "rotation_error_rad": 0.0,
+        "translation_error_m": 0.0
+      },
+      "camera_tf": {
+        "available": true,
+        "child_frame": "d435i_color_optical_frame",
+        "orientation_quat_xyzw": [
+          -0.52615728,
+          -0.4796885,
+          0.43097217,
+          0.55436491
+        ],
+        "parent_frame": "base_link",
+        "position_m": [
+          -0.1382359,
+          0.18348757,
+          0.50540577
+        ]
+      },
+      "controllers": {
+        "available": true,
+        "joint_state_broadcaster_active": true,
+        "scaled_joint_trajectory_controller_active": true
+      },
+      "current_straw_tip_pose": {
+        "frame_id": "base_link",
+        "orientation_quat_xyzw": [
+          0.73311899,
+          0.68007218,
+          0.00612325,
+          -0.00093501
+        ],
+        "position_m": [
+          -0.13541897,
+          0.22312037,
+          0.52060073
+        ]
+      },
+      "execute_trajectory_available": null,
+      "joint_state": {
+        "complete": true,
+        "expected_joint_count": 6,
+        "received": true,
+        "received_expected_joint_count": 6
+      },
+      "mount_calibration": {
+        "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+        "corrected_physical_profile": true,
+        "metrics": {
+          "captured_at": "2026-07-23T15:45:00+08:00",
+          "limitation": "One physical approach direction plus the upright-image constraint fixes the axis convention, but a three-marker solve is still required for metrology-grade 6-DoF verification.",
+          "method": "manual_physical_axis_alignment",
+          "preserved_tool0_to_optical_center_m": [
+            0.07011388,
+            5.789e-05,
+            0.01478767
+          ],
+          "rollback_tool0_to_d435i_link": {
+            "note": "Legacy simulation-derived provisional transform",
+            "rpy_rad": [
+              -3.14159265,
+              -0.027969,
+              -0.153885
+            ],
+            "translation_m": [
+              0.072299,
+              0.014823,
+              0.015
+            ]
+          },
+          "rotation_determinant": 1.0,
+          "rotation_orthogonality_error": 0.0,
+          "target_camera_optical_axes_in_base_link": {
+            "+X_image_right": [
+              0.0,
+              1.0,
+              0.0
+            ],
+            "+Y_image_down": [
+              0.0,
+              0.0,
+              -1.0
+            ],
+            "+Z_depth_forward": [
+              -1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "status": "provisional",
+        "tool0_to_d435i_link": {
+          "rpy_rad": [
+            3.0678492,
+            -0.00514696,
+            -1.46519711
+          ],
+          "translation_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        }
+      },
+      "mouth_pose": {
+        "available": false,
+        "identity_locked": true,
+        "identity_unsafe": false,
+        "perception_status": {
+          "detected": false,
+          "latest_received_age_sec": 0.01395225,
+          "reason": "no_face"
+        },
+        "reason": "no selected mouth samples were received; /mouth_detection/status reports no_face",
+        "sample_duration_sec": 1.0,
+        "stable": false,
+        "target_selection": "center"
+      },
+      "move_group_available": true,
+      "required_nodes": {
+        "controller_manager_exists": true,
+        "move_group_exists": true
+      },
+      "robot_mode": 7,
+      "robot_mode_running": true,
+      "robot_program_running": true,
+      "safety_mode": 1,
+      "safety_mode_normal": true,
+      "speed_slider_percent": 60.0,
+      "tool0_pose": {
+        "available": true,
+        "child_frame": "tool0",
+        "link_name": "tool0",
+        "orientation_quat_xyzw": [
+          0.73311899,
+          0.68007218,
+          0.00612325,
+          -0.00093501
+        ],
+        "parent_frame": "base_link",
+        "position_m": [
+          -0.14366113,
+          0.11343539,
+          0.51947324
+        ]
+      },
+      "tool0_to_camera_link_tf": {
+        "available": true,
+        "child_frame": "d435i_link",
+        "orientation_quat_xyzw": [
+          0.74286778,
+          -0.6684175,
+          -0.02274236,
+          0.02912556
+        ],
+        "parent_frame": "tool0",
+        "position_m": [
+          0.08492189,
+          0.00172131,
+          0.01390208
+        ]
+      },
+      "ur_base_tf": {
+        "available": true,
+        "child_frame": "base_link",
+        "orientation_quat_xyzw": [
+          0.0,
+          0.0,
+          1.0,
+          -0.0
+        ],
+        "parent_frame": "base",
+        "position_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "execute": true,
+    "maximum_time_sec": 15.0,
+    "orientation_error_rad": 0.05575416,
+    "reason": "tool orientation changed during translation-only search",
+    "rotation_search_enabled": false,
+    "search_direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+    "search_order": [
+      "backward_wide",
+      "scan_left",
+      "scan_right",
+      "scan_up",
+      "scan_down"
+    ],
+    "search_steps": [
+      {
+        "camera_extrinsic_applied": true,
+        "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+        "failure_diagnostic": {
+          "checks": {
+            "collision_disabled": {
+              "error_code": -31,
+              "response_received": true,
+              "success": false
+            }
+          },
+          "classification": "NO_IK_SOLUTION",
+          "reason": "MoveIt found no IK solution for the fixed-orientation tool0 search target, even with collision checking disabled",
+          "target": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "orientation_quat_xyzw": [
+              0.73311899,
+              0.68007218,
+              0.00612325,
+              -0.00093501
+            ],
+            "position_m": [
+              -0.12395386,
+              0.11003736,
+              0.51975095
+            ]
+          }
+        },
+        "name": "backward_wide",
+        "offset_camera_optical_m": [
+          0.0,
+          0.0,
+          -0.04
+        ],
+        "offset_from_origin_m": [
+          0.03941453,
+          -0.00679606,
+          0.0005554
+        ],
+        "offset_initial_tool0_m": [
+          -0.00381763,
+          0.03981614,
+          -0.00031753
+        ],
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "checks": {
+                "collision_disabled": {
+                  "error_code": -31,
+                  "response_received": true,
+                  "success": false
+                }
+              },
+              "classification": "NO_IK_SOLUTION",
+              "reason": "MoveIt found no IK solution for the fixed-orientation tool0 search target, even with collision checking disabled",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.73311899,
+                  0.68007218,
+                  0.00612325,
+                  -0.00093501
+                ],
+                "position_m": [
+                  -0.1042466,
+                  0.10663933,
+                  0.52002865
+                ]
+              }
+            },
+            "name": "backward_wide",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.03941453,
+              -0.00679606,
+              0.0005554
+            ],
+            "offset_initial_tool0_m": [
+              -0.00381763,
+              0.03981614,
+              -0.00031753
+            ],
+            "orientation_error_rad": 0.00013022,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planning_time_sec": 0.00631188,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "segment_distance_m": 0.03998773,
+            "target_tool0_position_m": [
+              -0.1042466,
+              0.10663933,
+              0.52002865
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.540989
+          },
+          {
+            "adaptive_candidate_index": 1,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "checks": {
+                "collision_disabled": {
+                  "error_code": -31,
+                  "response_received": true,
+                  "success": false
+                }
+              },
+              "classification": "NO_IK_SOLUTION",
+              "reason": "MoveIt found no IK solution for the fixed-orientation tool0 search target, even with collision checking disabled",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.73311899,
+                  0.68007218,
+                  0.00612325,
+                  -0.00093501
+                ],
+                "position_m": [
+                  -0.11410023,
+                  0.10833835,
+                  0.5198898
+                ]
+              }
+            },
+            "name": "backward_wide",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              -0.03
+            ],
+            "offset_from_origin_m": [
+              0.0295609,
+              -0.00509704,
+              0.00041655
+            ],
+            "offset_initial_tool0_m": [
+              -0.00286322,
+              0.0298621,
+              -0.00023815
+            ],
+            "orientation_error_rad": 0.00013022,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planning_time_sec": 0.01571635,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "segment_distance_m": 0.02998774,
+            "target_tool0_position_m": [
+              -0.11410023,
+              0.10833835,
+              0.5198898
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.54317719
+          },
+          {
+            "adaptive_candidate_index": 2,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "checks": {
+                "collision_disabled": {
+                  "error_code": -31,
+                  "response_received": true,
+                  "success": false
+                }
+              },
+              "classification": "NO_IK_SOLUTION",
+              "reason": "MoveIt found no IK solution for the fixed-orientation tool0 search target, even with collision checking disabled",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.73311899,
+                  0.68007218,
+                  0.00612325,
+                  -0.00093501
+                ],
+                "position_m": [
+                  -0.12395386,
+                  0.11003736,
+                  0.51975095
+                ]
+              }
+            },
+            "name": "backward_wide",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              -0.02
+            ],
+            "offset_from_origin_m": [
+              0.01970726,
+              -0.00339803,
+              0.0002777
+            ],
+            "offset_initial_tool0_m": [
+              -0.00190881,
+              0.01990807,
+              -0.00015877
+            ],
+            "orientation_error_rad": 0.00013022,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planning_time_sec": 0.01483226,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "segment_distance_m": 0.01998775,
+            "target_tool0_position_m": [
+              -0.12395386,
+              0.11003736,
+              0.51975095
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.54553994
+          }
+        ],
+        "skipped": true,
+        "target_tool0_position_m": [
+          -0.1042466,
+          0.10663933,
+          0.52002865
+        ]
+      },
+      {
+        "adaptive_candidate_index": 3,
+        "adaptive_scale_applied": true,
+        "camera_extrinsic_applied": true,
+        "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+        "execution_result": {
+          "candidate_detected": false,
+          "error_code": 1,
+          "error_message": "",
+          "execution_attempted": true,
+          "result_status": 4,
+          "stage": "search_execute",
+          "success": true
+        },
+        "failure_diagnostic": null,
+        "final_tool0_position_error_m": 0.00116486,
+        "name": "scan_left",
+        "offset_camera_optical_m": [
+          -0.02,
+          0.0,
+          -0.0
+        ],
+        "offset_from_origin_m": [
+          -0.00336648,
+          -0.0196523,
+          -0.00156653
+        ],
+        "offset_initial_tool0_m": [
+          -0.01986432,
+          -0.00189385,
+          0.00134985
+        ],
+        "orientation_error_rad": 6.947e-05,
+        "plan_result": {
+          "error_code": 1,
+          "error_message": "",
+          "execution_sent": false,
+          "planned_trajectory": {
+            "duration_sec": 0.59670469,
+            "joint_names": [
+              "shoulder_pan_joint",
+              "shoulder_lift_joint",
+              "elbow_joint",
+              "wrist_1_joint",
+              "wrist_2_joint",
+              "wrist_3_joint"
+            ],
+            "points": 7
+          },
+          "planning_time_sec": 0.00192526,
+          "stage": "search_plan_only",
+          "success": true
+        },
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "checks": {
+                "collision_disabled": {
+                  "error_code": -31,
+                  "response_received": true,
+                  "success": false
+                }
+              },
+              "classification": "NO_IK_SOLUTION",
+              "reason": "MoveIt found no IK solution for the fixed-orientation tool0 search target, even with collision checking disabled",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.73311899,
+                  0.68007218,
+                  0.00612325,
+                  -0.00093501
+                ],
+                "position_m": [
+                  -0.15207732,
+                  0.06430465,
+                  0.51555691
+                ]
+              }
+            },
+            "name": "scan_left",
+            "offset_camera_optical_m": [
+              -0.05,
+              0.0,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              -0.00841619,
+              -0.04913074,
+              -0.00391633
+            ],
+            "offset_initial_tool0_m": [
+              -0.0496608,
+              -0.00473463,
+              0.00337463
+            ],
+            "orientation_error_rad": 6.947e-05,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planning_time_sec": 0.01285378,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "segment_distance_m": 0.04999966,
+            "target_tool0_position_m": [
+              -0.15207732,
+              0.06430465,
+              0.51555691
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.54135157
+          },
+          {
+            "adaptive_candidate_index": 1,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "checks": {
+                "collision_disabled": {
+                  "error_code": -31,
+                  "response_received": true,
+                  "success": false
+                }
+              },
+              "classification": "NO_IK_SOLUTION",
+              "reason": "MoveIt found no IK solution for the fixed-orientation tool0 search target, even with collision checking disabled",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.73311899,
+                  0.68007218,
+                  0.00612325,
+                  -0.00093501
+                ],
+                "position_m": [
+                  -0.15039408,
+                  0.0741308,
+                  0.51634018
+                ]
+              }
+            },
+            "name": "scan_left",
+            "offset_camera_optical_m": [
+              -0.04,
+              0.0,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              -0.00673295,
+              -0.0393046,
+              -0.00313307
+            ],
+            "offset_initial_tool0_m": [
+              -0.03972864,
+              -0.00378771,
+              0.00269971
+            ],
+            "orientation_error_rad": 6.947e-05,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planning_time_sec": 0.01760552,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "segment_distance_m": 0.03999967,
+            "target_tool0_position_m": [
+              -0.15039408,
+              0.0741308,
+              0.51634018
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.54288206
+          },
+          {
+            "adaptive_candidate_index": 2,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "checks": {
+                "collision_disabled": {
+                  "error_code": -31,
+                  "response_received": true,
+                  "success": false
+                }
+              },
+              "classification": "NO_IK_SOLUTION",
+              "reason": "MoveIt found no IK solution for the fixed-orientation tool0 search target, even with collision checking disabled",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.73311899,
+                  0.68007218,
+                  0.00612325,
+                  -0.00093501
+                ],
+                "position_m": [
+                  -0.14871084,
+                  0.08395694,
+                  0.51712344
+                ]
+              }
+            },
+            "name": "scan_left",
+            "offset_camera_optical_m": [
+              -0.03,
+              0.0,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              -0.00504972,
+              -0.02947845,
+              -0.0023498
+            ],
+            "offset_initial_tool0_m": [
+              -0.02979648,
+              -0.00284078,
+              0.00202478
+            ],
+            "orientation_error_rad": 6.947e-05,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "planned_trajectory": {
+                "duration_sec": null,
+                "joint_names": [],
+                "points": 0
+              },
+              "planning_time_sec": 0.01916079,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "segment_distance_m": 0.02999967,
+            "target_tool0_position_m": [
+              -0.14871084,
+              0.08395694,
+              0.51712344
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.5445919
+          },
+          {
+            "adaptive_candidate_index": 3,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": null,
+            "name": "scan_left",
+            "offset_camera_optical_m": [
+              -0.02,
+              0.0,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              -0.00336648,
+              -0.0196523,
+              -0.00156653
+            ],
+            "offset_initial_tool0_m": [
+              -0.01986432,
+              -0.00189385,
+              0.00134985
+            ],
+            "orientation_error_rad": 6.947e-05,
+            "plan_result": {
+              "error_code": 1,
+              "error_message": "",
+              "execution_sent": false,
+              "planned_trajectory": {
+                "duration_sec": 0.59670469,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 7
+              },
+              "planning_time_sec": 0.00192526,
+              "stage": "search_plan_only",
+              "success": true
+            },
+            "segment_distance_m": 0.01999967,
+            "target_tool0_position_m": [
+              -0.1470276,
+              0.09378309,
+              0.51790671
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.54647941
+          }
+        ],
+        "segment_distance_m": 0.01999967,
+        "stationary_joint_state": {
+          "maximum_allowed_joint_speed_rad_sec": 0.01,
+          "maximum_joint_speed_rad_sec": 5.831e-05,
+          "stationary_sample_count": 2,
+          "success": true
+        },
+        "target_tool0_position_m": [
+          -0.1470276,
+          0.09378309,
+          0.51790671
+        ],
+        "target_tool0_radius_from_ur_base_m": 0.54647941
+      },
+      {
+        "camera_extrinsic_applied": true,
+        "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+        "failure_diagnostic": {
+          "checks": {
+            "collision_disabled": {
+              "error_code": 1,
+              "response_received": true,
+              "success": true
+            },
+            "collision_enabled": {
+              "error_code": 1,
+              "response_received": true,
+              "success": true
+            }
+          },
+          "classification": "PILZ_CARTESIAN_PATH_FAILED",
+          "reason": "the target has collision-free IK, but Pilz could not generate the fixed-orientation Cartesian path; an intermediate IK or joint dynamic limit was rejected",
+          "target": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "orientation_quat_xyzw": [
+              0.73311899,
+              0.68007218,
+              0.00612325,
+              -0.00093501
+            ],
+            "position_m": [
+              -0.14029465,
+              0.13308769,
+              0.52103978
+            ]
+          }
+        },
+        "name": "scan_right",
+        "offset_camera_optical_m": [
+          0.05,
+          0.0,
+          -0.04
+        ],
+        "offset_from_origin_m": [
+          0.04783072,
+          0.04233469,
+          0.00447174
+        ],
+        "offset_initial_tool0_m": [
+          0.04584317,
+          0.04455077,
+          -0.00369217
+        ],
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "checks": {
+                "collision_disabled": {
+                  "error_code": 1,
+                  "response_received": true,
+                  "success": true
+                },
+                "collision_enabled": {
+                  "error_code": 1,
+                  "response_received": true,
+                  "success": true
+                }
+              },
+              "classification": "PILZ_CARTESIAN_PATH_FAILED",
+              "reason": "the target has collision-free IK, but Pilz could not generate the fixed-orientation Cartesian path; an intermediate IK or joint dynamic limit was rejected",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.73311899,
+                  0.68007218,
+                  0.00612325,
+                  -0.00093501
+                ],
+                "position_m": [
+                  -0.13524493,
+                  0.16256614,
+                  0.52338958
+                ]
+              }
+            },
+            "name": "scan_right",
+            "offset_camera_optical_m": [
+              0.05,
+              0.0,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              0.00841619,
+              0.04913074,
+              0.00391633
+            ],
+            "offset_initial_tool0_m": [
+              0.0496608,
+              0.00473463,
+              -0.00337463
+            ],
+            "orientation_error_rad": 0.00973519,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "planned_trajectory": {
+                "duration_sec": 1.15525682,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 13
+              },
+              "planning_time_sec": 0.00358302,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "segment_distance_m": 0.07102904,
+            "target_tool0_position_m": [
+              -0.13524493,
+              0.16256614,
+              0.52338958
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.56449587
+          },
+          {
+            "adaptive_candidate_index": 1,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "checks": {
+                "collision_disabled": {
+                  "error_code": 1,
+                  "response_received": true,
+                  "success": true
+                },
+                "collision_enabled": {
+                  "error_code": 1,
+                  "response_received": true,
+                  "success": true
+                }
+              },
+              "classification": "PILZ_CARTESIAN_PATH_FAILED",
+              "reason": "the target has collision-free IK, but Pilz could not generate the fixed-orientation Cartesian path; an intermediate IK or joint dynamic limit was rejected",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.73311899,
+                  0.68007218,
+                  0.00612325,
+                  -0.00093501
+                ],
+                "position_m": [
+                  -0.13692817,
+                  0.15273999,
+                  0.52260631
+                ]
+              }
+            },
+            "name": "scan_right",
+            "offset_camera_optical_m": [
+              0.04,
+              0.0,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              0.00673295,
+              0.0393046,
+              0.00313307
+            ],
+            "offset_initial_tool0_m": [
+              0.03972864,
+              0.00378771,
+              -0.00269971
+            ],
+            "orientation_error_rad": 0.00973519,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "planned_trajectory": {
+                "duration_sec": 1.0549796,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 12
+              },
+              "planning_time_sec": 0.00157919,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "segment_distance_m": 0.06103106,
+            "target_tool0_position_m": [
+              -0.13692817,
+              0.15273999,
+              0.52260631
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.56142335
+          },
+          {
+            "adaptive_candidate_index": 2,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "checks": {
+                "collision_disabled": {
+                  "error_code": 1,
+                  "response_received": true,
+                  "success": true
+                },
+                "collision_enabled": {
+                  "error_code": 1,
+                  "response_received": true,
+                  "success": true
+                }
+              },
+              "classification": "PILZ_CARTESIAN_PATH_FAILED",
+              "reason": "the target has collision-free IK, but Pilz could not generate the fixed-orientation Cartesian path; an intermediate IK or joint dynamic limit was rejected",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.73311899,
+                  0.68007218,
+                  0.00612325,
+                  -0.00093501
+                ],
+                "position_m": [
+                  -0.13861141,
+                  0.14291384,
+                  0.52182304
+                ]
+              }
+            },
+            "name": "scan_right",
+            "offset_camera_optical_m": [
+              0.03,
+              0.0,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              0.00504972,
+              0.02947845,
+              0.0023498
+            ],
+            "offset_initial_tool0_m": [
+              0.02979648,
+              0.00284078,
+              -0.00202478
+            ],
+            "orientation_error_rad": 0.00973519,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "planned_trajectory": {
+                "duration_sec": 0.96560211,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 11
+              },
+              "planning_time_sec": 0.00246987,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "segment_distance_m": 0.05103388,
+            "target_tool0_position_m": [
+              -0.13861141,
+              0.14291384,
+              0.52182304
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.558513
+          },
+          {
+            "adaptive_candidate_index": 3,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "checks": {
+                "collision_disabled": {
+                  "error_code": 1,
+                  "response_received": true,
+                  "success": true
+                },
+                "collision_enabled": {
+                  "error_code": 1,
+                  "response_received": true,
+                  "success": true
+                }
+              },
+              "classification": "PILZ_CARTESIAN_PATH_FAILED",
+              "reason": "the target has collision-free IK, but Pilz could not generate the fixed-orientation Cartesian path; an intermediate IK or joint dynamic limit was rejected",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.73311899,
+                  0.68007218,
+                  0.00612325,
+                  -0.00093501
+                ],
+                "position_m": [
+                  -0.14029465,
+                  0.13308769,
+                  0.52103978
+                ]
+              }
+            },
+            "name": "scan_right",
+            "offset_camera_optical_m": [
+              0.02,
+              0.0,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              0.00336648,
+              0.0196523,
+              0.00156653
+            ],
+            "offset_initial_tool0_m": [
+              0.01986432,
+              0.00189385,
+              -0.00134985
+            ],
+            "orientation_error_rad": 0.00973519,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "planned_trajectory": {
+                "duration_sec": 0.86964164,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 10
+              },
+              "planning_time_sec": 0.00147186,
+              "stage": "search_plan_only",
+              "success": false
+            },
+            "segment_distance_m": 0.04103808,
+            "target_tool0_position_m": [
+              -0.14029465,
+              0.13308769,
+              0.52103978
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.55576737
+          }
+        ],
+        "skipped": true,
+        "target_tool0_position_m": [
+          -0.0958304,
+          0.15577008,
+          0.52394498
+        ]
+      }
+    ],
+    "skipped_search_waypoints": [
+      {
+        "classification": "NO_IK_SOLUTION",
+        "name": "backward_wide",
+        "reason": "MoveIt found no IK solution for the fixed-orientation tool0 search target, even with collision checking disabled"
+      },
+      {
+        "classification": "PILZ_CARTESIAN_PATH_FAILED",
+        "name": "scan_right",
+        "reason": "the target has collision-free IK, but Pilz could not generate the fixed-orientation Cartesian path; an intermediate IK or joint dynamic limit was rejected"
+      }
+    ],
+    "stage": "active_search_orientation_guard",
+    "success": false,
+    "target_selection": "center",
+    "trajectory_sent": true,
+    "translation_only": true
+  },
+  "dynamic_octomap_readiness": {
+    "execution_mode": true,
+    "failures": [],
+    "filtered_cloud": {
+      "active": true,
+      "age_sec": 6.003e-05,
+      "frame_id": "d435i_color_optical_frame",
+      "height": 1,
+      "maximum_age_sec": 0.75,
+      "point_count": 5740,
+      "topic": "/wrist_rgbd/filtered_cloud",
+      "width": 5740
+    },
+    "move_group_parameters": {
+      "allow_trajectory_execution": true,
+      "available": true,
+      "octomap_resolution_m": 0.03,
+      "sensors": [
+        "wrist_rgbd_pointcloud"
+      ]
+    },
+    "raw_cloud": {
+      "active": true,
+      "age_sec": 0.01880279,
+      "frame_id": "d435i_color_optical_frame",
+      "height": 1,
+      "maximum_age_sec": 0.75,
+      "point_count": 5744,
+      "topic": "/wrist_rgbd/points",
+      "width": 5744
+    },
+    "success": true
+  },
+  "execution_attempted": true,
+  "execution_sent": true,
+  "integrated_real_feed_water": {
+    "active_search": true,
+    "active_search_camera_extrinsic_applied": true,
+    "active_search_direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+    "active_search_order": [
+      "backward_wide",
+      "scan_left",
+      "scan_right",
+      "scan_up",
+      "scan_down"
+    ],
+    "adaptive_search_distances_m": {
+      "backward": [
+        0.04,
+        0.03,
+        0.02
+      ],
+      "directional": [
+        0.05,
+        0.04,
+        0.03,
+        0.02
+      ],
+      "skip_unreachable_direction": true
+    },
+    "combined_static_and_dynamic_scene_checks": true,
+    "constrained_detour_only_after_direct_rejection": true,
+    "direct_clear_path_first": true,
+    "dynamic_obstacle_avoidance": true,
+    "multi_target_identity_lock": true,
+    "rotation_search_enabled": false,
+    "same_target_replanning": true,
+    "target_selection": "center",
+    "translation_only_search": true,
+    "wait_for_clear": false
+  },
+  "mode": "execute",
+  "reason": "tool orientation changed during translation-only search",
+  "stage": "active_search",
+  "success": false
+}

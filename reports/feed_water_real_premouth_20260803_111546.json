@@ -1,0 +1,76 @@
+{
+  "dynamic_octomap_readiness": {
+    "execution_mode": null,
+    "failures": [
+      "MoveGroup parameters are unavailable",
+      "MoveGroup has not loaded wrist_rgbd_pointcloud",
+      "MoveGroup OctoMap resolution is unavailable or invalid"
+    ],
+    "filtered_cloud": {
+      "active": true,
+      "age_sec": 5.095e-05,
+      "frame_id": "d435i_color_optical_frame",
+      "height": 1,
+      "maximum_age_sec": 0.75,
+      "point_count": 1738,
+      "topic": "/wrist_rgbd/filtered_cloud",
+      "width": 1738
+    },
+    "move_group_parameters": {
+      "allow_trajectory_execution": null,
+      "available": false,
+      "octomap_resolution_m": null,
+      "sensors": []
+    },
+    "raw_cloud": {
+      "active": true,
+      "age_sec": 0.00825644,
+      "frame_id": "d435i_color_optical_frame",
+      "height": 1,
+      "maximum_age_sec": 0.75,
+      "point_count": 1738,
+      "topic": "/wrist_rgbd/points",
+      "width": 1738
+    },
+    "success": false
+  },
+  "execution_attempted": false,
+  "execution_sent": false,
+  "integrated_real_feed_water": {
+    "active_search": true,
+    "active_search_camera_extrinsic_applied": true,
+    "active_search_direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+    "active_search_order": [
+      "backward_wide",
+      "scan_left",
+      "scan_right",
+      "scan_up",
+      "scan_down"
+    ],
+    "adaptive_search_distances_m": {
+      "backward": [
+        0.04,
+        0.03,
+        0.02
+      ],
+      "directional": [
+        0.05,
+        0.04,
+        0.03,
+        0.02
+      ],
+      "skip_unreachable_direction": true
+    },
+    "dynamic_obstacle_avoidance": true,
+    "multi_target_identity_lock": true,
+    "rotation_search_enabled": false,
+    "same_target_replanning": true,
+    "target_selection": "center",
+    "translation_only_search": true,
+    "wait_for_clear": false
+  },
+  "mode": "plan",
+  "reason": "MoveGroup parameters are unavailable; MoveGroup has not loaded wrist_rgbd_pointcloud; MoveGroup OctoMap resolution is unavailable or invalid",
+  "stage": "dynamic_octomap_readiness",
+  "success": false
+}

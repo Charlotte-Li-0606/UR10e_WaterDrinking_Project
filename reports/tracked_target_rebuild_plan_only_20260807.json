@@ -1,0 +1,8 @@
+{
+  "mode": "plan_only",
+  "execution_sent": false,
+  "success": false,
+  "stage": "tracking_readiness",
+  "reason": "insufficient_fresh_tracked_samples",
+  "sample_count": 0
+}

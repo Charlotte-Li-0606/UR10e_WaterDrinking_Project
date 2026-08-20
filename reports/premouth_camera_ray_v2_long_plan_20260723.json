@@ -1,0 +1,143 @@
+{
+  "checks": {
+    "camera_tf": {
+      "available": true,
+      "child_frame": "d435i_color_optical_frame",
+      "orientation_quat_xyzw": [
+        -0.71309992,
+        -0.08676516,
+        0.09585808,
+        0.68903667
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.50841721,
+        0.55143892,
+        0.63270413
+      ]
+    },
+    "controllers": {
+      "available": null,
+      "inspection": "skipped in plan mode; controller state is checked only immediately before execution"
+    },
+    "current_straw_tip_pose": {
+      "frame_id": "base_link",
+      "orientation_quat_xyzw": [
+        0.67276163,
+        0.73983916,
+        -0.00506426,
+        -0.00203989
+      ],
+      "position_m": [
+        -0.51210965,
+        0.59120994,
+        0.64734011
+      ]
+    },
+    "execute_trajectory_available": null,
+    "joint_state": {
+      "complete": true,
+      "expected_joint_count": 6,
+      "received": true,
+      "received_expected_joint_count": 6
+    },
+    "mount_calibration": {
+      "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+      "metrics": null,
+      "status": "provisional"
+    },
+    "mouth_pose": {
+      "available": true,
+      "frame_id": "base_link",
+      "jitter_stddev_m": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "latest_position_m": [
+        -0.64749819,
+        1.16474112,
+        0.57552891
+      ],
+      "latest_received_age_sec": 0.62258083,
+      "latest_source_stamp_sec": 1784772666.9146726,
+      "max_distance_from_mean_m": 0.0,
+      "mean_position_m": [
+        -0.64749819,
+        1.16474112,
+        0.57552891
+      ],
+      "sample_count": 1,
+      "sample_duration_sec": 5.0,
+      "stability_requirements": {
+        "maximum_age_sec": 1.0,
+        "maximum_spread_m": 0.025,
+        "minimum_samples": 3
+      },
+      "stable": false,
+      "surface_normal": {
+        "available": true,
+        "frame_id": "base_link",
+        "max_angular_spread_deg": 0.0,
+        "max_angular_spread_rad": 0.0,
+        "mean_vector": [
+          0.12696088,
+          -0.74274604,
+          -0.65742623
+        ],
+        "sample_count": 1,
+        "stability_requirements": {
+          "maximum_angular_spread_deg": 12.0,
+          "minimum_samples": 3
+        },
+        "stable": false
+      }
+    },
+    "move_group_available": true,
+    "required_nodes": {
+      "controller_manager_exists": true,
+      "move_group_exists": true
+    },
+    "speed_slider_percent": 15.0,
+    "tool0_pose": {
+      "available": true,
+      "child_frame": "tool0",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.67276163,
+        0.73983916,
+        -0.00506426,
+        -0.00203989
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.50168438,
+        0.48170588,
+        0.64775764
+      ]
+    },
+    "ur_base_tf": {
+      "available": true,
+      "child_frame": "base_link",
+      "orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        1.0,
+        -0.0
+      ],
+      "parent_frame": "base",
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "execution_sent": false,
+  "failures": [
+    "mouth pose is not stable: 1 samples, max spread 0.0000 m"
+  ],
+  "mode": "plan",
+  "stage": "readiness",
+  "success": false
+}

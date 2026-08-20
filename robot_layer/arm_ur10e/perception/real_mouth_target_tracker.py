@@ -151,10 +151,20 @@ class RealMouthTargetTracker:
         self._reference_position: tuple[float, float, float] | None = None
         self._consecutive_ambiguity_updates = 0
         self._last_ambiguity_monotonic: float | None = None
+        self._single_candidate_initial_reacquisition_allowed = False
         self._last_update: dict[str, Any] = {
             "success": False,
             "reason": "no mouth-candidate message has been received",
         }
+
+    def set_single_candidate_initial_reacquisition_allowed(self, allowed: bool) -> None:
+        """Permit a center-target lock refresh only during pre-motion acquisition.
+
+        The workflow scopes this switch to the initial acquisition window and
+        disables it before any search, staging, recovery, or Servo motion.  It
+        never applies when multiple distinct mouth candidates are visible.
+        """
+        self._single_candidate_initial_reacquisition_allowed = bool(allowed)
 
     @staticmethod
     def _optional_finite(value: Any) -> float | None:
@@ -350,6 +360,7 @@ class RealMouthTargetTracker:
         )
 
         identity_unsafe = False
+        identity_reacquisition = None
         if self._reference_position is None:
             selected_index = self._initial_index(self.target_selection, candidates, center)
             if selected_index is None:
@@ -365,7 +376,27 @@ class RealMouthTargetTracker:
                 key=lambda item: item[0],
             )
             nearest_distance, selected_index = distances[0]
-            if nearest_distance > self.max_identity_jump_m:
+            single_candidate_initial_reacquisition = (
+                self._single_candidate_initial_reacquisition_allowed
+                and self.target_selection == "center"
+                and len(candidates) == 1
+            )
+            if (
+                nearest_distance > self.max_identity_jump_m
+                and single_candidate_initial_reacquisition
+            ):
+                identity_reacquisition = {
+                    "classification": "SINGLE_CANDIDATE_INITIAL_REACQUISITION",
+                    "previous_reference_position_m": list(self._reference_position),
+                    "new_reference_position_m": list(candidates[0].position_m),
+                    "reacquisition_displacement_m": nearest_distance,
+                    "maximum_identity_jump_m": self.max_identity_jump_m,
+                    "candidate_count_after_deduplication": 1,
+                    "motion_sent": False,
+                }
+                selected_index = 0
+                selection_method = "single_candidate_initial_reacquisition"
+            elif nearest_distance > self.max_identity_jump_m:
                 return self._reject(
                     f"selected target moved {nearest_distance:.4f} m, above the {self.max_identity_jump_m:.4f} m identity limit",
                     received_monotonic=now,
@@ -446,7 +477,8 @@ class RealMouthTargetTracker:
                         ],
                     },
                 )
-            selection_method = "locked_3d_nearest"
+            if identity_reacquisition is None:
+                selection_method = "locked_3d_nearest"
 
         self._consecutive_ambiguity_updates = 0
         self._last_ambiguity_monotonic = None
@@ -478,6 +510,7 @@ class RealMouthTargetTracker:
             "selected_candidate_index": selected_index,
             "selected_position_m": list(selected.position_m),
             "identity_unsafe": identity_unsafe,
+            "identity_reacquisition": identity_reacquisition,
         }
         return dict(self._last_update)
 

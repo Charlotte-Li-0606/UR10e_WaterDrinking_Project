@@ -1,0 +1,206 @@
+{
+  "camera_ray_details": {
+    "camera_to_mouth_distance_m": 0.71556829,
+    "camera_to_mouth_unit_vector": [
+      -0.13484605,
+      0.97668188,
+      -0.16706
+    ],
+    "camera_to_mouth_vector_m": [
+      -0.09649156,
+      0.69888259,
+      -0.11954284
+    ]
+  },
+  "checks": {
+    "camera_tf": {
+      "available": true,
+      "child_frame": "d435i_color_optical_frame",
+      "orientation_quat_xyzw": [
+        -0.71134606,
+        -0.09100926,
+        0.09669819,
+        0.69018371
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.30753707,
+        0.27213135,
+        0.6494852
+      ]
+    },
+    "controllers": {
+      "available": true,
+      "joint_state_broadcaster_active": true,
+      "scaled_joint_trajectory_controller_active": true
+    },
+    "current_straw_tip_pose": {
+      "frame_id": "base_link",
+      "orientation_quat_xyzw": [
+        0.67006085,
+        0.7423007,
+        -0.00194106,
+        -0.00208705
+      ],
+      "position_m": [
+        -0.31157989,
+        0.31180466,
+        0.66429278
+      ]
+    },
+    "execute_trajectory_available": true,
+    "joint_state": {
+      "complete": true,
+      "expected_joint_count": 6,
+      "received": true,
+      "received_expected_joint_count": 6
+    },
+    "mount_calibration": {
+      "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+      "metrics": null,
+      "status": "provisional"
+    },
+    "mouth_pose": {
+      "available": true,
+      "frame_id": "base_link",
+      "jitter_stddev_m": [
+        0.0001968,
+        0.00073709,
+        0.00028136
+      ],
+      "latest_position_m": [
+        -0.40354882,
+        0.96978592,
+        0.53055909
+      ],
+      "latest_received_age_sec": 0.00162929,
+      "latest_source_stamp_sec": 1784691661.8373437,
+      "max_distance_from_mean_m": 0.00145554,
+      "mean_position_m": [
+        -0.40402863,
+        0.97101394,
+        0.52994236
+      ],
+      "sample_count": 8,
+      "sample_duration_sec": 5.0,
+      "stability_requirements": {
+        "maximum_age_sec": 1.0,
+        "maximum_spread_m": 0.025,
+        "minimum_samples": 3
+      },
+      "stable": true,
+      "surface_normal": {
+        "available": true,
+        "frame_id": "base_link",
+        "max_angular_spread_deg": 3.43563892,
+        "max_angular_spread_rad": 0.05996321,
+        "mean_vector": [
+          0.16991919,
+          -0.98367764,
+          0.05920962
+        ],
+        "sample_count": 8,
+        "stability_requirements": {
+          "maximum_angular_spread_deg": 12.0,
+          "minimum_samples": 3
+        },
+        "stable": true
+      }
+    },
+    "move_group_available": true,
+    "required_nodes": {
+      "controller_manager_exists": true,
+      "move_group_exists": true
+    },
+    "speed_slider_percent": 15.0,
+    "tool0_pose": {
+      "available": true,
+      "child_frame": "tool0",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.67006085,
+        0.7423007,
+        -0.00194106,
+        -0.00208705
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.30035679,
+        0.20237871,
+        0.66423809
+      ]
+    },
+    "ur_base_tf": {
+      "available": true,
+      "child_frame": "base_link",
+      "orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        1.0,
+        -0.0
+      ],
+      "parent_frame": "base",
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "detected_mouth_pose": [
+    -0.40402863,
+    0.97101394,
+    0.52994236
+  ],
+  "execution_attempted": false,
+  "execution_disabled": false,
+  "execution_sent": false,
+  "failures": [
+    "the frozen-pose MoveIt plan did not succeed",
+    "the validated MoveIt trajectory is unavailable",
+    "target tool0 pose is outside the UR10e nominal reach envelope (0.0000 m > 1.30 m)",
+    "target tool orientation differs unexpectedly from the current tool orientation",
+    "pre-mouth straw target is too close to the detected face"
+  ],
+  "frozen_detected_mouth_pose": [
+    -0.40402863,
+    0.97101394,
+    0.52994236
+  ],
+  "frozen_target_policy": "The five-second stable mouth-pose mean is frozen before planning; no perception updates are consumed during motion.",
+  "maximum_translation_m": 0.3,
+  "mode": "execute",
+  "planned_tool0_translation_m": [
+    -0.08570644,
+    0.61037518,
+    -0.12599743
+  ],
+  "planned_tool0_translation_norm_m": 0.62910954,
+  "pre_mouth_candidates": {
+    "base-x": [
+      -0.35402863,
+      0.97101394,
+      0.52994236
+    ],
+    "camera-ray": [
+      -0.39728633,
+      0.92217984,
+      0.53829536
+    ],
+    "camera-ray-alternative": [
+      -0.41077093,
+      1.01984803,
+      0.52158936
+    ]
+  },
+  "premouth_policy": "camera-ray",
+  "reason": "planned tool0 translation exceeds the 0.30 m diagnostic plan-only limit",
+  "safe_distance_m": 0.05,
+  "stage": "execution_safety_guard",
+  "success": false,
+  "target_tool0_pose": [
+    -0.38606323,
+    0.81275389,
+    0.53824067
+  ]
+}

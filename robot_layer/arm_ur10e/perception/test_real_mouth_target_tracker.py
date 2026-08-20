@@ -74,6 +74,55 @@ class RealMouthTargetTrackerTest(unittest.TestCase):
         self.assertEqual(1, result["selected_candidate_index"])
         self.assertEqual([0.01, 0.2, 1.0], result["selected_position_m"])
 
+    def test_single_center_candidate_can_refresh_identity_only_when_enabled(self) -> None:
+        tracker = RealMouthTargetTracker("center")
+        tracker.update_json(
+            _payload([_candidate(0.0, 320.0)]),
+            received_monotonic=10.0,
+        )
+        tracker.set_single_candidate_initial_reacquisition_allowed(True)
+
+        refreshed = tracker.update_json(
+            _payload([_candidate(0.3, 330.0)]),
+            received_monotonic=10.1,
+        )
+
+        self.assertTrue(refreshed["success"], refreshed)
+        self.assertEqual(
+            "single_candidate_initial_reacquisition",
+            refreshed["selection_method"],
+        )
+        self.assertEqual(
+            "SINGLE_CANDIDATE_INITIAL_REACQUISITION",
+            refreshed["identity_reacquisition"]["classification"],
+        )
+        self.assertFalse(refreshed["identity_reacquisition"]["motion_sent"])
+
+        tracker.set_single_candidate_initial_reacquisition_allowed(False)
+        rejected = tracker.update_json(
+            _payload([_candidate(0.6, 340.0)]),
+            received_monotonic=10.2,
+        )
+        self.assertFalse(rejected["success"])
+        self.assertTrue(rejected["identity_unsafe"])
+
+    def test_single_candidate_refresh_never_bypasses_multi_person_identity_limit(self) -> None:
+        tracker = RealMouthTargetTracker("center")
+        tracker.update_json(
+            _payload([_candidate(0.0, 320.0)]),
+            received_monotonic=10.0,
+        )
+        tracker.set_single_candidate_initial_reacquisition_allowed(True)
+
+        rejected = tracker.update_json(
+            _payload([_candidate(0.3, 250.0), _candidate(0.5, 390.0)]),
+            received_monotonic=10.1,
+        )
+
+        self.assertFalse(rejected["success"])
+        self.assertTrue(rejected["identity_unsafe"])
+        self.assertEqual("IDENTITY_JUMP", rejected["diagnostics"]["classification"])
+
     def test_ambiguous_identity_match_invalidates_observation(self) -> None:
         tracker = RealMouthTargetTracker("center")
         tracker.update_json(_payload([_candidate(0.0, 320.0)]), received_monotonic=10.0)

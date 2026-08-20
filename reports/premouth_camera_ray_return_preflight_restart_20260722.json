@@ -1,0 +1,101 @@
+{
+  "automatic_retreat_sent": false,
+  "checks": {
+    "controllers": {
+      "available": false,
+      "reason": "/controller_manager/list_controllers is unavailable"
+    },
+    "execute_trajectory_available": true,
+    "joint_state": {
+      "complete": true,
+      "expected_joint_count": 6,
+      "received": true,
+      "received_expected_joint_count": 6
+    },
+    "move_group_available": true,
+    "required_nodes": {
+      "controller_manager_exists": false,
+      "move_group_exists": true
+    },
+    "speed_slider_percent": null,
+    "tool0_pose": {
+      "available": true,
+      "child_frame": "tool0",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.67133843,
+        0.74113767,
+        -0.00380803,
+        -0.00227331
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.50256083,
+        0.48093255,
+        0.64772195
+      ]
+    },
+    "ur_base_tf": {
+      "available": true,
+      "child_frame": "base_link",
+      "orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        1.0,
+        -0.0
+      ],
+      "parent_frame": "base",
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "execution_disabled": false,
+  "execution_sent": false,
+  "failures": [
+    "controller_manager is unavailable",
+    "joint_state_broadcaster is not active",
+    "scaled_joint_trajectory_controller is not active",
+    "speed slider is unavailable or outside the required 5%\u201315% range"
+  ],
+  "mode": "return",
+  "recorded_end_tool0_pose": {
+    "available": true,
+    "child_frame": "tool0",
+    "link_name": "tool0",
+    "orientation_quat_xyzw": [
+      0.67002095,
+      0.742337,
+      -0.00187156,
+      -0.00204973
+    ],
+    "parent_frame": "base_link",
+    "position_m": [
+      -0.50419817,
+      0.48120389,
+      0.64732166
+    ]
+  },
+  "recorded_start_tool0_pose": {
+    "available": true,
+    "child_frame": "tool0",
+    "link_name": "tool0",
+    "orientation_quat_xyzw": [
+      0.67004444,
+      0.74231588,
+      -0.00186464,
+      -0.00202907
+    ],
+    "parent_frame": "base_link",
+    "position_m": [
+      -0.42651524,
+      0.20239414,
+      0.6641546
+    ]
+  },
+  "return_report": "reports/premouth_camera_ray_execute_20260722_run6.json",
+  "stage": "return_readiness",
+  "success": false
+}

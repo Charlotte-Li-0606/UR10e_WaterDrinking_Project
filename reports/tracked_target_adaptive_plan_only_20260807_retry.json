@@ -1,0 +1,14 @@
+{
+  "mode": "plan_only",
+  "execution_sent": false,
+  "tracked_target_position": [
+    -0.9164912014952543,
+    0.29060844278993936,
+    0.6558839858878264
+  ],
+  "sample_count": 4,
+  "sample_spread_m": 0.0014047220998721867,
+  "success": false,
+  "stage": "exception",
+  "reason": "MoveGroup planning/execution timed out"
+}

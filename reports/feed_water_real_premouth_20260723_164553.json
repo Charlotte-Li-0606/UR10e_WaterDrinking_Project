@@ -1,0 +1,217 @@
+{
+  "checks": {
+    "camera_mount_match": {
+      "configured": {
+        "rpy_rad": [
+          3.0678492,
+          -0.00514696,
+          -1.46519711
+        ],
+        "translation_m": [
+          0.08492189,
+          0.00172131,
+          0.01390208
+        ]
+      },
+      "live": {
+        "available": true,
+        "child_frame": "d435i_link",
+        "orientation_quat_xyzw": [
+          0.74286778,
+          -0.6684175,
+          -0.02274236,
+          0.02912556
+        ],
+        "parent_frame": "tool0",
+        "position_m": [
+          0.08492189,
+          0.00172131,
+          0.01390208
+        ]
+      },
+      "matches": true,
+      "maximum_rotation_error_deg": 0.5,
+      "maximum_translation_error_m": 0.001,
+      "reason": null,
+      "rotation_error_deg": 0.0,
+      "rotation_error_rad": 0.0,
+      "translation_error_m": 0.0
+    },
+    "camera_tf": {
+      "available": true,
+      "child_frame": "d435i_color_optical_frame",
+      "orientation_quat_xyzw": [
+        -0.48290782,
+        -0.51651117,
+        0.48299609,
+        0.51646009
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.30021699,
+        0.25255788,
+        0.66646627
+      ]
+    },
+    "controllers": {
+      "available": null,
+      "inspection": "skipped in plan mode; controller state is checked only immediately before execution"
+    },
+    "current_straw_tip_pose": {
+      "frame_id": "base_link",
+      "orientation_quat_xyzw": [
+        0.67245962,
+        0.74012305,
+        -0.002853,
+        -0.0027926
+      ],
+      "position_m": [
+        -0.30396908,
+        0.29226276,
+        0.68126576
+      ]
+    },
+    "execute_trajectory_available": null,
+    "joint_state": {
+      "complete": true,
+      "expected_joint_count": 6,
+      "received": true,
+      "received_expected_joint_count": 6
+    },
+    "mount_calibration": {
+      "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+      "corrected_physical_profile": true,
+      "metrics": {
+        "captured_at": "2026-07-23T15:45:00+08:00",
+        "limitation": "One physical approach direction plus the upright-image constraint fixes the axis convention, but a three-marker solve is still required for metrology-grade 6-DoF verification.",
+        "method": "manual_physical_axis_alignment",
+        "preserved_tool0_to_optical_center_m": [
+          0.07011388,
+          5.789e-05,
+          0.01478767
+        ],
+        "rollback_tool0_to_d435i_link": {
+          "note": "Legacy simulation-derived provisional transform",
+          "rpy_rad": [
+            -3.14159265,
+            -0.027969,
+            -0.153885
+          ],
+          "translation_m": [
+            0.072299,
+            0.014823,
+            0.015
+          ]
+        },
+        "rotation_determinant": 1.0,
+        "rotation_orthogonality_error": 0.0,
+        "target_camera_optical_axes_in_base_link": {
+          "+X_image_right": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "+Y_image_down": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "+Z_depth_forward": [
+            -1.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "status": "provisional",
+      "tool0_to_d435i_link": {
+        "rpy_rad": [
+          3.0678492,
+          -0.00514696,
+          -1.46519711
+        ],
+        "translation_m": [
+          0.08492189,
+          0.00172131,
+          0.01390208
+        ]
+      }
+    },
+    "mouth_pose": {
+      "available": false,
+      "perception_status": {
+        "detected": false,
+        "latest_received_age_sec": 0.11671765,
+        "reason": "no_face"
+      },
+      "reason": "no /detected_mouth_pose messages received in 2.0 seconds; /mouth_detection/status reports no_face"
+    },
+    "move_group_available": true,
+    "required_nodes": {
+      "controller_manager_exists": true,
+      "move_group_exists": true
+    },
+    "robot_mode": null,
+    "robot_mode_running": false,
+    "robot_program_running": null,
+    "safety_mode": null,
+    "safety_mode_normal": false,
+    "speed_slider_percent": 0.0,
+    "tool0_pose": {
+      "available": true,
+      "child_frame": "tool0",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.67245962,
+        0.74012305,
+        -0.002853,
+        -0.0027926
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.29345522,
+        0.18276638,
+        0.68123313
+      ]
+    },
+    "tool0_to_camera_link_tf": {
+      "available": true,
+      "child_frame": "d435i_link",
+      "orientation_quat_xyzw": [
+        0.74286778,
+        -0.6684175,
+        -0.02274236,
+        0.02912556
+      ],
+      "parent_frame": "tool0",
+      "position_m": [
+        0.08492189,
+        0.00172131,
+        0.01390208
+      ]
+    },
+    "ur_base_tf": {
+      "available": true,
+      "child_frame": "base_link",
+      "orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        1.0,
+        -0.0
+      ],
+      "parent_frame": "base",
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "execution_sent": false,
+  "failures": [
+    "no /detected_mouth_pose messages received in 2.0 seconds; /mouth_detection/status reports no_face"
+  ],
+  "mode": "plan",
+  "stage": "readiness",
+  "success": false
+}

@@ -1,0 +1,45 @@
+{
+  "actual_tool0_displacement_m": [
+    -0.11908387516342689,
+    0.5779027420713124,
+    -0.06705896256547306
+  ],
+  "controller_action_status": 4,
+  "controller_action_status_name": "SUCCEEDED",
+  "execution_sent": true,
+  "final_straw_tip_m": [
+    -0.44286006947391965,
+    1.0381156168450143,
+    0.6154312475044381
+  ],
+  "final_straw_tip_to_pre_mouth_error_m": 0.00007520074307191628,
+  "final_tool0_pose": {
+    "available": true,
+    "child_frame": "tool0",
+    "link_name": "tool0",
+    "orientation_quat_xyzw": [
+      0.6724849176084614,
+      0.7400995115815427,
+      -0.003276057067642285,
+      -0.0024527527376618408
+    ],
+    "parent_frame": "base_link",
+    "position_m": [
+      -0.4323533051634269,
+      0.9286185820713124,
+      0.615516567434527
+    ]
+  },
+  "frozen_detected_mouth_pose": [
+    -0.44282926,
+    1.08814517,
+    0.61536934
+  ],
+  "frozen_pre_mouth_target_m": [
+    -0.44282926,
+    1.03814517,
+    0.61536934
+  ],
+  "joint_velocities_zero_after_completion": true,
+  "source_execution_report": "reports/premouth_feeding_vector_negy_real_execute_20260723.json"
+}

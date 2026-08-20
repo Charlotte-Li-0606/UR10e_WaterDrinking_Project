@@ -8,7 +8,7 @@ import math
 import unittest
 from contextlib import redirect_stderr
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import numpy as np
 
@@ -1849,6 +1849,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
 
         node._continuous_tracker = Mock()
         node._continuous_tracker.target.side_effect = [target(stable=False)]
+        node.target_tracker = Mock()
         node._publish_continuous_diagnostics = Mock()
         node._continuous_last_observation_update = {"accepted": True}
 
@@ -1860,7 +1861,9 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
                 side_effect=[10.0, 10.01, 10.02],
             ),
         ):
-            result = node._acquire_continuous_target()
+            result = node._acquire_continuous_target(
+                allow_single_candidate_initial_reacquisition=True
+            )
 
         self.assertTrue(result["success"], result)
         self.assertFalse(result["require_stable"])
@@ -1870,6 +1873,11 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         )
         self.assertEqual("PROVISIONAL_TARGET", result["state"])
         self.assertEqual(1, node._continuous_tracker.target.call_count)
+        self.assertTrue(result["single_candidate_initial_reacquisition_allowed"])
+        self.assertEqual(
+            [call(True), call(False)],
+            node.target_tracker.set_single_candidate_initial_reacquisition_allowed.call_args_list,
+        )
 
     def test_continuous_failure_after_sent_motion_requests_guarded_return(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)

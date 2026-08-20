@@ -1,0 +1,144 @@
+{
+  "checks": {
+    "camera_tf": {
+      "available": true,
+      "child_frame": "d435i_color_optical_frame",
+      "orientation_quat_xyzw": [
+        -0.71132845,
+        -0.09108169,
+        0.09667402,
+        0.69019569
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.51138558,
+        0.55102425,
+        0.63256157
+      ]
+    },
+    "controllers": {
+      "available": false,
+      "reason": "/controller_manager/list_controllers is unavailable"
+    },
+    "current_straw_tip_pose": {
+      "frame_id": "base_link",
+      "orientation_quat_xyzw": [
+        0.67003472,
+        0.74232453,
+        -0.00187582,
+        -0.00205921
+      ],
+      "position_m": [
+        -0.5154331,
+        0.5906964,
+        0.647371
+      ]
+    },
+    "execute_trajectory_available": true,
+    "joint_state": {
+      "complete": false,
+      "received": false
+    },
+    "mount_calibration": {
+      "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+      "metrics": null,
+      "status": "provisional"
+    },
+    "mouth_pose": {
+      "available": true,
+      "frame_id": "base_link",
+      "jitter_stddev_m": [
+        0.00155911,
+        0.00167809,
+        0.00218755
+      ],
+      "latest_position_m": [
+        -0.64526622,
+        0.82074758,
+        0.58554307
+      ],
+      "latest_received_age_sec": 0.24227803,
+      "latest_source_stamp_sec": 1784701758.7216182,
+      "max_distance_from_mean_m": 0.00464228,
+      "mean_position_m": [
+        -0.64690766,
+        0.82259451,
+        0.58749063
+      ],
+      "sample_count": 4,
+      "sample_duration_sec": 5.0,
+      "stability_requirements": {
+        "maximum_age_sec": 1.0,
+        "maximum_spread_m": 0.025,
+        "minimum_samples": 3
+      },
+      "stable": true,
+      "surface_normal": {
+        "available": true,
+        "frame_id": "base_link",
+        "max_angular_spread_deg": 1.9649608,
+        "max_angular_spread_rad": 0.03429504,
+        "mean_vector": [
+          0.30374953,
+          -0.86237067,
+          -0.40503463
+        ],
+        "sample_count": 4,
+        "stability_requirements": {
+          "maximum_angular_spread_deg": 12.0,
+          "minimum_samples": 3
+        },
+        "stable": true
+      }
+    },
+    "move_group_available": true,
+    "required_nodes": {
+      "controller_manager_exists": false,
+      "move_group_exists": true
+    },
+    "speed_slider_percent": null,
+    "tool0_pose": {
+      "available": true,
+      "child_frame": "tool0",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.67003472,
+        0.74232453,
+        -0.00187582,
+        -0.00205921
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.50420226,
+        0.48127124,
+        0.64731122
+      ]
+    },
+    "ur_base_tf": {
+      "available": true,
+      "child_frame": "base_link",
+      "orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        1.0,
+        -0.0
+      ],
+      "parent_frame": "base",
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "execution_sent": false,
+  "failures": [
+    "/joint_states is missing or incomplete",
+    "controller_manager is unavailable",
+    "joint_state_broadcaster is not active",
+    "scaled_joint_trajectory_controller is not active"
+  ],
+  "mode": "plan",
+  "stage": "readiness",
+  "success": false
+}

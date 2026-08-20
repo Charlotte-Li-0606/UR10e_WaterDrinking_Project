@@ -1,0 +1,3808 @@
+{
+  "active_search": {
+    "adaptive_distance_policy_m": {
+      "backward": [
+        0.04,
+        0.03,
+        0.02
+      ],
+      "skip_if_all_bounded_candidates_fail": true,
+      "up_down": [
+        0.05,
+        0.04,
+        0.03,
+        0.02
+      ]
+    },
+    "adaptive_left_right_angles_deg": [
+      15.0,
+      10.0,
+      5.0
+    ],
+    "camera_extrinsic_applied": true,
+    "candidate_detected": true,
+    "checks": {
+      "camera_mount_match": {
+        "configured": {
+          "rpy_rad": [
+            3.0678492,
+            -0.00514696,
+            -1.46519711
+          ],
+          "translation_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        },
+        "live": {
+          "available": true,
+          "child_frame": "d435i_link",
+          "orientation_quat_xyzw": [
+            0.74286778,
+            -0.6684175,
+            -0.02274236,
+            0.02912556
+          ],
+          "parent_frame": "tool0",
+          "position_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        },
+        "matches": true,
+        "maximum_rotation_error_deg": 0.5,
+        "maximum_translation_error_m": 0.001,
+        "reason": null,
+        "rotation_error_deg": 0.0,
+        "rotation_error_rad": 0.0,
+        "translation_error_m": 0.0
+      },
+      "camera_tf": {
+        "available": true,
+        "child_frame": "d435i_color_optical_frame",
+        "orientation_quat_xyzw": [
+          -0.5428461,
+          -0.4844153,
+          0.42611697,
+          0.53766556
+        ],
+        "parent_frame": "base_link",
+        "position_m": [
+          -0.30343031,
+          0.22273336,
+          0.78662331
+        ]
+      },
+      "controllers": {
+        "available": true,
+        "joint_state_broadcaster_active": true,
+        "scaled_joint_trajectory_controller_active": true
+      },
+      "current_straw_tip_pose": {
+        "frame_id": "base_link",
+        "orientation_quat_xyzw": [
+          0.73347476,
+          0.67922716,
+          0.01176375,
+          0.02295316
+        ],
+        "position_m": [
+          -0.30113205,
+          0.26276312,
+          0.80083305
+        ]
+      },
+      "execute_trajectory_available": null,
+      "joint_state": {
+        "complete": true,
+        "expected_joint_count": 6,
+        "received": true,
+        "received_expected_joint_count": 6
+      },
+      "mount_calibration": {
+        "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+        "corrected_physical_profile": true,
+        "metrics": {
+          "captured_at": "2026-07-23T15:45:00+08:00",
+          "limitation": "One physical approach direction plus the upright-image constraint fixes the axis convention, but a three-marker solve is still required for metrology-grade 6-DoF verification.",
+          "method": "manual_physical_axis_alignment",
+          "preserved_tool0_to_optical_center_m": [
+            0.07011388,
+            5.789e-05,
+            0.01478767
+          ],
+          "rollback_tool0_to_d435i_link": {
+            "note": "Legacy simulation-derived provisional transform",
+            "rpy_rad": [
+              -3.14159265,
+              -0.027969,
+              -0.153885
+            ],
+            "translation_m": [
+              0.072299,
+              0.014823,
+              0.015
+            ]
+          },
+          "rotation_determinant": 1.0,
+          "rotation_orthogonality_error": 0.0,
+          "target_camera_optical_axes_in_base_link": {
+            "+X_image_right": [
+              0.0,
+              1.0,
+              0.0
+            ],
+            "+Y_image_down": [
+              0.0,
+              0.0,
+              -1.0
+            ],
+            "+Z_depth_forward": [
+              -1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "status": "provisional",
+        "tool0_to_d435i_link": {
+          "rpy_rad": [
+            3.0678492,
+            -0.00514696,
+            -1.46519711
+          ],
+          "translation_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        }
+      },
+      "mouth_pose": {
+        "available": false,
+        "identity_locked": false,
+        "identity_unsafe": false,
+        "perception_status": {
+          "detected": false,
+          "latest_received_age_sec": 0.02215535,
+          "reason": "no_face"
+        },
+        "reason": "no mouth-candidate message has been received; /mouth_detection/status reports no_face",
+        "sample_duration_sec": 1.0,
+        "stable": false,
+        "target_selection": "center"
+      },
+      "move_group_available": true,
+      "required_nodes": {
+        "controller_manager_exists": true,
+        "move_group_exists": true
+      },
+      "robot_mode": 7,
+      "robot_mode_running": true,
+      "robot_program_running": true,
+      "safety_mode": 1,
+      "safety_mode_normal": true,
+      "speed_slider_percent": 60.0,
+      "tool0_pose": {
+        "available": true,
+        "child_frame": "tool0",
+        "link_name": "tool0",
+        "orientation_quat_xyzw": [
+          0.73347476,
+          0.67922716,
+          0.01176375,
+          0.02295316
+        ],
+        "parent_frame": "base_link",
+        "position_m": [
+          -0.30960471,
+          0.1531006,
+          0.80236469
+        ]
+      },
+      "tool0_to_camera_link_tf": {
+        "available": true,
+        "child_frame": "d435i_link",
+        "orientation_quat_xyzw": [
+          0.74286778,
+          -0.6684175,
+          -0.02274236,
+          0.02912556
+        ],
+        "parent_frame": "tool0",
+        "position_m": [
+          0.08492189,
+          0.00172131,
+          0.01390208
+        ]
+      },
+      "tool_vertical_axis_guard": {
+        "available": true,
+        "maximum_tilt_deg": 5.0,
+        "maximum_tilt_rad": 0.08726646,
+        "required_axis_base_link": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "tilt_deg": 2.95588709,
+        "tilt_rad": 0.05158996,
+        "tool_axis_tool0": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "within_limit": true
+      },
+      "ur_base_tf": {
+        "available": true,
+        "child_frame": "base_link",
+        "orientation_quat_xyzw": [
+          0.0,
+          0.0,
+          1.0,
+          -0.0
+        ],
+        "parent_frame": "base",
+        "position_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "elapsed_sec": 4.93085853,
+    "execute": true,
+    "fk_waypoint_vertical_axis_validation": true,
+    "intermediate_flange_orientation_unconstrained": false,
+    "left_right_rotation_each_side_deg": 15.0,
+    "left_right_search_strategy": "MoveIt tool0-local-Z pose rotations",
+    "left_right_total_sweep_deg": 30.0,
+    "maximum_cumulative_joint_travel_rad": 2.0,
+    "maximum_joint_excursion_rad": 0.78539816,
+    "maximum_search_trajectory_duration_sec": 3.0,
+    "maximum_time_sec": 15.0,
+    "maximum_tool_vertical_tilt_deg": 5.0,
+    "ompl_active_search_enabled": false,
+    "planner": "pilz_industrial_motion_planner/LIN",
+    "position_only_search_goals": false,
+    "rotation_search_enabled": true,
+    "search_direction_reference": {
+      "backward_up_down": "d435i_color_optical_frame frozen at initial tool0 pose",
+      "left_right": "tool0 local Z rotation"
+    },
+    "search_order": [
+      "backward_wide",
+      "scan_left",
+      "scan_right",
+      "scan_up",
+      "scan_down"
+    ],
+    "search_steps": [
+      {
+        "adaptive_candidate_index": 0,
+        "adaptive_scale_applied": false,
+        "camera_extrinsic_applied": true,
+        "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+        "execution_result": {
+          "candidate_detected": false,
+          "error_code": 1,
+          "error_message": "",
+          "execution_attempted": true,
+          "failure_diagnostic": null,
+          "joint_motion_validation": {
+            "cumulative_joint_travel_rad": 0.22595671,
+            "joint_excursions_rad": {
+              "elbow_joint": 0.03096356,
+              "shoulder_lift_joint": 0.08031986,
+              "shoulder_pan_joint": 0.04519804,
+              "wrist_1_joint": 0.00218353,
+              "wrist_2_joint": 0.02059281,
+              "wrist_3_joint": 0.04605579
+            },
+            "maximum_allowed_joint_excursion_rad": 0.78539816,
+            "maximum_cumulative_joint_travel_rad": 2.0,
+            "maximum_joint_excursion_rad": 0.08031986,
+            "maximum_trajectory_duration_sec": 3.0,
+            "reason": null,
+            "success": true,
+            "trajectory_duration_sec": 0.34411004
+          },
+          "reason": null,
+          "result_status": 4,
+          "stage": "search_execute",
+          "success": true,
+          "vertical_axis_validation": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "maximum_observed_tilt_deg": 2.94892743,
+            "maximum_observed_tilt_rad": 0.05146849,
+            "maximum_tilt_deg": 5.0,
+            "maximum_tilt_rad": 0.08726646,
+            "maximum_tilt_waypoint_index": 0,
+            "required_axis_base_link": [
+              0.0,
+              0.0,
+              -1.0
+            ],
+            "sampled_waypoints": 5,
+            "stage": "trajectory_vertical_axis_validation",
+            "success": true,
+            "tool_axis_spin_free": true,
+            "tool_axis_tool0": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "trajectory_waypoints": 5,
+            "wrist_3_joint_directly_commanded": false
+          }
+        },
+        "failure_diagnostic": null,
+        "final_tool0_orientation_quat_xyzw": [
+          0.73384933,
+          0.67931221,
+          0.00014238,
+          0.00026135
+        ],
+        "final_tool0_position_error_m": 0.00049119,
+        "goal_orientation_constraint": false,
+        "goal_vertical_axis_constraint": true,
+        "intermediate_flange_orientation_unconstrained": false,
+        "maximum_tool_vertical_tilt_rad": 0.08726646,
+        "name": "backward_wide",
+        "offset_camera_optical_m": [
+          0.0,
+          0.0,
+          -0.04
+        ],
+        "offset_from_origin_m": [
+          0.03934155,
+          -0.00683617,
+          0.00234721
+        ],
+        "offset_initial_tool0_m": [
+          -0.00381763,
+          0.03981614,
+          -0.00031753
+        ],
+        "orientation_path_constraint": true,
+        "plan_result": {
+          "error_code": 1,
+          "error_message": "",
+          "execution_sent": false,
+          "goal_orientation_constraint": false,
+          "goal_vertical_axis_constraint": true,
+          "intermediate_flange_orientation_unconstrained": false,
+          "joint_motion_validation": {
+            "cumulative_joint_travel_rad": 0.22595671,
+            "joint_excursions_rad": {
+              "elbow_joint": 0.03096356,
+              "shoulder_lift_joint": 0.08031986,
+              "shoulder_pan_joint": 0.04519804,
+              "wrist_1_joint": 0.00218353,
+              "wrist_2_joint": 0.02059281,
+              "wrist_3_joint": 0.04605579
+            },
+            "maximum_allowed_joint_excursion_rad": 0.78539816,
+            "maximum_cumulative_joint_travel_rad": 2.0,
+            "maximum_joint_excursion_rad": 0.08031986,
+            "maximum_trajectory_duration_sec": 3.0,
+            "reason": null,
+            "success": true,
+            "trajectory_duration_sec": 0.34411004
+          },
+          "maximum_tool_vertical_tilt_rad": 0.08726646,
+          "orientation_path_constraint": true,
+          "planned_trajectory": {
+            "duration_sec": 0.34411004,
+            "joint_names": [
+              "shoulder_pan_joint",
+              "shoulder_lift_joint",
+              "elbow_joint",
+              "wrist_1_joint",
+              "wrist_2_joint",
+              "wrist_3_joint"
+            ],
+            "points": 5
+          },
+          "planner": "pilz_industrial_motion_planner/LIN",
+          "planning_time_sec": 0.0013704,
+          "position_goal_constraint": true,
+          "reason": null,
+          "search_motion_type": "cartesian_translation",
+          "stage": "search_plan_only",
+          "success": true,
+          "tool_axis_spin_free": true,
+          "tool_local_z_rotation_rad": 0.0,
+          "vertical_axis_validation": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "maximum_observed_tilt_deg": 2.94892743,
+            "maximum_observed_tilt_rad": 0.05146849,
+            "maximum_tilt_deg": 5.0,
+            "maximum_tilt_rad": 0.08726646,
+            "maximum_tilt_waypoint_index": 0,
+            "required_axis_base_link": [
+              0.0,
+              0.0,
+              -1.0
+            ],
+            "sampled_waypoints": 5,
+            "stage": "trajectory_vertical_axis_validation",
+            "success": true,
+            "tool_axis_spin_free": true,
+            "tool_axis_tool0": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "trajectory_waypoints": 5,
+            "wrist_3_joint_directly_commanded": false
+          },
+          "wrist_3_direct_command": false
+        },
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": null,
+            "goal_orientation_constraint": false,
+            "goal_vertical_axis_constraint": true,
+            "intermediate_flange_orientation_unconstrained": false,
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "backward_wide",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.03934155,
+              -0.00683617,
+              0.00234721
+            ],
+            "offset_initial_tool0_m": [
+              -0.00381763,
+              0.03981614,
+              -0.00031753
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 1,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": {
+                "cumulative_joint_travel_rad": 0.22595671,
+                "joint_excursions_rad": {
+                  "elbow_joint": 0.03096356,
+                  "shoulder_lift_joint": 0.08031986,
+                  "shoulder_pan_joint": 0.04519804,
+                  "wrist_1_joint": 0.00218353,
+                  "wrist_2_joint": 0.02059281,
+                  "wrist_3_joint": 0.04605579
+                },
+                "maximum_allowed_joint_excursion_rad": 0.78539816,
+                "maximum_cumulative_joint_travel_rad": 2.0,
+                "maximum_joint_excursion_rad": 0.08031986,
+                "maximum_trajectory_duration_sec": 3.0,
+                "reason": null,
+                "success": true,
+                "trajectory_duration_sec": 0.34411004
+              },
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.34411004,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 5
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.0013704,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "cartesian_translation",
+              "stage": "search_plan_only",
+              "success": true,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.0,
+              "vertical_axis_validation": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "maximum_observed_tilt_deg": 2.94892743,
+                "maximum_observed_tilt_rad": 0.05146849,
+                "maximum_tilt_deg": 5.0,
+                "maximum_tilt_rad": 0.08726646,
+                "maximum_tilt_waypoint_index": 0,
+                "required_axis_base_link": [
+                  0.0,
+                  0.0,
+                  -1.0
+                ],
+                "sampled_waypoints": 5,
+                "stage": "trajectory_vertical_axis_validation",
+                "success": true,
+                "tool_axis_spin_free": true,
+                "tool_axis_tool0": [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "trajectory_waypoints": 5,
+                "wrist_3_joint_directly_commanded": false
+              },
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "cartesian_translation",
+            "segment_distance_m": 0.03999842,
+            "segment_orientation_distance_rad": 0.00010431,
+            "target_tool0_orientation_quat_xyzw": [
+              0.73347476,
+              0.67922716,
+              0.01176375,
+              0.02295316
+            ],
+            "target_tool0_position_m": [
+              -0.27026316,
+              0.14626444,
+              0.8047119
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.8613923,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_rad": 0.0,
+            "wrist_3_direct_command": false
+          }
+        ],
+        "position_goal_constraint": true,
+        "search_motion_type": "cartesian_translation",
+        "segment_distance_m": 0.03999842,
+        "segment_orientation_distance_rad": 0.00010431,
+        "stationary_joint_state": {
+          "maximum_allowed_joint_speed_rad_sec": 0.01,
+          "maximum_joint_speed_rad_sec": 0.0,
+          "stationary_sample_count": 2,
+          "success": true
+        },
+        "target_tool0_orientation_quat_xyzw": [
+          0.73347476,
+          0.67922716,
+          0.01176375,
+          0.02295316
+        ],
+        "target_tool0_position_m": [
+          -0.27026316,
+          0.14626444,
+          0.8047119
+        ],
+        "target_tool0_radius_from_ur_base_m": 0.8613923,
+        "tool_axis_spin_free": true,
+        "tool_local_z_rotation_rad": 0.0,
+        "wrist_3_direct_command": false
+      },
+      {
+        "adaptive_candidate_index": 0,
+        "adaptive_scale_applied": false,
+        "camera_extrinsic_applied": false,
+        "direction_reference": "tool0 local +Z axis",
+        "execution_result": {
+          "candidate_detected": false,
+          "error_code": 1,
+          "error_message": "",
+          "execution_attempted": true,
+          "failure_diagnostic": null,
+          "joint_motion_validation": {
+            "cumulative_joint_travel_rad": 0.36051041,
+            "joint_excursions_rad": {
+              "elbow_joint": 0.01487616,
+              "shoulder_lift_joint": 0.01513494,
+              "shoulder_pan_joint": 0.01029368,
+              "wrist_1_joint": 0.04714108,
+              "wrist_2_joint": 0.02239375,
+              "wrist_3_joint": 0.2506708
+            },
+            "maximum_allowed_joint_excursion_rad": 0.78539816,
+            "maximum_cumulative_joint_travel_rad": 2.0,
+            "maximum_joint_excursion_rad": 0.2506708,
+            "maximum_trajectory_duration_sec": 3.0,
+            "reason": null,
+            "success": true,
+            "trajectory_duration_sec": 0.70940502
+          },
+          "reason": null,
+          "result_status": 4,
+          "stage": "search_execute",
+          "success": true,
+          "vertical_axis_validation": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "maximum_observed_tilt_deg": 2.9558871,
+            "maximum_observed_tilt_rad": 0.05158996,
+            "maximum_tilt_deg": 5.0,
+            "maximum_tilt_rad": 0.08726646,
+            "maximum_tilt_waypoint_index": 8,
+            "required_axis_base_link": [
+              0.0,
+              0.0,
+              -1.0
+            ],
+            "sampled_waypoints": 9,
+            "stage": "trajectory_vertical_axis_validation",
+            "success": true,
+            "tool_axis_spin_free": true,
+            "tool_axis_tool0": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "trajectory_waypoints": 9,
+            "wrist_3_joint_directly_commanded": false
+          }
+        },
+        "failure_diagnostic": null,
+        "final_tool0_orientation_error_rad": 0.00142678,
+        "final_tool0_orientation_quat_xyzw": [
+          0.81545576,
+          0.57825044,
+          0.01462877,
+          0.02107902
+        ],
+        "final_tool0_position_error_m": 0.00011358,
+        "goal_orientation_constraint": true,
+        "goal_vertical_axis_constraint": false,
+        "intermediate_flange_orientation_unconstrained": false,
+        "joint_selection": "MoveIt pose-goal IK and planning",
+        "maximum_tool_vertical_tilt_rad": 0.08726646,
+        "name": "scan_left",
+        "offset_camera_optical_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "offset_from_origin_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "offset_initial_tool0_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "orientation_path_constraint": true,
+        "plan_result": {
+          "error_code": 1,
+          "error_message": "",
+          "execution_sent": false,
+          "goal_orientation_constraint": true,
+          "goal_vertical_axis_constraint": false,
+          "intermediate_flange_orientation_unconstrained": false,
+          "joint_motion_validation": {
+            "cumulative_joint_travel_rad": 0.36051041,
+            "joint_excursions_rad": {
+              "elbow_joint": 0.01487616,
+              "shoulder_lift_joint": 0.01513494,
+              "shoulder_pan_joint": 0.01029368,
+              "wrist_1_joint": 0.04714108,
+              "wrist_2_joint": 0.02239375,
+              "wrist_3_joint": 0.2506708
+            },
+            "maximum_allowed_joint_excursion_rad": 0.78539816,
+            "maximum_cumulative_joint_travel_rad": 2.0,
+            "maximum_joint_excursion_rad": 0.2506708,
+            "maximum_trajectory_duration_sec": 3.0,
+            "reason": null,
+            "success": true,
+            "trajectory_duration_sec": 0.70940502
+          },
+          "maximum_tool_vertical_tilt_rad": 0.08726646,
+          "orientation_path_constraint": true,
+          "planned_trajectory": {
+            "duration_sec": 0.70940502,
+            "joint_names": [
+              "shoulder_pan_joint",
+              "shoulder_lift_joint",
+              "elbow_joint",
+              "wrist_1_joint",
+              "wrist_2_joint",
+              "wrist_3_joint"
+            ],
+            "points": 9
+          },
+          "planner": "pilz_industrial_motion_planner/LIN",
+          "planning_time_sec": 0.00162193,
+          "position_goal_constraint": true,
+          "reason": null,
+          "search_motion_type": "tool_local_z_rotation",
+          "stage": "search_plan_only",
+          "success": true,
+          "tool_axis_spin_free": true,
+          "tool_local_z_rotation_rad": 0.26179939,
+          "vertical_axis_validation": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "maximum_observed_tilt_deg": 2.9558871,
+            "maximum_observed_tilt_rad": 0.05158996,
+            "maximum_tilt_deg": 5.0,
+            "maximum_tilt_rad": 0.08726646,
+            "maximum_tilt_waypoint_index": 8,
+            "required_axis_base_link": [
+              0.0,
+              0.0,
+              -1.0
+            ],
+            "sampled_waypoints": 9,
+            "stage": "trajectory_vertical_axis_validation",
+            "success": true,
+            "tool_axis_spin_free": true,
+            "tool_axis_tool0": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "trajectory_waypoints": 9,
+            "wrist_3_joint_directly_commanded": false
+          },
+          "wrist_3_direct_command": false
+        },
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": false,
+            "direction_reference": "tool0 local +Z axis",
+            "failure_diagnostic": null,
+            "goal_orientation_constraint": true,
+            "goal_vertical_axis_constraint": false,
+            "intermediate_flange_orientation_unconstrained": false,
+            "joint_selection": "MoveIt pose-goal IK and planning",
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_left",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_from_origin_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_initial_tool0_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 1,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": {
+                "cumulative_joint_travel_rad": 0.36051041,
+                "joint_excursions_rad": {
+                  "elbow_joint": 0.01487616,
+                  "shoulder_lift_joint": 0.01513494,
+                  "shoulder_pan_joint": 0.01029368,
+                  "wrist_1_joint": 0.04714108,
+                  "wrist_2_joint": 0.02239375,
+                  "wrist_3_joint": 0.2506708
+                },
+                "maximum_allowed_joint_excursion_rad": 0.78539816,
+                "maximum_cumulative_joint_travel_rad": 2.0,
+                "maximum_joint_excursion_rad": 0.2506708,
+                "maximum_trajectory_duration_sec": 3.0,
+                "reason": null,
+                "success": true,
+                "trajectory_duration_sec": 0.70940502
+              },
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.70940502,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 9
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.00162193,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "tool_local_z_rotation",
+              "stage": "search_plan_only",
+              "success": true,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.26179939,
+              "vertical_axis_validation": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "maximum_observed_tilt_deg": 2.9558871,
+                "maximum_observed_tilt_rad": 0.05158996,
+                "maximum_tilt_deg": 5.0,
+                "maximum_tilt_rad": 0.08726646,
+                "maximum_tilt_waypoint_index": 8,
+                "required_axis_base_link": [
+                  0.0,
+                  0.0,
+                  -1.0
+                ],
+                "sampled_waypoints": 9,
+                "stage": "trajectory_vertical_axis_validation",
+                "success": true,
+                "tool_axis_spin_free": true,
+                "tool_axis_tool0": [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "trajectory_waypoints": 9,
+                "wrist_3_joint_directly_commanded": false
+              },
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "tool_local_z_rotation",
+            "segment_distance_m": 0.0,
+            "segment_orientation_distance_rad": 0.26664586,
+            "target_tool0_orientation_quat_xyzw": [
+              0.81585672,
+              0.57767861,
+              0.0146591,
+              0.02122132
+            ],
+            "target_tool0_position_m": [
+              -0.26986827,
+              0.14624185,
+              0.80491179
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.86145143,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_deg": 15.0,
+            "tool_local_z_rotation_rad": 0.26179939,
+            "wrist_3_direct_command": false
+          }
+        ],
+        "position_goal_constraint": true,
+        "search_motion_type": "tool_local_z_rotation",
+        "segment_distance_m": 0.0,
+        "segment_orientation_distance_rad": 0.26664586,
+        "stationary_joint_state": {
+          "maximum_allowed_joint_speed_rad_sec": 0.01,
+          "maximum_joint_speed_rad_sec": 0.00699797,
+          "stationary_sample_count": 2,
+          "success": true
+        },
+        "target_tool0_orientation_quat_xyzw": [
+          0.81585672,
+          0.57767861,
+          0.0146591,
+          0.02122132
+        ],
+        "target_tool0_position_m": [
+          -0.26986827,
+          0.14624185,
+          0.80491179
+        ],
+        "target_tool0_radius_from_ur_base_m": 0.86145143,
+        "tool_axis_spin_free": true,
+        "tool_local_z_rotation_deg": 15.0,
+        "tool_local_z_rotation_rad": 0.26179939,
+        "wrist_3_direct_command": false
+      },
+      {
+        "adaptive_candidate_index": 0,
+        "adaptive_scale_applied": false,
+        "camera_extrinsic_applied": false,
+        "direction_reference": "tool0 local +Z axis",
+        "execution_result": {
+          "candidate_detected": true,
+          "execution_attempted": true,
+          "joint_motion_validation": {
+            "cumulative_joint_travel_rad": 0.52383752,
+            "joint_excursions_rad": {
+              "elbow_joint": 5.407e-05,
+              "shoulder_lift_joint": 3.576e-05,
+              "shoulder_pan_joint": 1.661e-05,
+              "wrist_1_joint": 2.745e-05,
+              "wrist_2_joint": 8.159e-05,
+              "wrist_3_joint": 0.52362205
+            },
+            "maximum_allowed_joint_excursion_rad": 0.78539816,
+            "maximum_cumulative_joint_travel_rad": 2.0,
+            "maximum_joint_excursion_rad": 0.52362205,
+            "maximum_trajectory_duration_sec": 3.0,
+            "reason": null,
+            "success": true,
+            "trajectory_duration_sec": 1.00032315
+          },
+          "stage": "search_cancelled_for_candidate",
+          "success": true,
+          "trajectory_cancel_requested": true,
+          "vertical_axis_validation": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "maximum_observed_tilt_deg": 2.95588692,
+            "maximum_observed_tilt_rad": 0.05158996,
+            "maximum_tilt_deg": 5.0,
+            "maximum_tilt_rad": 0.08726646,
+            "maximum_tilt_waypoint_index": 10,
+            "required_axis_base_link": [
+              0.0,
+              0.0,
+              -1.0
+            ],
+            "sampled_waypoints": 12,
+            "stage": "trajectory_vertical_axis_validation",
+            "success": true,
+            "tool_axis_spin_free": true,
+            "tool_axis_tool0": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "trajectory_waypoints": 12,
+            "wrist_3_joint_directly_commanded": false
+          }
+        },
+        "failure_diagnostic": null,
+        "goal_orientation_constraint": true,
+        "goal_vertical_axis_constraint": false,
+        "intermediate_flange_orientation_unconstrained": false,
+        "joint_selection": "MoveIt pose-goal IK and planning",
+        "maximum_tool_vertical_tilt_rad": 0.08726646,
+        "name": "scan_right",
+        "offset_camera_optical_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "offset_from_origin_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "offset_initial_tool0_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "orientation_path_constraint": true,
+        "plan_result": {
+          "error_code": 1,
+          "error_message": "",
+          "execution_sent": false,
+          "goal_orientation_constraint": true,
+          "goal_vertical_axis_constraint": false,
+          "intermediate_flange_orientation_unconstrained": false,
+          "joint_motion_validation": {
+            "cumulative_joint_travel_rad": 0.52383752,
+            "joint_excursions_rad": {
+              "elbow_joint": 5.407e-05,
+              "shoulder_lift_joint": 3.576e-05,
+              "shoulder_pan_joint": 1.661e-05,
+              "wrist_1_joint": 2.745e-05,
+              "wrist_2_joint": 8.159e-05,
+              "wrist_3_joint": 0.52362205
+            },
+            "maximum_allowed_joint_excursion_rad": 0.78539816,
+            "maximum_cumulative_joint_travel_rad": 2.0,
+            "maximum_joint_excursion_rad": 0.52362205,
+            "maximum_trajectory_duration_sec": 3.0,
+            "reason": null,
+            "success": true,
+            "trajectory_duration_sec": 1.00032315
+          },
+          "maximum_tool_vertical_tilt_rad": 0.08726646,
+          "orientation_path_constraint": true,
+          "planned_trajectory": {
+            "duration_sec": 1.00032315,
+            "joint_names": [
+              "shoulder_pan_joint",
+              "shoulder_lift_joint",
+              "elbow_joint",
+              "wrist_1_joint",
+              "wrist_2_joint",
+              "wrist_3_joint"
+            ],
+            "points": 12
+          },
+          "planner": "pilz_industrial_motion_planner/LIN",
+          "planning_time_sec": 0.00109769,
+          "position_goal_constraint": true,
+          "reason": null,
+          "search_motion_type": "tool_local_z_rotation",
+          "stage": "search_plan_only",
+          "success": true,
+          "tool_axis_spin_free": true,
+          "tool_local_z_rotation_rad": -0.26179939,
+          "vertical_axis_validation": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "maximum_observed_tilt_deg": 2.95588692,
+            "maximum_observed_tilt_rad": 0.05158996,
+            "maximum_tilt_deg": 5.0,
+            "maximum_tilt_rad": 0.08726646,
+            "maximum_tilt_waypoint_index": 10,
+            "required_axis_base_link": [
+              0.0,
+              0.0,
+              -1.0
+            ],
+            "sampled_waypoints": 12,
+            "stage": "trajectory_vertical_axis_validation",
+            "success": true,
+            "tool_axis_spin_free": true,
+            "tool_axis_tool0": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "trajectory_waypoints": 12,
+            "wrist_3_joint_directly_commanded": false
+          },
+          "wrist_3_direct_command": false
+        },
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": false,
+            "direction_reference": "tool0 local +Z axis",
+            "failure_diagnostic": null,
+            "goal_orientation_constraint": true,
+            "goal_vertical_axis_constraint": false,
+            "intermediate_flange_orientation_unconstrained": false,
+            "joint_selection": "MoveIt pose-goal IK and planning",
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_right",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_from_origin_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_initial_tool0_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 1,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": {
+                "cumulative_joint_travel_rad": 0.52383752,
+                "joint_excursions_rad": {
+                  "elbow_joint": 5.407e-05,
+                  "shoulder_lift_joint": 3.576e-05,
+                  "shoulder_pan_joint": 1.661e-05,
+                  "wrist_1_joint": 2.745e-05,
+                  "wrist_2_joint": 8.159e-05,
+                  "wrist_3_joint": 0.52362205
+                },
+                "maximum_allowed_joint_excursion_rad": 0.78539816,
+                "maximum_cumulative_joint_travel_rad": 2.0,
+                "maximum_joint_excursion_rad": 0.52362205,
+                "maximum_trajectory_duration_sec": 3.0,
+                "reason": null,
+                "success": true,
+                "trajectory_duration_sec": 1.00032315
+              },
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 1.00032315,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 12
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.00109769,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "tool_local_z_rotation",
+              "stage": "search_plan_only",
+              "success": true,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": -0.26179939,
+              "vertical_axis_validation": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "maximum_observed_tilt_deg": 2.95588692,
+                "maximum_observed_tilt_rad": 0.05158996,
+                "maximum_tilt_deg": 5.0,
+                "maximum_tilt_rad": 0.08726646,
+                "maximum_tilt_waypoint_index": 10,
+                "required_axis_base_link": [
+                  0.0,
+                  0.0,
+                  -1.0
+                ],
+                "sampled_waypoints": 12,
+                "stage": "trajectory_vertical_axis_validation",
+                "success": true,
+                "tool_axis_spin_free": true,
+                "tool_axis_tool0": [
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "trajectory_waypoints": 12,
+                "wrist_3_joint_directly_commanded": false
+              },
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "tool_local_z_rotation",
+            "segment_distance_m": 0.0,
+            "segment_orientation_distance_rad": 0.52342478,
+            "target_tool0_orientation_quat_xyzw": [
+              0.63854285,
+              0.76915395,
+              0.00866712,
+              0.02429227
+            ],
+            "target_tool0_position_m": [
+              -0.26982736,
+              0.14624519,
+              0.80483858
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.86137077,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_deg": -15.0,
+            "tool_local_z_rotation_rad": -0.26179939,
+            "wrist_3_direct_command": false
+          }
+        ],
+        "position_goal_constraint": true,
+        "search_motion_type": "tool_local_z_rotation",
+        "segment_distance_m": 0.0,
+        "segment_orientation_distance_rad": 0.52342478,
+        "stationary_joint_state": {
+          "maximum_allowed_joint_speed_rad_sec": 0.01,
+          "maximum_joint_speed_rad_sec": 0.00848649,
+          "stationary_sample_count": 2,
+          "success": true
+        },
+        "target_tool0_orientation_quat_xyzw": [
+          0.63854285,
+          0.76915395,
+          0.00866712,
+          0.02429227
+        ],
+        "target_tool0_position_m": [
+          -0.26982736,
+          0.14624519,
+          0.80483858
+        ],
+        "target_tool0_radius_from_ur_base_m": 0.86137077,
+        "tool_axis_spin_free": true,
+        "tool_local_z_rotation_deg": -15.0,
+        "tool_local_z_rotation_rad": -0.26179939,
+        "wrist_3_direct_command": false
+      }
+    ],
+    "selected_mouth": {
+      "available": true,
+      "candidate_count": 1,
+      "frame_id": "base_link",
+      "identity_locked": true,
+      "identity_unsafe": false,
+      "jitter_stddev_m": [
+        0.00656803,
+        0.00058364,
+        0.00203687
+      ],
+      "latest_position_m": [
+        -0.918208,
+        0.032407,
+        0.656708
+      ],
+      "latest_received_age_sec": 0.12675724,
+      "latest_source_stamp_sec": 1785813914.8755898,
+      "max_distance_from_mean_m": 0.01032236,
+      "mean_position_m": [
+        -0.91066275,
+        0.03313,
+        0.65419725
+      ],
+      "sample_count": 4,
+      "selected_candidate_index": 0,
+      "stability_requirements": {
+        "ambiguity_margin_m": 0.03,
+        "maximum_age_sec": 1.0,
+        "maximum_identity_jump_m": 0.12,
+        "maximum_spread_m": 0.025,
+        "minimum_samples": 3
+      },
+      "stable": true,
+      "surface_normal": {
+        "available": true,
+        "frame_id": "base_link",
+        "mean_vector": [
+          0.8976267,
+          0.16428684,
+          -0.40899405
+        ],
+        "sample_count": 4
+      },
+      "target_selection": "center",
+      "visible_candidates": [
+        {
+          "depth_m": 0.655,
+          "image_x": 189.819,
+          "image_y": 328.875,
+          "position_m": [
+            -0.918208,
+            0.032407,
+            0.656708
+          ],
+          "surface_normal": [
+            0.903284,
+            0.254268,
+            -0.345581
+          ]
+        }
+      ]
+    },
+    "skipped_search_waypoints": [],
+    "stage": "mouth_found_during_search",
+    "start_state_checks": [
+      {
+        "before": {
+          "available": true,
+          "classification": "START_STATE_VALID",
+          "contacts": [],
+          "octomap_only_collision": false,
+          "valid": true
+        },
+        "before_search_waypoint": "backward_wide",
+        "octomap_clear_attempted": false,
+        "octomap_rebuilt_from_fresh_clouds": false,
+        "recovered": false
+      },
+      {
+        "before": {
+          "available": true,
+          "classification": "START_STATE_VALID",
+          "contacts": [],
+          "octomap_only_collision": false,
+          "valid": true
+        },
+        "before_search_waypoint": "scan_left",
+        "octomap_clear_attempted": false,
+        "octomap_rebuilt_from_fresh_clouds": false,
+        "recovered": false
+      },
+      {
+        "before": {
+          "available": true,
+          "classification": "START_STATE_VALID",
+          "contacts": [],
+          "octomap_only_collision": false,
+          "valid": true
+        },
+        "before_search_waypoint": "scan_right",
+        "octomap_clear_attempted": false,
+        "octomap_rebuilt_from_fresh_clouds": false,
+        "recovered": false
+      }
+    ],
+    "stopped_for_stability": true,
+    "success": true,
+    "target_selection": "center",
+    "tool_axis_spin_free": true,
+    "trajectory_sent": true,
+    "translation_only": false,
+    "vertical_axis_constraint_active": true,
+    "wrist_3_direct_command": false
+  },
+  "automatic_retreat_sent": false,
+  "camera_mount_match": {
+    "configured": {
+      "rpy_rad": [
+        3.0678492,
+        -0.00514696,
+        -1.46519711
+      ],
+      "translation_m": [
+        0.08492189,
+        0.00172131,
+        0.01390208
+      ]
+    },
+    "live": {
+      "available": true,
+      "child_frame": "d435i_link",
+      "orientation_quat_xyzw": [
+        0.74286778,
+        -0.6684175,
+        -0.02274236,
+        0.02912556
+      ],
+      "parent_frame": "tool0",
+      "position_m": [
+        0.08492189,
+        0.00172131,
+        0.01390208
+      ]
+    },
+    "matches": true,
+    "maximum_rotation_error_deg": 0.5,
+    "maximum_translation_error_m": 0.001,
+    "reason": null,
+    "rotation_error_deg": 0.0,
+    "rotation_error_rad": 0.0,
+    "translation_error_m": 0.0
+  },
+  "camera_tf_used": {
+    "available": true,
+    "child_frame": "d435i_color_optical_frame",
+    "orientation_quat_xyzw": [
+      0.47747294,
+      0.54710523,
+      -0.49688541,
+      -0.47518454
+    ],
+    "parent_frame": "base_link",
+    "position_m": [
+      -0.28194325,
+      0.21488003,
+      0.78822243
+    ]
+  },
+  "captured_at": "2026-08-04T11:25:06.593+08:00",
+  "controller_result": null,
+  "cup_tilt_commanded": false,
+  "detected_mouth_pose": {
+    "frame_id": "base_link",
+    "position_m": [
+      -0.91855529,
+      0.03174243,
+      0.65742771
+    ]
+  },
+  "direct_mouth_contact": false,
+  "dynamic_octomap_readiness": {
+    "execution_mode": true,
+    "failures": [],
+    "filtered_cloud": {
+      "active": true,
+      "age_sec": 6.936e-05,
+      "frame_id": "d435i_color_optical_frame",
+      "height": 1,
+      "maximum_age_sec": 0.75,
+      "point_count": 8156,
+      "topic": "/wrist_rgbd/filtered_cloud",
+      "width": 8156
+    },
+    "move_group_parameters": {
+      "allow_trajectory_execution": true,
+      "available": true,
+      "octomap_resolution_m": 0.03,
+      "sensors": [
+        "wrist_rgbd_pointcloud"
+      ]
+    },
+    "raw_cloud": {
+      "active": true,
+      "age_sec": 0.01915365,
+      "frame_id": "d435i_color_optical_frame",
+      "height": 1,
+      "maximum_age_sec": 0.75,
+      "point_count": 8156,
+      "topic": "/wrist_rgbd/points",
+      "width": 8156
+    },
+    "success": true
+  },
+  "elapsed_sec": 20.02487615402788,
+  "execution_attempted": false,
+  "execution_sent": false,
+  "final_error_m": null,
+  "final_state": "refused",
+  "final_straw_tip_pose": null,
+  "hold_completed": false,
+  "hold_duration_sec": 3.0,
+  "integrated_real_feed_water": {
+    "active_search": true,
+    "active_search_camera_extrinsic_applied": true,
+    "active_search_direction_reference": {
+      "backward_up_down": "d435i_color_optical_frame frozen at initial tool0 pose",
+      "left_right": "tool0 local Z rotation"
+    },
+    "active_search_intermediate_flange_orientation_unconstrained": false,
+    "active_search_order": [
+      "backward_wide",
+      "scan_left",
+      "scan_right",
+      "scan_up",
+      "scan_down"
+    ],
+    "active_search_planner": "pilz_industrial_motion_planner/LIN",
+    "active_search_vertical_axis_constraint": true,
+    "adaptive_left_right_angles_deg": [
+      15.0,
+      10.0,
+      5.0
+    ],
+    "adaptive_search_distances_m": {
+      "backward": [
+        0.04,
+        0.03,
+        0.02
+      ],
+      "skip_unreachable_direction": true,
+      "up_down": [
+        0.05,
+        0.04,
+        0.03,
+        0.02
+      ]
+    },
+    "combined_static_and_dynamic_scene_checks": true,
+    "detour_final_goal_orientation_constraint": true,
+    "direct_clear_path_first": true,
+    "dynamic_obstacle_avoidance": true,
+    "fk_waypoint_vertical_axis_validation": true,
+    "left_right_rotation_each_side_deg": 15.0,
+    "left_right_search_strategy": "MoveIt tool0-local-Z pose rotations",
+    "left_right_total_sweep_deg": 30.0,
+    "maximum_cumulative_joint_travel_rad": 2.0,
+    "maximum_joint_excursion_rad": 0.78539816,
+    "maximum_search_trajectory_duration_sec": 3.0,
+    "maximum_tool_vertical_tilt_deg": 5.0,
+    "multi_target_identity_lock": true,
+    "ompl_active_search_enabled": false,
+    "ompl_dynamic_obstacle_detour_enabled": true,
+    "position_only_active_search_goals": false,
+    "rotation_search_enabled": true,
+    "same_target_replanning": true,
+    "target_selection": "center",
+    "tool_axis_spin_free": true,
+    "translation_only_search": false,
+    "vertical_axis_detour_after_direct_rejection": true,
+    "wait_for_clear": false,
+    "wrist_3_direct_command": false
+  },
+  "maximum_planned_displacement_m": 1.3,
+  "mode": "execute",
+  "mount_calibration": {
+    "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+    "corrected_physical_profile": true,
+    "metrics": {
+      "captured_at": "2026-07-23T15:45:00+08:00",
+      "limitation": "One physical approach direction plus the upright-image constraint fixes the axis convention, but a three-marker solve is still required for metrology-grade 6-DoF verification.",
+      "method": "manual_physical_axis_alignment",
+      "preserved_tool0_to_optical_center_m": [
+        0.07011388,
+        5.789e-05,
+        0.01478767
+      ],
+      "rollback_tool0_to_d435i_link": {
+        "note": "Legacy simulation-derived provisional transform",
+        "rpy_rad": [
+          -3.14159265,
+          -0.027969,
+          -0.153885
+        ],
+        "translation_m": [
+          0.072299,
+          0.014823,
+          0.015
+        ]
+      },
+      "rotation_determinant": 1.0,
+      "rotation_orthogonality_error": 0.0,
+      "target_camera_optical_axes_in_base_link": {
+        "+X_image_right": [
+          0.0,
+          1.0,
+          0.0
+        ],
+        "+Y_image_down": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "+Z_depth_forward": [
+          -1.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "status": "provisional",
+    "tool0_to_d435i_link": {
+      "rpy_rad": [
+        3.0678492,
+        -0.00514696,
+        -1.46519711
+      ],
+      "translation_m": [
+        0.08492189,
+        0.00172131,
+        0.01390208
+      ]
+    }
+  },
+  "pipeline_report_path": "/home/dase-hw101/ur_drinking_project/reports/feed_water_real_premouth_20260804_112506.json",
+  "pipeline_result": {
+    "active_search": {
+      "adaptive_distance_policy_m": {
+        "backward": [
+          0.04,
+          0.03,
+          0.02
+        ],
+        "skip_if_all_bounded_candidates_fail": true,
+        "up_down": [
+          0.05,
+          0.04,
+          0.03,
+          0.02
+        ]
+      },
+      "adaptive_left_right_angles_deg": [
+        15.0,
+        10.0,
+        5.0
+      ],
+      "camera_extrinsic_applied": true,
+      "candidate_detected": true,
+      "checks": {
+        "camera_mount_match": {
+          "configured": {
+            "rpy_rad": [
+              3.0678492,
+              -0.00514696,
+              -1.46519711
+            ],
+            "translation_m": [
+              0.08492189,
+              0.00172131,
+              0.01390208
+            ]
+          },
+          "live": {
+            "available": true,
+            "child_frame": "d435i_link",
+            "orientation_quat_xyzw": [
+              0.74286778,
+              -0.6684175,
+              -0.02274236,
+              0.02912556
+            ],
+            "parent_frame": "tool0",
+            "position_m": [
+              0.08492189,
+              0.00172131,
+              0.01390208
+            ]
+          },
+          "matches": true,
+          "maximum_rotation_error_deg": 0.5,
+          "maximum_translation_error_m": 0.001,
+          "reason": null,
+          "rotation_error_deg": 0.0,
+          "rotation_error_rad": 0.0,
+          "translation_error_m": 0.0
+        },
+        "camera_tf": {
+          "available": true,
+          "child_frame": "d435i_color_optical_frame",
+          "orientation_quat_xyzw": [
+            -0.5428461,
+            -0.4844153,
+            0.42611697,
+            0.53766556
+          ],
+          "parent_frame": "base_link",
+          "position_m": [
+            -0.30343031,
+            0.22273336,
+            0.78662331
+          ]
+        },
+        "controllers": {
+          "available": true,
+          "joint_state_broadcaster_active": true,
+          "scaled_joint_trajectory_controller_active": true
+        },
+        "current_straw_tip_pose": {
+          "frame_id": "base_link",
+          "orientation_quat_xyzw": [
+            0.73347476,
+            0.67922716,
+            0.01176375,
+            0.02295316
+          ],
+          "position_m": [
+            -0.30113205,
+            0.26276312,
+            0.80083305
+          ]
+        },
+        "execute_trajectory_available": null,
+        "joint_state": {
+          "complete": true,
+          "expected_joint_count": 6,
+          "received": true,
+          "received_expected_joint_count": 6
+        },
+        "mount_calibration": {
+          "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+          "corrected_physical_profile": true,
+          "metrics": {
+            "captured_at": "2026-07-23T15:45:00+08:00",
+            "limitation": "One physical approach direction plus the upright-image constraint fixes the axis convention, but a three-marker solve is still required for metrology-grade 6-DoF verification.",
+            "method": "manual_physical_axis_alignment",
+            "preserved_tool0_to_optical_center_m": [
+              0.07011388,
+              5.789e-05,
+              0.01478767
+            ],
+            "rollback_tool0_to_d435i_link": {
+              "note": "Legacy simulation-derived provisional transform",
+              "rpy_rad": [
+                -3.14159265,
+                -0.027969,
+                -0.153885
+              ],
+              "translation_m": [
+                0.072299,
+                0.014823,
+                0.015
+              ]
+            },
+            "rotation_determinant": 1.0,
+            "rotation_orthogonality_error": 0.0,
+            "target_camera_optical_axes_in_base_link": {
+              "+X_image_right": [
+                0.0,
+                1.0,
+                0.0
+              ],
+              "+Y_image_down": [
+                0.0,
+                0.0,
+                -1.0
+              ],
+              "+Z_depth_forward": [
+                -1.0,
+                0.0,
+                0.0
+              ]
+            }
+          },
+          "status": "provisional",
+          "tool0_to_d435i_link": {
+            "rpy_rad": [
+              3.0678492,
+              -0.00514696,
+              -1.46519711
+            ],
+            "translation_m": [
+              0.08492189,
+              0.00172131,
+              0.01390208
+            ]
+          }
+        },
+        "mouth_pose": {
+          "available": false,
+          "identity_locked": false,
+          "identity_unsafe": false,
+          "perception_status": {
+            "detected": false,
+            "latest_received_age_sec": 0.02215535,
+            "reason": "no_face"
+          },
+          "reason": "no mouth-candidate message has been received; /mouth_detection/status reports no_face",
+          "sample_duration_sec": 1.0,
+          "stable": false,
+          "target_selection": "center"
+        },
+        "move_group_available": true,
+        "required_nodes": {
+          "controller_manager_exists": true,
+          "move_group_exists": true
+        },
+        "robot_mode": 7,
+        "robot_mode_running": true,
+        "robot_program_running": true,
+        "safety_mode": 1,
+        "safety_mode_normal": true,
+        "speed_slider_percent": 60.0,
+        "tool0_pose": {
+          "available": true,
+          "child_frame": "tool0",
+          "link_name": "tool0",
+          "orientation_quat_xyzw": [
+            0.73347476,
+            0.67922716,
+            0.01176375,
+            0.02295316
+          ],
+          "parent_frame": "base_link",
+          "position_m": [
+            -0.30960471,
+            0.1531006,
+            0.80236469
+          ]
+        },
+        "tool0_to_camera_link_tf": {
+          "available": true,
+          "child_frame": "d435i_link",
+          "orientation_quat_xyzw": [
+            0.74286778,
+            -0.6684175,
+            -0.02274236,
+            0.02912556
+          ],
+          "parent_frame": "tool0",
+          "position_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        },
+        "tool_vertical_axis_guard": {
+          "available": true,
+          "maximum_tilt_deg": 5.0,
+          "maximum_tilt_rad": 0.08726646,
+          "required_axis_base_link": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "tilt_deg": 2.95588709,
+          "tilt_rad": 0.05158996,
+          "tool_axis_tool0": [
+            0.0,
+            0.0,
+            1.0
+          ],
+          "within_limit": true
+        },
+        "ur_base_tf": {
+          "available": true,
+          "child_frame": "base_link",
+          "orientation_quat_xyzw": [
+            0.0,
+            0.0,
+            1.0,
+            -0.0
+          ],
+          "parent_frame": "base",
+          "position_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "elapsed_sec": 4.93085853,
+      "execute": true,
+      "fk_waypoint_vertical_axis_validation": true,
+      "intermediate_flange_orientation_unconstrained": false,
+      "left_right_rotation_each_side_deg": 15.0,
+      "left_right_search_strategy": "MoveIt tool0-local-Z pose rotations",
+      "left_right_total_sweep_deg": 30.0,
+      "maximum_cumulative_joint_travel_rad": 2.0,
+      "maximum_joint_excursion_rad": 0.78539816,
+      "maximum_search_trajectory_duration_sec": 3.0,
+      "maximum_time_sec": 15.0,
+      "maximum_tool_vertical_tilt_deg": 5.0,
+      "ompl_active_search_enabled": false,
+      "planner": "pilz_industrial_motion_planner/LIN",
+      "position_only_search_goals": false,
+      "rotation_search_enabled": true,
+      "search_direction_reference": {
+        "backward_up_down": "d435i_color_optical_frame frozen at initial tool0 pose",
+        "left_right": "tool0 local Z rotation"
+      },
+      "search_order": [
+        "backward_wide",
+        "scan_left",
+        "scan_right",
+        "scan_up",
+        "scan_down"
+      ],
+      "search_steps": [
+        {
+          "adaptive_candidate_index": 0,
+          "adaptive_scale_applied": false,
+          "camera_extrinsic_applied": true,
+          "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+          "execution_result": {
+            "candidate_detected": false,
+            "error_code": 1,
+            "error_message": "",
+            "execution_attempted": true,
+            "failure_diagnostic": null,
+            "joint_motion_validation": {
+              "cumulative_joint_travel_rad": 0.22595671,
+              "joint_excursions_rad": {
+                "elbow_joint": 0.03096356,
+                "shoulder_lift_joint": 0.08031986,
+                "shoulder_pan_joint": 0.04519804,
+                "wrist_1_joint": 0.00218353,
+                "wrist_2_joint": 0.02059281,
+                "wrist_3_joint": 0.04605579
+              },
+              "maximum_allowed_joint_excursion_rad": 0.78539816,
+              "maximum_cumulative_joint_travel_rad": 2.0,
+              "maximum_joint_excursion_rad": 0.08031986,
+              "maximum_trajectory_duration_sec": 3.0,
+              "reason": null,
+              "success": true,
+              "trajectory_duration_sec": 0.34411004
+            },
+            "reason": null,
+            "result_status": 4,
+            "stage": "search_execute",
+            "success": true,
+            "vertical_axis_validation": {
+              "frame_id": "base_link",
+              "link_name": "tool0",
+              "maximum_observed_tilt_deg": 2.94892743,
+              "maximum_observed_tilt_rad": 0.05146849,
+              "maximum_tilt_deg": 5.0,
+              "maximum_tilt_rad": 0.08726646,
+              "maximum_tilt_waypoint_index": 0,
+              "required_axis_base_link": [
+                0.0,
+                0.0,
+                -1.0
+              ],
+              "sampled_waypoints": 5,
+              "stage": "trajectory_vertical_axis_validation",
+              "success": true,
+              "tool_axis_spin_free": true,
+              "tool_axis_tool0": [
+                0.0,
+                0.0,
+                1.0
+              ],
+              "trajectory_waypoints": 5,
+              "wrist_3_joint_directly_commanded": false
+            }
+          },
+          "failure_diagnostic": null,
+          "final_tool0_orientation_quat_xyzw": [
+            0.73384933,
+            0.67931221,
+            0.00014238,
+            0.00026135
+          ],
+          "final_tool0_position_error_m": 0.00049119,
+          "goal_orientation_constraint": false,
+          "goal_vertical_axis_constraint": true,
+          "intermediate_flange_orientation_unconstrained": false,
+          "maximum_tool_vertical_tilt_rad": 0.08726646,
+          "name": "backward_wide",
+          "offset_camera_optical_m": [
+            0.0,
+            0.0,
+            -0.04
+          ],
+          "offset_from_origin_m": [
+            0.03934155,
+            -0.00683617,
+            0.00234721
+          ],
+          "offset_initial_tool0_m": [
+            -0.00381763,
+            0.03981614,
+            -0.00031753
+          ],
+          "orientation_path_constraint": true,
+          "plan_result": {
+            "error_code": 1,
+            "error_message": "",
+            "execution_sent": false,
+            "goal_orientation_constraint": false,
+            "goal_vertical_axis_constraint": true,
+            "intermediate_flange_orientation_unconstrained": false,
+            "joint_motion_validation": {
+              "cumulative_joint_travel_rad": 0.22595671,
+              "joint_excursions_rad": {
+                "elbow_joint": 0.03096356,
+                "shoulder_lift_joint": 0.08031986,
+                "shoulder_pan_joint": 0.04519804,
+                "wrist_1_joint": 0.00218353,
+                "wrist_2_joint": 0.02059281,
+                "wrist_3_joint": 0.04605579
+              },
+              "maximum_allowed_joint_excursion_rad": 0.78539816,
+              "maximum_cumulative_joint_travel_rad": 2.0,
+              "maximum_joint_excursion_rad": 0.08031986,
+              "maximum_trajectory_duration_sec": 3.0,
+              "reason": null,
+              "success": true,
+              "trajectory_duration_sec": 0.34411004
+            },
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "orientation_path_constraint": true,
+            "planned_trajectory": {
+              "duration_sec": 0.34411004,
+              "joint_names": [
+                "shoulder_pan_joint",
+                "shoulder_lift_joint",
+                "elbow_joint",
+                "wrist_1_joint",
+                "wrist_2_joint",
+                "wrist_3_joint"
+              ],
+              "points": 5
+            },
+            "planner": "pilz_industrial_motion_planner/LIN",
+            "planning_time_sec": 0.0013704,
+            "position_goal_constraint": true,
+            "reason": null,
+            "search_motion_type": "cartesian_translation",
+            "stage": "search_plan_only",
+            "success": true,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_rad": 0.0,
+            "vertical_axis_validation": {
+              "frame_id": "base_link",
+              "link_name": "tool0",
+              "maximum_observed_tilt_deg": 2.94892743,
+              "maximum_observed_tilt_rad": 0.05146849,
+              "maximum_tilt_deg": 5.0,
+              "maximum_tilt_rad": 0.08726646,
+              "maximum_tilt_waypoint_index": 0,
+              "required_axis_base_link": [
+                0.0,
+                0.0,
+                -1.0
+              ],
+              "sampled_waypoints": 5,
+              "stage": "trajectory_vertical_axis_validation",
+              "success": true,
+              "tool_axis_spin_free": true,
+              "tool_axis_tool0": [
+                0.0,
+                0.0,
+                1.0
+              ],
+              "trajectory_waypoints": 5,
+              "wrist_3_joint_directly_commanded": false
+            },
+            "wrist_3_direct_command": false
+          },
+          "planning_attempts": [
+            {
+              "adaptive_candidate_index": 0,
+              "adaptive_scale_applied": false,
+              "camera_extrinsic_applied": true,
+              "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+              "failure_diagnostic": null,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "name": "backward_wide",
+              "offset_camera_optical_m": [
+                0.0,
+                0.0,
+                -0.04
+              ],
+              "offset_from_origin_m": [
+                0.03934155,
+                -0.00683617,
+                0.00234721
+              ],
+              "offset_initial_tool0_m": [
+                -0.00381763,
+                0.03981614,
+                -0.00031753
+              ],
+              "orientation_path_constraint": true,
+              "plan_result": {
+                "error_code": 1,
+                "error_message": "",
+                "execution_sent": false,
+                "goal_orientation_constraint": false,
+                "goal_vertical_axis_constraint": true,
+                "intermediate_flange_orientation_unconstrained": false,
+                "joint_motion_validation": {
+                  "cumulative_joint_travel_rad": 0.22595671,
+                  "joint_excursions_rad": {
+                    "elbow_joint": 0.03096356,
+                    "shoulder_lift_joint": 0.08031986,
+                    "shoulder_pan_joint": 0.04519804,
+                    "wrist_1_joint": 0.00218353,
+                    "wrist_2_joint": 0.02059281,
+                    "wrist_3_joint": 0.04605579
+                  },
+                  "maximum_allowed_joint_excursion_rad": 0.78539816,
+                  "maximum_cumulative_joint_travel_rad": 2.0,
+                  "maximum_joint_excursion_rad": 0.08031986,
+                  "maximum_trajectory_duration_sec": 3.0,
+                  "reason": null,
+                  "success": true,
+                  "trajectory_duration_sec": 0.34411004
+                },
+                "maximum_tool_vertical_tilt_rad": 0.08726646,
+                "orientation_path_constraint": true,
+                "planned_trajectory": {
+                  "duration_sec": 0.34411004,
+                  "joint_names": [
+                    "shoulder_pan_joint",
+                    "shoulder_lift_joint",
+                    "elbow_joint",
+                    "wrist_1_joint",
+                    "wrist_2_joint",
+                    "wrist_3_joint"
+                  ],
+                  "points": 5
+                },
+                "planner": "pilz_industrial_motion_planner/LIN",
+                "planning_time_sec": 0.0013704,
+                "position_goal_constraint": true,
+                "reason": null,
+                "search_motion_type": "cartesian_translation",
+                "stage": "search_plan_only",
+                "success": true,
+                "tool_axis_spin_free": true,
+                "tool_local_z_rotation_rad": 0.0,
+                "vertical_axis_validation": {
+                  "frame_id": "base_link",
+                  "link_name": "tool0",
+                  "maximum_observed_tilt_deg": 2.94892743,
+                  "maximum_observed_tilt_rad": 0.05146849,
+                  "maximum_tilt_deg": 5.0,
+                  "maximum_tilt_rad": 0.08726646,
+                  "maximum_tilt_waypoint_index": 0,
+                  "required_axis_base_link": [
+                    0.0,
+                    0.0,
+                    -1.0
+                  ],
+                  "sampled_waypoints": 5,
+                  "stage": "trajectory_vertical_axis_validation",
+                  "success": true,
+                  "tool_axis_spin_free": true,
+                  "tool_axis_tool0": [
+                    0.0,
+                    0.0,
+                    1.0
+                  ],
+                  "trajectory_waypoints": 5,
+                  "wrist_3_joint_directly_commanded": false
+                },
+                "wrist_3_direct_command": false
+              },
+              "position_goal_constraint": true,
+              "search_motion_type": "cartesian_translation",
+              "segment_distance_m": 0.03999842,
+              "segment_orientation_distance_rad": 0.00010431,
+              "target_tool0_orientation_quat_xyzw": [
+                0.73347476,
+                0.67922716,
+                0.01176375,
+                0.02295316
+              ],
+              "target_tool0_position_m": [
+                -0.27026316,
+                0.14626444,
+                0.8047119
+              ],
+              "target_tool0_radius_from_ur_base_m": 0.8613923,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.0,
+              "wrist_3_direct_command": false
+            }
+          ],
+          "position_goal_constraint": true,
+          "search_motion_type": "cartesian_translation",
+          "segment_distance_m": 0.03999842,
+          "segment_orientation_distance_rad": 0.00010431,
+          "stationary_joint_state": {
+            "maximum_allowed_joint_speed_rad_sec": 0.01,
+            "maximum_joint_speed_rad_sec": 0.0,
+            "stationary_sample_count": 2,
+            "success": true
+          },
+          "target_tool0_orientation_quat_xyzw": [
+            0.73347476,
+            0.67922716,
+            0.01176375,
+            0.02295316
+          ],
+          "target_tool0_position_m": [
+            -0.27026316,
+            0.14626444,
+            0.8047119
+          ],
+          "target_tool0_radius_from_ur_base_m": 0.8613923,
+          "tool_axis_spin_free": true,
+          "tool_local_z_rotation_rad": 0.0,
+          "wrist_3_direct_command": false
+        },
+        {
+          "adaptive_candidate_index": 0,
+          "adaptive_scale_applied": false,
+          "camera_extrinsic_applied": false,
+          "direction_reference": "tool0 local +Z axis",
+          "execution_result": {
+            "candidate_detected": false,
+            "error_code": 1,
+            "error_message": "",
+            "execution_attempted": true,
+            "failure_diagnostic": null,
+            "joint_motion_validation": {
+              "cumulative_joint_travel_rad": 0.36051041,
+              "joint_excursions_rad": {
+                "elbow_joint": 0.01487616,
+                "shoulder_lift_joint": 0.01513494,
+                "shoulder_pan_joint": 0.01029368,
+                "wrist_1_joint": 0.04714108,
+                "wrist_2_joint": 0.02239375,
+                "wrist_3_joint": 0.2506708
+              },
+              "maximum_allowed_joint_excursion_rad": 0.78539816,
+              "maximum_cumulative_joint_travel_rad": 2.0,
+              "maximum_joint_excursion_rad": 0.2506708,
+              "maximum_trajectory_duration_sec": 3.0,
+              "reason": null,
+              "success": true,
+              "trajectory_duration_sec": 0.70940502
+            },
+            "reason": null,
+            "result_status": 4,
+            "stage": "search_execute",
+            "success": true,
+            "vertical_axis_validation": {
+              "frame_id": "base_link",
+              "link_name": "tool0",
+              "maximum_observed_tilt_deg": 2.9558871,
+              "maximum_observed_tilt_rad": 0.05158996,
+              "maximum_tilt_deg": 5.0,
+              "maximum_tilt_rad": 0.08726646,
+              "maximum_tilt_waypoint_index": 8,
+              "required_axis_base_link": [
+                0.0,
+                0.0,
+                -1.0
+              ],
+              "sampled_waypoints": 9,
+              "stage": "trajectory_vertical_axis_validation",
+              "success": true,
+              "tool_axis_spin_free": true,
+              "tool_axis_tool0": [
+                0.0,
+                0.0,
+                1.0
+              ],
+              "trajectory_waypoints": 9,
+              "wrist_3_joint_directly_commanded": false
+            }
+          },
+          "failure_diagnostic": null,
+          "final_tool0_orientation_error_rad": 0.00142678,
+          "final_tool0_orientation_quat_xyzw": [
+            0.81545576,
+            0.57825044,
+            0.01462877,
+            0.02107902
+          ],
+          "final_tool0_position_error_m": 0.00011358,
+          "goal_orientation_constraint": true,
+          "goal_vertical_axis_constraint": false,
+          "intermediate_flange_orientation_unconstrained": false,
+          "joint_selection": "MoveIt pose-goal IK and planning",
+          "maximum_tool_vertical_tilt_rad": 0.08726646,
+          "name": "scan_left",
+          "offset_camera_optical_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "offset_from_origin_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "offset_initial_tool0_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orientation_path_constraint": true,
+          "plan_result": {
+            "error_code": 1,
+            "error_message": "",
+            "execution_sent": false,
+            "goal_orientation_constraint": true,
+            "goal_vertical_axis_constraint": false,
+            "intermediate_flange_orientation_unconstrained": false,
+            "joint_motion_validation": {
+              "cumulative_joint_travel_rad": 0.36051041,
+              "joint_excursions_rad": {
+                "elbow_joint": 0.01487616,
+                "shoulder_lift_joint": 0.01513494,
+                "shoulder_pan_joint": 0.01029368,
+                "wrist_1_joint": 0.04714108,
+                "wrist_2_joint": 0.02239375,
+                "wrist_3_joint": 0.2506708
+              },
+              "maximum_allowed_joint_excursion_rad": 0.78539816,
+              "maximum_cumulative_joint_travel_rad": 2.0,
+              "maximum_joint_excursion_rad": 0.2506708,
+              "maximum_trajectory_duration_sec": 3.0,
+              "reason": null,
+              "success": true,
+              "trajectory_duration_sec": 0.70940502
+            },
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "orientation_path_constraint": true,
+            "planned_trajectory": {
+              "duration_sec": 0.70940502,
+              "joint_names": [
+                "shoulder_pan_joint",
+                "shoulder_lift_joint",
+                "elbow_joint",
+                "wrist_1_joint",
+                "wrist_2_joint",
+                "wrist_3_joint"
+              ],
+              "points": 9
+            },
+            "planner": "pilz_industrial_motion_planner/LIN",
+            "planning_time_sec": 0.00162193,
+            "position_goal_constraint": true,
+            "reason": null,
+            "search_motion_type": "tool_local_z_rotation",
+            "stage": "search_plan_only",
+            "success": true,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_rad": 0.26179939,
+            "vertical_axis_validation": {
+              "frame_id": "base_link",
+              "link_name": "tool0",
+              "maximum_observed_tilt_deg": 2.9558871,
+              "maximum_observed_tilt_rad": 0.05158996,
+              "maximum_tilt_deg": 5.0,
+              "maximum_tilt_rad": 0.08726646,
+              "maximum_tilt_waypoint_index": 8,
+              "required_axis_base_link": [
+                0.0,
+                0.0,
+                -1.0
+              ],
+              "sampled_waypoints": 9,
+              "stage": "trajectory_vertical_axis_validation",
+              "success": true,
+              "tool_axis_spin_free": true,
+              "tool_axis_tool0": [
+                0.0,
+                0.0,
+                1.0
+              ],
+              "trajectory_waypoints": 9,
+              "wrist_3_joint_directly_commanded": false
+            },
+            "wrist_3_direct_command": false
+          },
+          "planning_attempts": [
+            {
+              "adaptive_candidate_index": 0,
+              "adaptive_scale_applied": false,
+              "camera_extrinsic_applied": false,
+              "direction_reference": "tool0 local +Z axis",
+              "failure_diagnostic": null,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_selection": "MoveIt pose-goal IK and planning",
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "name": "scan_left",
+              "offset_camera_optical_m": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "offset_from_origin_m": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "offset_initial_tool0_m": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "orientation_path_constraint": true,
+              "plan_result": {
+                "error_code": 1,
+                "error_message": "",
+                "execution_sent": false,
+                "goal_orientation_constraint": true,
+                "goal_vertical_axis_constraint": false,
+                "intermediate_flange_orientation_unconstrained": false,
+                "joint_motion_validation": {
+                  "cumulative_joint_travel_rad": 0.36051041,
+                  "joint_excursions_rad": {
+                    "elbow_joint": 0.01487616,
+                    "shoulder_lift_joint": 0.01513494,
+                    "shoulder_pan_joint": 0.01029368,
+                    "wrist_1_joint": 0.04714108,
+                    "wrist_2_joint": 0.02239375,
+                    "wrist_3_joint": 0.2506708
+                  },
+                  "maximum_allowed_joint_excursion_rad": 0.78539816,
+                  "maximum_cumulative_joint_travel_rad": 2.0,
+                  "maximum_joint_excursion_rad": 0.2506708,
+                  "maximum_trajectory_duration_sec": 3.0,
+                  "reason": null,
+                  "success": true,
+                  "trajectory_duration_sec": 0.70940502
+                },
+                "maximum_tool_vertical_tilt_rad": 0.08726646,
+                "orientation_path_constraint": true,
+                "planned_trajectory": {
+                  "duration_sec": 0.70940502,
+                  "joint_names": [
+                    "shoulder_pan_joint",
+                    "shoulder_lift_joint",
+                    "elbow_joint",
+                    "wrist_1_joint",
+                    "wrist_2_joint",
+                    "wrist_3_joint"
+                  ],
+                  "points": 9
+                },
+                "planner": "pilz_industrial_motion_planner/LIN",
+                "planning_time_sec": 0.00162193,
+                "position_goal_constraint": true,
+                "reason": null,
+                "search_motion_type": "tool_local_z_rotation",
+                "stage": "search_plan_only",
+                "success": true,
+                "tool_axis_spin_free": true,
+                "tool_local_z_rotation_rad": 0.26179939,
+                "vertical_axis_validation": {
+                  "frame_id": "base_link",
+                  "link_name": "tool0",
+                  "maximum_observed_tilt_deg": 2.9558871,
+                  "maximum_observed_tilt_rad": 0.05158996,
+                  "maximum_tilt_deg": 5.0,
+                  "maximum_tilt_rad": 0.08726646,
+                  "maximum_tilt_waypoint_index": 8,
+                  "required_axis_base_link": [
+                    0.0,
+                    0.0,
+                    -1.0
+                  ],
+                  "sampled_waypoints": 9,
+                  "stage": "trajectory_vertical_axis_validation",
+                  "success": true,
+                  "tool_axis_spin_free": true,
+                  "tool_axis_tool0": [
+                    0.0,
+                    0.0,
+                    1.0
+                  ],
+                  "trajectory_waypoints": 9,
+                  "wrist_3_joint_directly_commanded": false
+                },
+                "wrist_3_direct_command": false
+              },
+              "position_goal_constraint": true,
+              "search_motion_type": "tool_local_z_rotation",
+              "segment_distance_m": 0.0,
+              "segment_orientation_distance_rad": 0.26664586,
+              "target_tool0_orientation_quat_xyzw": [
+                0.81585672,
+                0.57767861,
+                0.0146591,
+                0.02122132
+              ],
+              "target_tool0_position_m": [
+                -0.26986827,
+                0.14624185,
+                0.80491179
+              ],
+              "target_tool0_radius_from_ur_base_m": 0.86145143,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_deg": 15.0,
+              "tool_local_z_rotation_rad": 0.26179939,
+              "wrist_3_direct_command": false
+            }
+          ],
+          "position_goal_constraint": true,
+          "search_motion_type": "tool_local_z_rotation",
+          "segment_distance_m": 0.0,
+          "segment_orientation_distance_rad": 0.26664586,
+          "stationary_joint_state": {
+            "maximum_allowed_joint_speed_rad_sec": 0.01,
+            "maximum_joint_speed_rad_sec": 0.00699797,
+            "stationary_sample_count": 2,
+            "success": true
+          },
+          "target_tool0_orientation_quat_xyzw": [
+            0.81585672,
+            0.57767861,
+            0.0146591,
+            0.02122132
+          ],
+          "target_tool0_position_m": [
+            -0.26986827,
+            0.14624185,
+            0.80491179
+          ],
+          "target_tool0_radius_from_ur_base_m": 0.86145143,
+          "tool_axis_spin_free": true,
+          "tool_local_z_rotation_deg": 15.0,
+          "tool_local_z_rotation_rad": 0.26179939,
+          "wrist_3_direct_command": false
+        },
+        {
+          "adaptive_candidate_index": 0,
+          "adaptive_scale_applied": false,
+          "camera_extrinsic_applied": false,
+          "direction_reference": "tool0 local +Z axis",
+          "execution_result": {
+            "candidate_detected": true,
+            "execution_attempted": true,
+            "joint_motion_validation": {
+              "cumulative_joint_travel_rad": 0.52383752,
+              "joint_excursions_rad": {
+                "elbow_joint": 5.407e-05,
+                "shoulder_lift_joint": 3.576e-05,
+                "shoulder_pan_joint": 1.661e-05,
+                "wrist_1_joint": 2.745e-05,
+                "wrist_2_joint": 8.159e-05,
+                "wrist_3_joint": 0.52362205
+              },
+              "maximum_allowed_joint_excursion_rad": 0.78539816,
+              "maximum_cumulative_joint_travel_rad": 2.0,
+              "maximum_joint_excursion_rad": 0.52362205,
+              "maximum_trajectory_duration_sec": 3.0,
+              "reason": null,
+              "success": true,
+              "trajectory_duration_sec": 1.00032315
+            },
+            "stage": "search_cancelled_for_candidate",
+            "success": true,
+            "trajectory_cancel_requested": true,
+            "vertical_axis_validation": {
+              "frame_id": "base_link",
+              "link_name": "tool0",
+              "maximum_observed_tilt_deg": 2.95588692,
+              "maximum_observed_tilt_rad": 0.05158996,
+              "maximum_tilt_deg": 5.0,
+              "maximum_tilt_rad": 0.08726646,
+              "maximum_tilt_waypoint_index": 10,
+              "required_axis_base_link": [
+                0.0,
+                0.0,
+                -1.0
+              ],
+              "sampled_waypoints": 12,
+              "stage": "trajectory_vertical_axis_validation",
+              "success": true,
+              "tool_axis_spin_free": true,
+              "tool_axis_tool0": [
+                0.0,
+                0.0,
+                1.0
+              ],
+              "trajectory_waypoints": 12,
+              "wrist_3_joint_directly_commanded": false
+            }
+          },
+          "failure_diagnostic": null,
+          "goal_orientation_constraint": true,
+          "goal_vertical_axis_constraint": false,
+          "intermediate_flange_orientation_unconstrained": false,
+          "joint_selection": "MoveIt pose-goal IK and planning",
+          "maximum_tool_vertical_tilt_rad": 0.08726646,
+          "name": "scan_right",
+          "offset_camera_optical_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "offset_from_origin_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "offset_initial_tool0_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "orientation_path_constraint": true,
+          "plan_result": {
+            "error_code": 1,
+            "error_message": "",
+            "execution_sent": false,
+            "goal_orientation_constraint": true,
+            "goal_vertical_axis_constraint": false,
+            "intermediate_flange_orientation_unconstrained": false,
+            "joint_motion_validation": {
+              "cumulative_joint_travel_rad": 0.52383752,
+              "joint_excursions_rad": {
+                "elbow_joint": 5.407e-05,
+                "shoulder_lift_joint": 3.576e-05,
+                "shoulder_pan_joint": 1.661e-05,
+                "wrist_1_joint": 2.745e-05,
+                "wrist_2_joint": 8.159e-05,
+                "wrist_3_joint": 0.52362205
+              },
+              "maximum_allowed_joint_excursion_rad": 0.78539816,
+              "maximum_cumulative_joint_travel_rad": 2.0,
+              "maximum_joint_excursion_rad": 0.52362205,
+              "maximum_trajectory_duration_sec": 3.0,
+              "reason": null,
+              "success": true,
+              "trajectory_duration_sec": 1.00032315
+            },
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "orientation_path_constraint": true,
+            "planned_trajectory": {
+              "duration_sec": 1.00032315,
+              "joint_names": [
+                "shoulder_pan_joint",
+                "shoulder_lift_joint",
+                "elbow_joint",
+                "wrist_1_joint",
+                "wrist_2_joint",
+                "wrist_3_joint"
+              ],
+              "points": 12
+            },
+            "planner": "pilz_industrial_motion_planner/LIN",
+            "planning_time_sec": 0.00109769,
+            "position_goal_constraint": true,
+            "reason": null,
+            "search_motion_type": "tool_local_z_rotation",
+            "stage": "search_plan_only",
+            "success": true,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_rad": -0.26179939,
+            "vertical_axis_validation": {
+              "frame_id": "base_link",
+              "link_name": "tool0",
+              "maximum_observed_tilt_deg": 2.95588692,
+              "maximum_observed_tilt_rad": 0.05158996,
+              "maximum_tilt_deg": 5.0,
+              "maximum_tilt_rad": 0.08726646,
+              "maximum_tilt_waypoint_index": 10,
+              "required_axis_base_link": [
+                0.0,
+                0.0,
+                -1.0
+              ],
+              "sampled_waypoints": 12,
+              "stage": "trajectory_vertical_axis_validation",
+              "success": true,
+              "tool_axis_spin_free": true,
+              "tool_axis_tool0": [
+                0.0,
+                0.0,
+                1.0
+              ],
+              "trajectory_waypoints": 12,
+              "wrist_3_joint_directly_commanded": false
+            },
+            "wrist_3_direct_command": false
+          },
+          "planning_attempts": [
+            {
+              "adaptive_candidate_index": 0,
+              "adaptive_scale_applied": false,
+              "camera_extrinsic_applied": false,
+              "direction_reference": "tool0 local +Z axis",
+              "failure_diagnostic": null,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_selection": "MoveIt pose-goal IK and planning",
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "name": "scan_right",
+              "offset_camera_optical_m": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "offset_from_origin_m": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "offset_initial_tool0_m": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "orientation_path_constraint": true,
+              "plan_result": {
+                "error_code": 1,
+                "error_message": "",
+                "execution_sent": false,
+                "goal_orientation_constraint": true,
+                "goal_vertical_axis_constraint": false,
+                "intermediate_flange_orientation_unconstrained": false,
+                "joint_motion_validation": {
+                  "cumulative_joint_travel_rad": 0.52383752,
+                  "joint_excursions_rad": {
+                    "elbow_joint": 5.407e-05,
+                    "shoulder_lift_joint": 3.576e-05,
+                    "shoulder_pan_joint": 1.661e-05,
+                    "wrist_1_joint": 2.745e-05,
+                    "wrist_2_joint": 8.159e-05,
+                    "wrist_3_joint": 0.52362205
+                  },
+                  "maximum_allowed_joint_excursion_rad": 0.78539816,
+                  "maximum_cumulative_joint_travel_rad": 2.0,
+                  "maximum_joint_excursion_rad": 0.52362205,
+                  "maximum_trajectory_duration_sec": 3.0,
+                  "reason": null,
+                  "success": true,
+                  "trajectory_duration_sec": 1.00032315
+                },
+                "maximum_tool_vertical_tilt_rad": 0.08726646,
+                "orientation_path_constraint": true,
+                "planned_trajectory": {
+                  "duration_sec": 1.00032315,
+                  "joint_names": [
+                    "shoulder_pan_joint",
+                    "shoulder_lift_joint",
+                    "elbow_joint",
+                    "wrist_1_joint",
+                    "wrist_2_joint",
+                    "wrist_3_joint"
+                  ],
+                  "points": 12
+                },
+                "planner": "pilz_industrial_motion_planner/LIN",
+                "planning_time_sec": 0.00109769,
+                "position_goal_constraint": true,
+                "reason": null,
+                "search_motion_type": "tool_local_z_rotation",
+                "stage": "search_plan_only",
+                "success": true,
+                "tool_axis_spin_free": true,
+                "tool_local_z_rotation_rad": -0.26179939,
+                "vertical_axis_validation": {
+                  "frame_id": "base_link",
+                  "link_name": "tool0",
+                  "maximum_observed_tilt_deg": 2.95588692,
+                  "maximum_observed_tilt_rad": 0.05158996,
+                  "maximum_tilt_deg": 5.0,
+                  "maximum_tilt_rad": 0.08726646,
+                  "maximum_tilt_waypoint_index": 10,
+                  "required_axis_base_link": [
+                    0.0,
+                    0.0,
+                    -1.0
+                  ],
+                  "sampled_waypoints": 12,
+                  "stage": "trajectory_vertical_axis_validation",
+                  "success": true,
+                  "tool_axis_spin_free": true,
+                  "tool_axis_tool0": [
+                    0.0,
+                    0.0,
+                    1.0
+                  ],
+                  "trajectory_waypoints": 12,
+                  "wrist_3_joint_directly_commanded": false
+                },
+                "wrist_3_direct_command": false
+              },
+              "position_goal_constraint": true,
+              "search_motion_type": "tool_local_z_rotation",
+              "segment_distance_m": 0.0,
+              "segment_orientation_distance_rad": 0.52342478,
+              "target_tool0_orientation_quat_xyzw": [
+                0.63854285,
+                0.76915395,
+                0.00866712,
+                0.02429227
+              ],
+              "target_tool0_position_m": [
+                -0.26982736,
+                0.14624519,
+                0.80483858
+              ],
+              "target_tool0_radius_from_ur_base_m": 0.86137077,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_deg": -15.0,
+              "tool_local_z_rotation_rad": -0.26179939,
+              "wrist_3_direct_command": false
+            }
+          ],
+          "position_goal_constraint": true,
+          "search_motion_type": "tool_local_z_rotation",
+          "segment_distance_m": 0.0,
+          "segment_orientation_distance_rad": 0.52342478,
+          "stationary_joint_state": {
+            "maximum_allowed_joint_speed_rad_sec": 0.01,
+            "maximum_joint_speed_rad_sec": 0.00848649,
+            "stationary_sample_count": 2,
+            "success": true
+          },
+          "target_tool0_orientation_quat_xyzw": [
+            0.63854285,
+            0.76915395,
+            0.00866712,
+            0.02429227
+          ],
+          "target_tool0_position_m": [
+            -0.26982736,
+            0.14624519,
+            0.80483858
+          ],
+          "target_tool0_radius_from_ur_base_m": 0.86137077,
+          "tool_axis_spin_free": true,
+          "tool_local_z_rotation_deg": -15.0,
+          "tool_local_z_rotation_rad": -0.26179939,
+          "wrist_3_direct_command": false
+        }
+      ],
+      "selected_mouth": {
+        "available": true,
+        "candidate_count": 1,
+        "frame_id": "base_link",
+        "identity_locked": true,
+        "identity_unsafe": false,
+        "jitter_stddev_m": [
+          0.00656803,
+          0.00058364,
+          0.00203687
+        ],
+        "latest_position_m": [
+          -0.918208,
+          0.032407,
+          0.656708
+        ],
+        "latest_received_age_sec": 0.12675724,
+        "latest_source_stamp_sec": 1785813914.8755898,
+        "max_distance_from_mean_m": 0.01032236,
+        "mean_position_m": [
+          -0.91066275,
+          0.03313,
+          0.65419725
+        ],
+        "sample_count": 4,
+        "selected_candidate_index": 0,
+        "stability_requirements": {
+          "ambiguity_margin_m": 0.03,
+          "maximum_age_sec": 1.0,
+          "maximum_identity_jump_m": 0.12,
+          "maximum_spread_m": 0.025,
+          "minimum_samples": 3
+        },
+        "stable": true,
+        "surface_normal": {
+          "available": true,
+          "frame_id": "base_link",
+          "mean_vector": [
+            0.8976267,
+            0.16428684,
+            -0.40899405
+          ],
+          "sample_count": 4
+        },
+        "target_selection": "center",
+        "visible_candidates": [
+          {
+            "depth_m": 0.655,
+            "image_x": 189.819,
+            "image_y": 328.875,
+            "position_m": [
+              -0.918208,
+              0.032407,
+              0.656708
+            ],
+            "surface_normal": [
+              0.903284,
+              0.254268,
+              -0.345581
+            ]
+          }
+        ]
+      },
+      "skipped_search_waypoints": [],
+      "stage": "mouth_found_during_search",
+      "start_state_checks": [
+        {
+          "before": {
+            "available": true,
+            "classification": "START_STATE_VALID",
+            "contacts": [],
+            "octomap_only_collision": false,
+            "valid": true
+          },
+          "before_search_waypoint": "backward_wide",
+          "octomap_clear_attempted": false,
+          "octomap_rebuilt_from_fresh_clouds": false,
+          "recovered": false
+        },
+        {
+          "before": {
+            "available": true,
+            "classification": "START_STATE_VALID",
+            "contacts": [],
+            "octomap_only_collision": false,
+            "valid": true
+          },
+          "before_search_waypoint": "scan_left",
+          "octomap_clear_attempted": false,
+          "octomap_rebuilt_from_fresh_clouds": false,
+          "recovered": false
+        },
+        {
+          "before": {
+            "available": true,
+            "classification": "START_STATE_VALID",
+            "contacts": [],
+            "octomap_only_collision": false,
+            "valid": true
+          },
+          "before_search_waypoint": "scan_right",
+          "octomap_clear_attempted": false,
+          "octomap_rebuilt_from_fresh_clouds": false,
+          "recovered": false
+        }
+      ],
+      "stopped_for_stability": true,
+      "success": true,
+      "target_selection": "center",
+      "tool_axis_spin_free": true,
+      "trajectory_sent": true,
+      "translation_only": false,
+      "vertical_axis_constraint_active": true,
+      "wrist_3_direct_command": false
+    },
+    "camera_position": [
+      -0.28194325,
+      0.21488003,
+      0.78822243
+    ],
+    "camera_ray_details": {
+      "camera_to_mouth_distance_m": 0.67521961,
+      "camera_to_mouth_unit_vector": [
+        -0.9428222,
+        -0.27122671,
+        -0.19370692
+      ],
+      "camera_to_mouth_vector_m": [
+        -0.63661204,
+        -0.1831376,
+        -0.13079471
+      ],
+      "feeding_vector_input": [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "feeding_vector_normalized": [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      "feeding_vector_sign": "plus",
+      "tool_x_axis_base": [
+        -0.1833855,
+        0.9826884,
+        -0.0263299
+      ]
+    },
+    "checks": {
+      "camera_mount_match": {
+        "configured": {
+          "rpy_rad": [
+            3.0678492,
+            -0.00514696,
+            -1.46519711
+          ],
+          "translation_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        },
+        "live": {
+          "available": true,
+          "child_frame": "d435i_link",
+          "orientation_quat_xyzw": [
+            0.74286778,
+            -0.6684175,
+            -0.02274236,
+            0.02912556
+          ],
+          "parent_frame": "tool0",
+          "position_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        },
+        "matches": true,
+        "maximum_rotation_error_deg": 0.5,
+        "maximum_translation_error_m": 0.001,
+        "reason": null,
+        "rotation_error_deg": 0.0,
+        "rotation_error_rad": 0.0,
+        "translation_error_m": 0.0
+      },
+      "camera_tf": {
+        "available": true,
+        "child_frame": "d435i_color_optical_frame",
+        "orientation_quat_xyzw": [
+          0.47747294,
+          0.54710523,
+          -0.49688541,
+          -0.47518454
+        ],
+        "parent_frame": "base_link",
+        "position_m": [
+          -0.28194325,
+          0.21488003,
+          0.78822243
+        ]
+      },
+      "controllers": {
+        "available": null,
+        "inspection": "skipped in plan mode; controller state is checked only immediately before execution"
+      },
+      "current_straw_tip_pose": {
+        "frame_id": "base_link",
+        "orientation_quat_xyzw": [
+          0.63852669,
+          0.76916687,
+          0.00866445,
+          0.02430868
+        ],
+        "position_m": [
+          -0.29003123,
+          0.25432693,
+          0.80193763
+        ]
+      },
+      "execute_trajectory_available": null,
+      "joint_state": {
+        "complete": true,
+        "expected_joint_count": 6,
+        "received": true,
+        "received_expected_joint_count": 6
+      },
+      "mount_calibration": {
+        "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+        "corrected_physical_profile": true,
+        "metrics": {
+          "captured_at": "2026-07-23T15:45:00+08:00",
+          "limitation": "One physical approach direction plus the upright-image constraint fixes the axis convention, but a three-marker solve is still required for metrology-grade 6-DoF verification.",
+          "method": "manual_physical_axis_alignment",
+          "preserved_tool0_to_optical_center_m": [
+            0.07011388,
+            5.789e-05,
+            0.01478767
+          ],
+          "rollback_tool0_to_d435i_link": {
+            "note": "Legacy simulation-derived provisional transform",
+            "rpy_rad": [
+              -3.14159265,
+              -0.027969,
+              -0.153885
+            ],
+            "translation_m": [
+              0.072299,
+              0.014823,
+              0.015
+            ]
+          },
+          "rotation_determinant": 1.0,
+          "rotation_orthogonality_error": 0.0,
+          "target_camera_optical_axes_in_base_link": {
+            "+X_image_right": [
+              0.0,
+              1.0,
+              0.0
+            ],
+            "+Y_image_down": [
+              0.0,
+              0.0,
+              -1.0
+            ],
+            "+Z_depth_forward": [
+              -1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "status": "provisional",
+        "tool0_to_d435i_link": {
+          "rpy_rad": [
+            3.0678492,
+            -0.00514696,
+            -1.46519711
+          ],
+          "translation_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        }
+      },
+      "mouth_pose": {
+        "available": true,
+        "candidate_count": 1,
+        "frame_id": "base_link",
+        "identity_locked": true,
+        "identity_unsafe": false,
+        "jitter_stddev_m": [
+          0.00263307,
+          0.00062601,
+          0.0001842
+        ],
+        "latest_position_m": [
+          -0.914867,
+          0.032471,
+          0.65728
+        ],
+        "latest_received_age_sec": 0.12287976,
+        "latest_source_stamp_sec": 1785813916.0781012,
+        "max_distance_from_mean_m": 0.00432939,
+        "mean_position_m": [
+          -0.91855529,
+          0.03174243,
+          0.65742771
+        ],
+        "perception_status": {
+          "candidate_count": 1,
+          "depth_m": 0.653,
+          "detected": true,
+          "frame_id": "base_link",
+          "latest_received_age_sec": 0.12242615,
+          "mount_calibration_status": "provisional",
+          "pixel_u": 202.89,
+          "pixel_v": 329.69,
+          "reason": "mouth_pose_published",
+          "surface_normal_available": true,
+          "tf_mode": "image_stamp"
+        },
+        "sample_count": 7,
+        "sample_duration_sec": 1.0,
+        "selected_candidate_index": 0,
+        "stability_requirements": {
+          "ambiguity_margin_m": 0.03,
+          "maximum_age_sec": 1.0,
+          "maximum_identity_jump_m": 0.12,
+          "maximum_spread_m": 0.025,
+          "minimum_samples": 3
+        },
+        "stable": true,
+        "surface_normal": {
+          "available": true,
+          "frame_id": "base_link",
+          "mean_vector": [
+            0.88863213,
+            -0.09707029,
+            -0.44823018
+          ],
+          "sample_count": 7
+        },
+        "target_selection": "center",
+        "visible_candidates": [
+          {
+            "depth_m": 0.653,
+            "image_x": 202.888,
+            "image_y": 329.691,
+            "position_m": [
+              -0.914867,
+              0.032471,
+              0.65728
+            ],
+            "surface_normal": [
+              0.858484,
+              -0.156993,
+              -0.48822
+            ]
+          }
+        ]
+      },
+      "move_group_available": true,
+      "planning_scene_obstacles": {
+        "camera_position": [
+          -0.281943,
+          0.21488,
+          0.788222
+        ],
+        "config": {
+          "base_frame": "base_link",
+          "face_safety_offset_m": [
+            0.0,
+            0.15,
+            0.03
+          ],
+          "face_safety_radius_m": 0.16,
+          "head_offset_m": [
+            0.0,
+            0.1,
+            0.03
+          ],
+          "head_radius_m": 0.12,
+          "include_table": false,
+          "mouth_topic": "/detected_mouth_pose",
+          "mouth_wait_timeout_sec": 1.0,
+          "service_timeout_sec": 5.0,
+          "table_center_m": [
+            0.4,
+            0.55,
+            -0.05
+          ],
+          "table_size_m": [
+            1.2,
+            0.8,
+            0.1
+          ],
+          "torso_offset_m": [
+            0.0,
+            0.1,
+            -0.35
+          ],
+          "torso_size_m": [
+            0.4,
+            0.25,
+            0.6
+          ]
+        },
+        "dynamic_octomap_enabled": false,
+        "frame_id": "base_link",
+        "frozen_candidate_positions_m": [
+          [
+            -0.91855529,
+            0.03174243,
+            0.65742771
+          ]
+        ],
+        "object_ids": [
+          "real_human_obstacle_0_head",
+          "real_human_obstacle_0_torso",
+          "real_human_obstacle_0_face_safety"
+        ],
+        "operation": "apply_people",
+        "people": [
+          {
+            "behind_face_unit_vector": [
+              -0.942822,
+              -0.271227,
+              -0.193707
+            ],
+            "face_safety_center": [
+              -1.059979,
+              -0.008942,
+              0.658372
+            ],
+            "head_center": [
+              -1.012838,
+              0.00462,
+              0.668057
+            ],
+            "mouth_position": [
+              -0.918555,
+              0.031742,
+              0.657428
+            ],
+            "object_ids": [
+              "real_human_obstacle_0_head",
+              "real_human_obstacle_0_torso",
+              "real_human_obstacle_0_face_safety"
+            ],
+            "person_index": 0,
+            "torso_center": [
+              -1.012838,
+              0.00462,
+              0.288057
+            ]
+          }
+        ],
+        "person_count": 1,
+        "removed_stale_object_ids": [],
+        "selected_candidate_index": 0,
+        "selected_mouth_position_m": [
+          -0.91855529,
+          0.03174243,
+          0.65742771
+        ],
+        "success": true,
+        "target_selection": "center",
+        "verification": {
+          "missing_object_ids": [],
+          "present_object_ids": [
+            "real_human_obstacle_0_face_safety",
+            "real_human_obstacle_0_head",
+            "real_human_obstacle_0_torso"
+          ],
+          "stale_object_ids_still_present": [],
+          "success": true
+        }
+      },
+      "required_nodes": {
+        "controller_manager_exists": true,
+        "move_group_exists": true
+      },
+      "robot_mode": 7,
+      "robot_mode_running": true,
+      "robot_program_running": true,
+      "safety_mode": 1,
+      "safety_mode_normal": true,
+      "speed_slider_percent": 60.0,
+      "tool0_pose": {
+        "available": true,
+        "child_frame": "tool0",
+        "link_name": "tool0",
+        "orientation_quat_xyzw": [
+          0.63852669,
+          0.76916687,
+          0.00866445,
+          0.02430868
+        ],
+        "parent_frame": "base_link",
+        "position_m": [
+          -0.26985883,
+          0.14623121,
+          0.80483392
+        ]
+      },
+      "tool0_to_camera_link_tf": {
+        "available": true,
+        "child_frame": "d435i_link",
+        "orientation_quat_xyzw": [
+          0.74286778,
+          -0.6684175,
+          -0.02274236,
+          0.02912556
+        ],
+        "parent_frame": "tool0",
+        "position_m": [
+          0.08492189,
+          0.00172131,
+          0.01390208
+        ]
+      },
+      "tool_vertical_axis_guard": {
+        "available": true,
+        "maximum_tilt_deg": 5.0,
+        "maximum_tilt_rad": 0.08726646,
+        "required_axis_base_link": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "tilt_deg": 2.95755626,
+        "tilt_rad": 0.05161909,
+        "tool_axis_tool0": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "within_limit": true
+      },
+      "ur_base_tf": {
+        "available": true,
+        "child_frame": "base_link",
+        "orientation_quat_xyzw": [
+          0.0,
+          0.0,
+          1.0,
+          -0.0
+        ],
+        "parent_frame": "base",
+        "position_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "current_straw_tip_pose": {
+      "frame_id": "base_link",
+      "orientation_quat_xyzw": [
+        0.63852669,
+        0.76916687,
+        0.00866445,
+        0.02430868
+      ],
+      "position_m": [
+        -0.29003123,
+        0.25432693,
+        0.80193763
+      ]
+    },
+    "detected_mouth_pose": {
+      "frame_id": "base_link",
+      "position_m": [
+        -0.91855529,
+        0.03174243,
+        0.65742771
+      ]
+    },
+    "dynamic_octomap_readiness": {
+      "execution_mode": true,
+      "failures": [],
+      "filtered_cloud": {
+        "active": true,
+        "age_sec": 6.936e-05,
+        "frame_id": "d435i_color_optical_frame",
+        "height": 1,
+        "maximum_age_sec": 0.75,
+        "point_count": 8156,
+        "topic": "/wrist_rgbd/filtered_cloud",
+        "width": 8156
+      },
+      "move_group_parameters": {
+        "allow_trajectory_execution": true,
+        "available": true,
+        "octomap_resolution_m": 0.03,
+        "sensors": [
+          "wrist_rgbd_pointcloud"
+        ]
+      },
+      "raw_cloud": {
+        "active": true,
+        "age_sec": 0.01915365,
+        "frame_id": "d435i_color_optical_frame",
+        "height": 1,
+        "maximum_age_sec": 0.75,
+        "point_count": 8156,
+        "topic": "/wrist_rgbd/points",
+        "width": 8156
+      },
+      "success": true
+    },
+    "estimated_final_straw_tip_to_pre_mouth_m": 0.0,
+    "execution_attempted": false,
+    "execution_disabled": false,
+    "execution_sent": false,
+    "failure_diagnostic": {
+      "classification": "DIRECT_AND_DETOUR_PLANNING_FAILED",
+      "direct_path_plan_result": {
+        "error_code": 99999,
+        "error_message": "",
+        "execution_sent": false,
+        "planned_trajectory": {
+          "duration_sec": 1.44859855,
+          "joint_names": [
+            "shoulder_pan_joint",
+            "shoulder_lift_joint",
+            "elbow_joint",
+            "wrist_1_joint",
+            "wrist_2_joint",
+            "wrist_3_joint"
+          ],
+          "points": 16
+        },
+        "planning_time_sec": 0.00339356,
+        "reason": null,
+        "result_status": 6,
+        "stage": "move_group_plan_only",
+        "success": false,
+        "vertical_axis_validation": null
+      },
+      "error_code": 99999,
+      "error_message": "",
+      "obstacle_layer_attribution": "combined_scene_only",
+      "reason": "the direct path and vertical-axis OMPL detour both failed for the frozen real pre-mouth target; the tool constraint was not relaxed"
+    },
+    "feeding_vector_input": [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    "feeding_vector_normalized": [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    "feeding_vector_sign": "plus",
+    "final_straw_tip_to_detected_mouth_standoff_m": 0.08,
+    "frozen_detected_mouth_pose": {
+      "frame_id": "base_link",
+      "position_m": [
+        -0.91855529,
+        0.03174243,
+        0.65742771
+      ]
+    },
+    "frozen_target_policy": "The 1-second stable mouth-pose mean is frozen before planning; no perception updates are consumed during motion.",
+    "integrated_real_feed_water": {
+      "active_search": true,
+      "active_search_camera_extrinsic_applied": true,
+      "active_search_direction_reference": {
+        "backward_up_down": "d435i_color_optical_frame frozen at initial tool0 pose",
+        "left_right": "tool0 local Z rotation"
+      },
+      "active_search_intermediate_flange_orientation_unconstrained": false,
+      "active_search_order": [
+        "backward_wide",
+        "scan_left",
+        "scan_right",
+        "scan_up",
+        "scan_down"
+      ],
+      "active_search_planner": "pilz_industrial_motion_planner/LIN",
+      "active_search_vertical_axis_constraint": true,
+      "adaptive_left_right_angles_deg": [
+        15.0,
+        10.0,
+        5.0
+      ],
+      "adaptive_search_distances_m": {
+        "backward": [
+          0.04,
+          0.03,
+          0.02
+        ],
+        "skip_unreachable_direction": true,
+        "up_down": [
+          0.05,
+          0.04,
+          0.03,
+          0.02
+        ]
+      },
+      "combined_static_and_dynamic_scene_checks": true,
+      "detour_final_goal_orientation_constraint": true,
+      "direct_clear_path_first": true,
+      "dynamic_obstacle_avoidance": true,
+      "fk_waypoint_vertical_axis_validation": true,
+      "left_right_rotation_each_side_deg": 15.0,
+      "left_right_search_strategy": "MoveIt tool0-local-Z pose rotations",
+      "left_right_total_sweep_deg": 30.0,
+      "maximum_cumulative_joint_travel_rad": 2.0,
+      "maximum_joint_excursion_rad": 0.78539816,
+      "maximum_search_trajectory_duration_sec": 3.0,
+      "maximum_tool_vertical_tilt_deg": 5.0,
+      "multi_target_identity_lock": true,
+      "ompl_active_search_enabled": false,
+      "ompl_dynamic_obstacle_detour_enabled": true,
+      "position_only_active_search_goals": false,
+      "rotation_search_enabled": true,
+      "same_target_replanning": true,
+      "target_selection": "center",
+      "tool_axis_spin_free": true,
+      "translation_only_search": false,
+      "vertical_axis_detour_after_direct_rejection": true,
+      "wait_for_clear": false,
+      "wrist_3_direct_command": false
+    },
+    "maximum_plan_translation_m": 1.3,
+    "maximum_radius_m": 1.3,
+    "mode": "execute",
+    "mount_calibration": {
+      "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+      "corrected_physical_profile": true,
+      "metrics": {
+        "captured_at": "2026-07-23T15:45:00+08:00",
+        "limitation": "One physical approach direction plus the upright-image constraint fixes the axis convention, but a three-marker solve is still required for metrology-grade 6-DoF verification.",
+        "method": "manual_physical_axis_alignment",
+        "preserved_tool0_to_optical_center_m": [
+          0.07011388,
+          5.789e-05,
+          0.01478767
+        ],
+        "rollback_tool0_to_d435i_link": {
+          "note": "Legacy simulation-derived provisional transform",
+          "rpy_rad": [
+            -3.14159265,
+            -0.027969,
+            -0.153885
+          ],
+          "translation_m": [
+            0.072299,
+            0.014823,
+            0.015
+          ]
+        },
+        "rotation_determinant": 1.0,
+        "rotation_orthogonality_error": 0.0,
+        "target_camera_optical_axes_in_base_link": {
+          "+X_image_right": [
+            0.0,
+            1.0,
+            0.0
+          ],
+          "+Y_image_down": [
+            0.0,
+            0.0,
+            -1.0
+          ],
+          "+Z_depth_forward": [
+            -1.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "status": "provisional",
+      "tool0_to_d435i_link": {
+        "rpy_rad": [
+          3.0678492,
+          -0.00514696,
+          -1.46519711
+        ],
+        "translation_m": [
+          0.08492189,
+          0.00172131,
+          0.01390208
+        ]
+      }
+    },
+    "orientation_difference_rad": 0.0,
+    "orientation_preserved": true,
+    "plan_result": {
+      "combined_planning_scene_checked": true,
+      "detour_attempted": true,
+      "direct_path_accepted": false,
+      "direct_path_plan_result": {
+        "error_code": 99999,
+        "error_message": "",
+        "execution_sent": false,
+        "planned_trajectory": {
+          "duration_sec": 1.44859855,
+          "joint_names": [
+            "shoulder_pan_joint",
+            "shoulder_lift_joint",
+            "elbow_joint",
+            "wrist_1_joint",
+            "wrist_2_joint",
+            "wrist_3_joint"
+          ],
+          "points": 16
+        },
+        "planning_time_sec": 0.00339356,
+        "reason": null,
+        "result_status": 6,
+        "stage": "move_group_plan_only",
+        "success": false,
+        "vertical_axis_validation": null
+      },
+      "error_code": 99999,
+      "error_message": "",
+      "execution_sent": false,
+      "failure_diagnostic": {
+        "classification": "DIRECT_AND_DETOUR_PLANNING_FAILED",
+        "detour_error_code": 99999,
+        "detour_error_message": "",
+        "direct_error_code": 99999,
+        "direct_error_message": "",
+        "obstacle_layer_attribution": "combined_scene_only",
+        "reason": "the combined static-and-dynamic PlanningScene rejected or could not plan either the direct route or the OMPL detour while enforcing the vertical-tool axis constraint"
+      },
+      "final_goal_orientation_constraint": true,
+      "final_goal_orientation_tolerance_rad": 0.001,
+      "intermediate_flange_orientation_unconstrained": false,
+      "maximum_replan_attempts": 3,
+      "maximum_tool_vertical_tilt_rad": 0.08726646,
+      "orientation_path_constraint": true,
+      "planned_trajectory": {
+        "duration_sec": null,
+        "joint_names": [],
+        "points": 0
+      },
+      "planner": "ompl/RRTConnect",
+      "planning_scene": "static_collision_objects_plus_live_octomap",
+      "planning_time_sec": 0.0,
+      "reason": null,
+      "replan_delay_sec": 0.0,
+      "result_status": 6,
+      "route_strategy": null,
+      "same_target_replanning": true,
+      "stage": "move_group_plan_only",
+      "success": false,
+      "tool_axis_spin_free": true,
+      "vertical_axis_validation": null,
+      "wait_for_clear": false
+    },
+    "planned_tool0_translation_m": [
+      -0.55309828,
+      -0.20088636,
+      -0.12901336
+    ],
+    "planned_tool0_translation_norm_m": 0.60242633,
+    "planned_trajectory_duration_sec": null,
+    "planner": "ompl/RRTConnect",
+    "planning_error_code": 99999,
+    "pre_execution_plan_stage": "dynamic_route_plan_only",
+    "pre_mouth_candidates": {
+      "frame_id": "base_link",
+      "positions_m": {
+        "base-x": [
+          -0.83855529,
+          0.03174243,
+          0.65742771
+        ],
+        "camera-ray": [
+          -0.84312951,
+          0.05344057,
+          0.67292427
+        ],
+        "camera-ray-alternative": [
+          -0.99398106,
+          0.01004429,
+          0.64193116
+        ],
+        "feeding-vector-minus": [
+          -0.91855529,
+          0.11174243,
+          0.65742771
+        ],
+        "feeding-vector-plus": [
+          -0.91855529,
+          -0.04825757,
+          0.65742771
+        ],
+        "tcp-forward": [
+          -0.90388445,
+          -0.04687264,
+          0.65953411
+        ]
+      }
+    },
+    "pre_mouth_offset_base_link_m": [
+      0.07542578,
+      0.02169814,
+      0.01549655
+    ],
+    "pre_mouth_pose": {
+      "frame_id": "base_link",
+      "position_m": [
+        -0.84312951,
+        0.05344057,
+        0.67292427
+      ]
+    },
+    "premouth_policy": "camera-ray",
+    "reason": "the direct path and vertical-axis OMPL detour both failed for the frozen real pre-mouth target; the tool constraint was not relaxed",
+    "route_strategy": null,
+    "safe_distance_m": 0.08,
+    "selected_candidate": "camera-ray",
+    "selected_candidate_index": 0,
+    "stage": "pre_execution_plan",
+    "success": false,
+    "target_selection": "center",
+    "target_tool0_pose": {
+      "frame_id": "base_link",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.63852669,
+        0.76916687,
+        0.00866445,
+        0.02430868
+      ],
+      "position_m": [
+        -0.82295711,
+        -0.05465516,
+        0.67582056
+      ]
+    },
+    "target_tool0_position_in_ur_base_m": [
+      0.82295711,
+      0.05465516,
+      0.67582056
+    ],
+    "target_tool0_radius_from_ur_base_m": 1.06629218,
+    "timing_profile": {
+      "mouth_sample_seconds": 1.0,
+      "recommended_pendant_speed_percent": 60.0,
+      "trajectory_acceleration_scaling": 0.6,
+      "trajectory_velocity_scaling": 0.6
+    },
+    "tool_x_axis_base": [
+      -0.1833855,
+      0.9826884,
+      -0.0263299
+    ]
+  },
+  "planned_displacement_m": [
+    -0.55309828,
+    -0.20088636,
+    -0.12901336
+  ],
+  "planned_displacement_norm_m": 0.60242633,
+  "pour_commanded": false,
+  "pre_mouth_target": {
+    "frame_id": "base_link",
+    "position_m": [
+      -0.84312951,
+      0.05344057,
+      0.67292427
+    ]
+  },
+  "reason": "the direct path and vertical-axis OMPL detour both failed for the frozen real pre-mouth target; the tool constraint was not relaxed",
+  "report_path": "/home/dase-hw101/ur_drinking_project/reports/feed_water_real_20260804_112506.json",
+  "safety_gates": {
+    "active_search_vertical_axis_constraint": true,
+    "backend_real": true,
+    "controller_active": false,
+    "corrected_camera_tf_loaded": true,
+    "dynamic_same_target_replanning": true,
+    "execution_runtime_gates_required": true,
+    "explicit_runtime_confirmation": true,
+    "external_control_running": true,
+    "hold_duration_in_range": true,
+    "multi_target_identity_lock": true,
+    "no_direct_mouth_contact": true,
+    "no_tilt_or_pour": true,
+    "pipeline_exit_code": 2,
+    "pipeline_passed": false,
+    "pre_mouth_only": true,
+    "real_execution_environment_enabled": true,
+    "robot_mode_running": true,
+    "safety_mode_normal": true,
+    "speed_slider_percent": 60.0,
+    "stable_mouth_pose": true,
+    "target_is_center_mouth": true,
+    "tool_axis_spin_free": true,
+    "vertical_axis_obstacle_detour": true
+  },
+  "schema_version": 1,
+  "selected_backend": "real",
+  "stage": "refused",
+  "success": false,
+  "target_tool0_pose": {
+    "frame_id": "base_link",
+    "link_name": "tool0",
+    "orientation_quat_xyzw": [
+      0.63852669,
+      0.76916687,
+      0.00866445,
+      0.02430868
+    ],
+    "position_m": [
+      -0.82295711,
+      -0.05465516,
+      0.67582056
+    ]
+  },
+  "tool": "feed_water"
+}

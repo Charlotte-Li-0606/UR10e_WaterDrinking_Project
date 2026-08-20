@@ -1,0 +1,47 @@
+{
+  "dynamic_octomap_readiness": {
+    "execution_mode": false,
+    "failures": [
+      "MoveGroup trajectory execution is not explicitly disabled"
+    ],
+    "filtered_cloud": {
+      "active": true,
+      "age_sec": 0.00014436,
+      "frame_id": "d435i_color_optical_frame",
+      "height": 1,
+      "maximum_age_sec": 0.75,
+      "point_count": 5391,
+      "topic": "/wrist_rgbd/filtered_cloud",
+      "width": 5391
+    },
+    "move_group_parameters": {
+      "allow_trajectory_execution": true,
+      "available": true,
+      "octomap_resolution_m": 0.03,
+      "sensors": [
+        "wrist_rgbd_pointcloud"
+      ]
+    },
+    "raw_cloud": {
+      "active": true,
+      "age_sec": 0.21071145,
+      "frame_id": "d435i_color_optical_frame",
+      "height": 1,
+      "maximum_age_sec": 0.75,
+      "point_count": 6465,
+      "topic": "/wrist_rgbd/points",
+      "width": 6465
+    },
+    "success": false
+  },
+  "execution_disabled": true,
+  "execution_sent": false,
+  "mode": "dynamic_obstacle_avoidance_plan_only",
+  "planner": "ompl/RRTConnect",
+  "real_execution_supported": false,
+  "reason": "MoveGroup trajectory execution is not explicitly disabled",
+  "same_target_replanning": true,
+  "stage": "dynamic_octomap_readiness",
+  "success": false,
+  "wait_for_clear": false
+}

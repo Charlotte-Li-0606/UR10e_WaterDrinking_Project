@@ -1,0 +1,14 @@
+{
+  "mode": "plan_only",
+  "execution_sent": false,
+  "tracked_target_position": [
+    -0.9169849270483751,
+    0.29790213543873834,
+    0.644392784135429
+  ],
+  "sample_count": 15,
+  "sample_spread_m": 0.010034105085133823,
+  "success": false,
+  "stage": "exception",
+  "reason": "Could not read TF base_link->tool0: Could not find a connection between 'base_link' and 'tool0' because they are not part of the same tree.Tf has two or more unconnected trees."
+}

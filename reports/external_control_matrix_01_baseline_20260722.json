@@ -1,0 +1,143 @@
+{
+  "actual_duration_sec": 4.705,
+  "label": "baseline_existing_stack_no_command",
+  "no_motion_contract": "subscriptions and ListControllers only; no publishers, dashboard calls, controller switches, or actions",
+  "requested_duration_sec": 60.0,
+  "samples": [
+    {
+      "controller": {
+        "available": false,
+        "scaled_joint_trajectory_controller": null
+      },
+      "elapsed_sec": 1.231,
+      "joint_states_age_sec": null,
+      "joint_states_complete": false,
+      "load_average_1m_5m_15m": [
+        3.71728515625,
+        3.04931640625,
+        2.876953125
+      ],
+      "process_counts": {
+        "controller_manager": 1,
+        "driver_launch": 1,
+        "move_group": 1,
+        "perception": 1,
+        "realsense": 1
+      },
+      "processes": {
+        "controller_manager": [
+          {
+            "command": "/opt/ros/jazzy/lib/controller_manager/ros2_control_node --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10e_update_rate.yaml --params-file /tmp/launch_params_7fx6c251",
+            "pid": 853788,
+            "state": "S"
+          }
+        ],
+        "driver_launch": [
+          {
+            "command": "/usr/bin/python3 /opt/ros/jazzy/bin/ros2 launch ur_robot_driver ur_control.launch.py ur_type:=ur10e robot_ip:=192.168.2.102 kinematics_params_file:=/home/dase-hw101/ur_drinking_project/config/ur10e_real/ur10e_calibration.yaml launch_rviz:=false",
+            "pid": 853777,
+            "state": "S"
+          }
+        ],
+        "move_group": [
+          {
+            "command": "/opt/ros/jazzy/lib/moveit_ros_move_group/move_group --ros-args --params-file /tmp/launch_params_1nbngd6e --params-file /tmp/launch_params_793ogza1 --params-file /tmp/launch_params_jp13xom4 --params-file /tmp/launch_params_lxraz_kq",
+            "pid": 826523,
+            "state": "S"
+          }
+        ],
+        "perception": [
+          {
+            "command": "/home/dase-hw101/ur_drinking_project/venv/bin/python /home/dase-hw101/ur_drinking_project/robot_layer/arm_ur10e/perception/mouth_perception_node.py --rgb-topic /d435i/d435i/color/image_raw --depth-topic /d435i/d435i/aligned_depth_to_color/image_raw --camera-info-topic /d435i/d435i/color/camera_info --output-topic /detected_mouth_pose --candidates-topic /detected_mouth_candidates --status-topic /mouth_detection/status --normal-topic /detected_mouth_normal --mount-calibration-status provisional --debug-image-topic /mouth_detection/debug_image --base-frame base_link",
+            "pid": 858414,
+            "state": "S"
+          }
+        ],
+        "realsense": [
+          {
+            "command": "/opt/ros/jazzy/lib/realsense2_camera/realsense2_camera_node --ros-args --log-level info --ros-args -r __node:=d435i -r __ns:=/d435i --params-file /tmp/launch_params_7rwfftd3 --params-file /tmp/launch_params__584_i4d",
+            "pid": 851710,
+            "state": "S"
+          }
+        ]
+      },
+      "robot_mode": null,
+      "robot_mode_running": false,
+      "robot_program_running": null,
+      "safety_mode": null,
+      "safety_mode_normal": false,
+      "speed_slider_percent": null,
+      "system_cpu_percent": 10.131926121372032,
+      "wall_time": "2026-07-22T16:13:57+0800"
+    }
+  ],
+  "trigger": {
+    "reason": "scaled_controller_not_active",
+    "sample": {
+      "controller": {
+        "available": false,
+        "scaled_joint_trajectory_controller": null
+      },
+      "elapsed_sec": 1.231,
+      "joint_states_age_sec": null,
+      "joint_states_complete": false,
+      "load_average_1m_5m_15m": [
+        3.71728515625,
+        3.04931640625,
+        2.876953125
+      ],
+      "process_counts": {
+        "controller_manager": 1,
+        "driver_launch": 1,
+        "move_group": 1,
+        "perception": 1,
+        "realsense": 1
+      },
+      "processes": {
+        "controller_manager": [
+          {
+            "command": "/opt/ros/jazzy/lib/controller_manager/ros2_control_node --ros-args --params-file /opt/ros/jazzy/share/ur_robot_driver/config/ur10e_update_rate.yaml --params-file /tmp/launch_params_7fx6c251",
+            "pid": 853788,
+            "state": "S"
+          }
+        ],
+        "driver_launch": [
+          {
+            "command": "/usr/bin/python3 /opt/ros/jazzy/bin/ros2 launch ur_robot_driver ur_control.launch.py ur_type:=ur10e robot_ip:=192.168.2.102 kinematics_params_file:=/home/dase-hw101/ur_drinking_project/config/ur10e_real/ur10e_calibration.yaml launch_rviz:=false",
+            "pid": 853777,
+            "state": "S"
+          }
+        ],
+        "move_group": [
+          {
+            "command": "/opt/ros/jazzy/lib/moveit_ros_move_group/move_group --ros-args --params-file /tmp/launch_params_1nbngd6e --params-file /tmp/launch_params_793ogza1 --params-file /tmp/launch_params_jp13xom4 --params-file /tmp/launch_params_lxraz_kq",
+            "pid": 826523,
+            "state": "S"
+          }
+        ],
+        "perception": [
+          {
+            "command": "/home/dase-hw101/ur_drinking_project/venv/bin/python /home/dase-hw101/ur_drinking_project/robot_layer/arm_ur10e/perception/mouth_perception_node.py --rgb-topic /d435i/d435i/color/image_raw --depth-topic /d435i/d435i/aligned_depth_to_color/image_raw --camera-info-topic /d435i/d435i/color/camera_info --output-topic /detected_mouth_pose --candidates-topic /detected_mouth_candidates --status-topic /mouth_detection/status --normal-topic /detected_mouth_normal --mount-calibration-status provisional --debug-image-topic /mouth_detection/debug_image --base-frame base_link",
+            "pid": 858414,
+            "state": "S"
+          }
+        ],
+        "realsense": [
+          {
+            "command": "/opt/ros/jazzy/lib/realsense2_camera/realsense2_camera_node --ros-args --log-level info --ros-args -r __node:=d435i -r __ns:=/d435i --params-file /tmp/launch_params_7rwfftd3 --params-file /tmp/launch_params__584_i4d",
+            "pid": 851710,
+            "state": "S"
+          }
+        ]
+      },
+      "robot_mode": null,
+      "robot_mode_running": false,
+      "robot_program_running": null,
+      "safety_mode": null,
+      "safety_mode_normal": false,
+      "speed_slider_percent": null,
+      "system_cpu_percent": 10.131926121372032,
+      "wall_time": "2026-07-22T16:13:57+0800"
+    }
+  }
+}

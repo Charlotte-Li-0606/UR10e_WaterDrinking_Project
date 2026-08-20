@@ -1,0 +1,5611 @@
+{
+  "backend_priority": [
+    "servo",
+    "cartesian",
+    "pilz",
+    "ompl"
+  ],
+  "coarse_staging_execution": {
+    "controller_goal_type": "MoveIt ExecuteTrajectory (validated MoveIt plan; no raw FollowJointTrajectory goal)",
+    "error_code": 1,
+    "error_message": "",
+    "execution_attempted": true,
+    "execution_sent": true,
+    "result_status": 4,
+    "stage": "execute_trajectory",
+    "success": true,
+    "trajectory_collision_validation": {
+      "collision_checking_required": true,
+      "collision_pairs": [],
+      "reason": null,
+      "sampled_waypoints": 17,
+      "stage": "return_trajectory_collision_validation",
+      "success": true,
+      "trajectory_waypoints": 17
+    },
+    "vertical_axis_validation": {
+      "frame_id": "base_link",
+      "link_name": "tool0",
+      "maximum_observed_tilt_deg": 1.14710929,
+      "maximum_observed_tilt_rad": 0.02002083,
+      "maximum_tilt_deg": 5.0,
+      "maximum_tilt_rad": 0.08726646,
+      "maximum_tilt_waypoint_index": 0,
+      "required_axis_base_link": [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      "sampled_waypoints": 17,
+      "stage": "trajectory_vertical_axis_validation",
+      "success": true,
+      "tool_axis_spin_free": true,
+      "tool_axis_tool0": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "trajectory_waypoints": 17,
+      "wrist_3_joint_directly_commanded": false
+    }
+  },
+  "coarse_staging_plan": {
+    "attempted_backends": [
+      "cartesian"
+    ],
+    "attempts": [
+      {
+        "backend": "cartesian",
+        "plan": {
+          "acceleration_scaling": 0.3,
+          "avoid_collisions": true,
+          "complete": true,
+          "error_code": 1,
+          "error_message": "",
+          "execution_sent": false,
+          "fraction": 1.0,
+          "max_step_m": 0.01,
+          "maximum_revolute_joint_jump_rad": 0.34906585,
+          "planned_trajectory": {
+            "duration_sec": 1.55252393,
+            "joint_names": [
+              "shoulder_pan_joint",
+              "shoulder_lift_joint",
+              "elbow_joint",
+              "wrist_1_joint",
+              "wrist_2_joint",
+              "wrist_3_joint"
+            ],
+            "points": 17
+          },
+          "planner": "moveit_compute_cartesian_path",
+          "reason": null,
+          "required_fraction": 0.999,
+          "stage": "cartesian_plan_only",
+          "success": true,
+          "velocity_scaling": 0.3,
+          "vertical_axis_validation": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "maximum_observed_tilt_deg": 1.14710929,
+            "maximum_observed_tilt_rad": 0.02002083,
+            "maximum_tilt_deg": 5.0,
+            "maximum_tilt_rad": 0.08726646,
+            "maximum_tilt_waypoint_index": 0,
+            "required_axis_base_link": [
+              0.0,
+              0.0,
+              -1.0
+            ],
+            "sampled_waypoints": 17,
+            "stage": "trajectory_vertical_axis_validation",
+            "success": true,
+            "tool_axis_spin_free": true,
+            "tool_axis_tool0": [
+              0.0,
+              0.0,
+              1.0
+            ],
+            "trajectory_waypoints": 17,
+            "wrist_3_joint_directly_commanded": false
+          }
+        },
+        "success": true,
+        "trajectory_collision_validation": {
+          "collision_checking_required": true,
+          "collision_pairs": [],
+          "reason": null,
+          "sampled_waypoints": 17,
+          "stage": "return_trajectory_collision_validation",
+          "success": true,
+          "trajectory_waypoints": 17
+        }
+      }
+    ],
+    "ompl_needed": false,
+    "reason": null,
+    "selected_backend": "cartesian",
+    "success": true
+  },
+  "coarse_staging_target": {
+    "flange_vertical_axis_error_rad": 0.01997678,
+    "frame_id": "base_link",
+    "mouth_position_m": [
+      -0.932984,
+      0.287859,
+      0.646016
+    ],
+    "orientation_quat_xyzw": [
+      0.72115223,
+      0.69270463,
+      -0.00917564,
+      0.00394617
+    ],
+    "position_m": [
+      -0.77226092,
+      0.15661439,
+      0.68468199
+    ],
+    "standoff_m": 0.17,
+    "straw_tip_position_m": [
+      -0.76784418,
+      0.26650643,
+      0.68262487
+    ],
+    "success": true
+  },
+  "combined_tool_collision_geometry": {
+    "center_tool0_m": [
+      0.0,
+      0.0,
+      0.15
+    ],
+    "collision_checking_enabled_against_non_touch_links": true,
+    "dimensions_m": [
+      0.1,
+      0.1,
+      0.3
+    ],
+    "execution_sent": false,
+    "follows_tool0": true,
+    "frame_id": "tool0",
+    "link_name": "tool0",
+    "object_id": "combined_camera_cup_holder_straw_collision",
+    "operation": "attach_combined_tool_collision",
+    "span_tool0_z_m": [
+      0.0,
+      0.3
+    ],
+    "success": true,
+    "touch_links": [
+      "tool0",
+      "flange",
+      "wrist_3_link"
+    ],
+    "verification": {
+      "actual_center_tool0_m": [
+        -0.0,
+        -0.0,
+        0.15
+      ],
+      "actual_dimensions_m": [
+        0.1,
+        0.1,
+        0.3
+      ],
+      "actual_frame_id": "tool0",
+      "actual_link_name": "tool0",
+      "actual_orientation_quat_xyzw": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "actual_shape": "box",
+      "actual_touch_links": [
+        "flange",
+        "tool0",
+        "wrist_3_link"
+      ],
+      "checks": {
+        "center": true,
+        "dimensions": true,
+        "frame": true,
+        "link": true,
+        "orientation": true,
+        "shape": true,
+        "touch_links": true
+      },
+      "expected_center_tool0_m": [
+        0.0,
+        0.0,
+        0.15
+      ],
+      "expected_dimensions_m": [
+        0.1,
+        0.1,
+        0.3
+      ],
+      "expected_frame_id": "tool0",
+      "expected_link_name": "tool0",
+      "expected_span_tool0_z_m": [
+        0.0,
+        0.3
+      ],
+      "expected_touch_links": [
+        "tool0",
+        "flange",
+        "wrist_3_link"
+      ],
+      "matched_object_count": 1,
+      "modeling_strategy": "one conservative attached box for camera, cup holder, and straw",
+      "object_id": "combined_camera_cup_holder_straw_collision",
+      "object_pose_orientation_quat_xyzw": [
+        0.0,
+        -0.0,
+        0.0,
+        1.0
+      ],
+      "object_pose_position_tool0_m": [
+        -0.0,
+        -0.0,
+        0.15
+      ],
+      "primitive_pose_orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "primitive_pose_position_m": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "real_execution_geometry_complete": true,
+      "reason": null,
+      "success": true,
+      "tool0_positive_z_is_base_link_negative_z_when_flange_down": true
+    }
+  },
+  "continuous_mouth_tracking": true,
+  "continuous_servo": {
+    "elapsed_sec": 1.99752073,
+    "final_tool0_pose": {
+      "available": true,
+      "child_frame": "tool0",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.72120091,
+        0.69271966,
+        -0.00270542,
+        0.00118297
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.78667571,
+        0.14805756,
+        0.68122824
+      ]
+    },
+    "hold_duration_sec": 5.0,
+    "hold_elapsed_sec": 0.0,
+    "maximum_target_displacement_m": 0.00475876,
+    "maximum_target_error_m": 0.10369344,
+    "octomap": {
+      "configuration_valid": true,
+      "degraded": false,
+      "dynamic_obstacle_layer_active": false,
+      "status": "dynamic_obstacle_layer_disabled",
+      "use_octomap": false
+    },
+    "post_staging_target_acquisition": {
+      "active_search_required": false,
+      "elapsed_sec": 0.26514919,
+      "last_observation_update": {
+        "accepted": true,
+        "confidence": 1.0,
+        "confidence_source": "accepted_mediapipe_rgbd_observation",
+        "depth_m": 0.161,
+        "reason": "accepted",
+        "source_timestamp_sec": 1786417478.3752246
+      },
+      "reason": "stable_target_acquired",
+      "state": "STABLE_TARGET",
+      "success": true,
+      "target_report": {
+        "available": true,
+        "confidence": 1.0,
+        "frame_id": "base_link",
+        "position_m": [
+          -0.934671,
+          0.20453,
+          0.656814
+        ],
+        "predicted_position_m": [
+          -0.93484395,
+          0.2045904,
+          0.65735761
+        ],
+        "prediction_m": 0.00057365,
+        "provisional": false,
+        "reason": null,
+        "sample_count": 3,
+        "source_timestamp_sec": 1786417478.3752246,
+        "spread_m": 0.0008467,
+        "stable": true,
+        "target_age_sec": 0.00011405,
+        "target_id": "center",
+        "tracking_state": "STABLE_TARGET",
+        "velocity_mps": [
+          -0.00172951,
+          0.00060395,
+          0.00543612
+        ]
+      }
+    },
+    "recent_diagnostics": [
+      {
+        "elapsed_sec": 1.83103487,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00155519,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.24134817,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83165063,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00217095,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.24196393,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83205,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00257032,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.2423633,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83247332,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00299365,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.24278663,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83289024,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 6.57e-06,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.24320355,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83351569,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00063202,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.243829,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83390025,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00101658,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.24421356,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83429884,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00141517,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.24461215,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83485807,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.0019744,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.24517137,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83528849,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00240483,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.2456018,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.8357252,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00284154,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.24603851,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83630019,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00341653,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.2466135,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83670268,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00381901,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.24701598,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83708602,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00420235,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.24739933,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83752625,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 6.48e-06,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.24783955,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83807789,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00055812,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.2483912,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83846377,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.000944,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.24877708,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83886836,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00134859,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.24918167,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.8394402,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00192043,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.2497535,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.83984084,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00232107,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25015415,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84023733,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00271756,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25055064,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84062729,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 6.49e-06,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25094059,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.8411663,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00054551,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25147961,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84162288,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00100209,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25193619,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.8420231,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00140231,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25233641,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84257116,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00195036,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25288446,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84294188,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00232108,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25325518,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84336909,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.0027483,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.2536824,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.8439174,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00329661,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25423071,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84429788,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00367708,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25461118,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84469306,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00407227,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25500637,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84504903,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 6.3e-06,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25536234,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84563329,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00059056,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.2559466,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84600567,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00096294,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25631898,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.8463864,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00134367,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.2566997,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84693867,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00189594,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25725198,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84736274,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00232001,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25767604,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84779314,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00275041,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25810644,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84816028,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 6.52e-06,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25847359,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84870532,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00055156,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25901862,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84908798,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00093421,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25940128,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.84954149,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00138773,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.25985479,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85010785,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00195409,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26042116,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85049039,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00233663,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.2608037,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85088171,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00272795,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26119501,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85145805,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00330429,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26177135,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85190576,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.003752,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26221907,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85230137,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 6.62e-06,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26261467,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85283744,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00054269,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26315075,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85323345,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.0009387,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26354676,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85365926,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00136452,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26397257,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85427798,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00198323,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26459128,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85470477,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00241002,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26501807,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85512571,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00283097,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26543902,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.8558179,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00352315,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26613121,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85626954,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 7.48e-06,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26658285,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85685406,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.000592,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26716737,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85729394,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00103188,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26760725,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85795103,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00168897,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26826434,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85877552,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00251346,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.26908883,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.85974378,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00348171,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.27005708,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.86069465,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00443258,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.27100795,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.86151823,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00525617,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.27183154,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.86205664,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00579458,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.27236994,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.8626685,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00640643,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.2729818,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.86324444,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00698237,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.27355774,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.86384115,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 1.014e-05,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.27415446,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.86476194,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00093093,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.27507525,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.86530724,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00147622,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.27562055,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.86588304,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00205202,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.27619634,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.86668863,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00285762,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.27700194,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.86728465,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00345363,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.27759795,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.86821144,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00438042,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.27852475,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.8689797,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00514869,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.27929301,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.86952377,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00569275,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.27983707,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.87015096,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00631994,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.28046427,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.87069286,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 8.42e-06,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.28100617,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.87144506,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00076062,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.28175837,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.87217113,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00148669,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.28248444,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.87269004,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.0020056,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.28300335,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.873136,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 8.73e-06,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.2834493,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.87424815,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00112088,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.28456145,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.87470543,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00157817,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.28501874,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04258385
+      },
+      {
+        "elapsed_sec": 1.87533085,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00220358,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.28564415,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.87712447,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.0039972,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.28743777,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.87900337,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00587611,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.28931668,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.88023669,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00710942,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.29055,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.88075363,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 9.39e-06,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.29106694,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.88148125,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00073701,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.29179456,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.88211698,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00137274,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.29243028,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.88260427,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00186003,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.29291757,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.88357004,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.0028258,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.29388334,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.88428904,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00354481,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.29460235,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.88500809,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00426385,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.29532139,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.88565452,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 1.149e-05,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.29596782,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.88696708,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00132406,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.29728039,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.88766514,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00202212,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.29797845,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.88830069,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00265767,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.298614,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.88921657,
+        "fallback_reason": null,
+        "safety_stop_reason": null,
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00357355,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "TRACKING",
+        "target_age_sec": 0.29952988,
+        "target_confidence": 1.0,
+        "target_displacement_m": 0.00475876,
+        "target_error_m": 0.04269265
+      },
+      {
+        "elapsed_sec": 1.88976492,
+        "fallback_reason": null,
+        "safety_stop_reason": "target_stale",
+        "servo_status": {
+          "code": 0,
+          "delivery_policy": "reliable_transient_local_event_driven",
+          "last_event_age_sec": 0.00412189,
+          "message": "No warnings",
+          "publisher_count": 1,
+          "reason": null,
+          "success": true
+        },
+        "state": "ABORTED",
+        "target_age_sec": 0.30007822,
+        "target_confidence": 0.0,
+        "target_displacement_m": 0.0,
+        "target_error_m": Infinity
+      }
+    ],
+    "recovery_attempts": [],
+    "servo_activation": {
+      "active": true,
+      "reason": null,
+      "success": true
+    },
+    "servo_command_count": 3311,
+    "stage": "continuous_servo_approach_and_hold",
+    "stop_reason": "target_stale",
+    "success": false
+  },
+  "detected_mouth_pose": {
+    "frame_id": "base_link",
+    "position_m": [
+      -0.932984,
+      0.287859,
+      0.646016
+    ],
+    "tracking": {
+      "available": true,
+      "confidence": 1.0,
+      "frame_id": "base_link",
+      "position_m": [
+        -0.932984,
+        0.287859,
+        0.646016
+      ],
+      "predicted_position_m": [
+        -0.93305374,
+        0.28186797,
+        0.64561374
+      ],
+      "prediction_m": 0.00600492,
+      "provisional": false,
+      "reason": null,
+      "sample_count": 3,
+      "source_timestamp_sec": 1786417461.9609134,
+      "spread_m": 0.01000942,
+      "stable": true,
+      "target_age_sec": 9.9e-05,
+      "target_id": "center",
+      "tracking_state": "STABLE_TARGET",
+      "velocity_mps": [
+        -0.00069744,
+        -0.0599103,
+        -0.00402257
+      ]
+    }
+  },
+  "execution_attempted": true,
+  "execution_sent": true,
+  "existing_one_shot_path_modified": false,
+  "existing_segmented_tracking_path_modified": false,
+  "failure_recovery_return": {
+    "attempted": true,
+    "execution_sent": false,
+    "final_state": "stopped_after_failure",
+    "motion_was_sent_before_failure": true,
+    "post_return_initial_position": {
+      "at_initial_position": false,
+      "available": true,
+      "joint_errors_rad": {
+        "elbow_joint": 0.35185334,
+        "shoulder_lift_joint": 0.73813193,
+        "shoulder_pan_joint": 0.02166404,
+        "wrist_1_joint": 0.37955496,
+        "wrist_2_joint": 0.01377317,
+        "wrist_3_joint": 0.02167759
+      },
+      "maximum_allowed_joint_error_deg": 1.0,
+      "maximum_allowed_joint_error_rad": 0.01745329,
+      "maximum_joint_error_deg": 42.29184405,
+      "maximum_joint_error_rad": 0.73813193,
+      "reason": "live joints are not at initial_position",
+      "stage": "current_initial_position_check"
+    },
+    "reason": "real_human_obstacle_0_torso <-> combined_camera_cup_holder_straw_collision",
+    "return_result": {
+      "automatic_retreat_sent": false,
+      "collision_checking_required": true,
+      "combined_tool_collision_geometry": {
+        "center_tool0_m": [
+          0.0,
+          0.0,
+          0.15
+        ],
+        "collision_checking_enabled_against_non_touch_links": true,
+        "dimensions_m": [
+          0.1,
+          0.1,
+          0.3
+        ],
+        "execution_sent": false,
+        "follows_tool0": true,
+        "frame_id": "tool0",
+        "link_name": "tool0",
+        "object_id": "combined_camera_cup_holder_straw_collision",
+        "operation": "attach_combined_tool_collision",
+        "span_tool0_z_m": [
+          0.0,
+          0.3
+        ],
+        "success": true,
+        "touch_links": [
+          "tool0",
+          "flange",
+          "wrist_3_link"
+        ],
+        "verification": {
+          "actual_center_tool0_m": [
+            0.0,
+            0.0,
+            0.15
+          ],
+          "actual_dimensions_m": [
+            0.1,
+            0.1,
+            0.3
+          ],
+          "actual_frame_id": "tool0",
+          "actual_link_name": "tool0",
+          "actual_orientation_quat_xyzw": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "actual_shape": "box",
+          "actual_touch_links": [
+            "flange",
+            "tool0",
+            "wrist_3_link"
+          ],
+          "checks": {
+            "center": true,
+            "dimensions": true,
+            "frame": true,
+            "link": true,
+            "orientation": true,
+            "shape": true,
+            "touch_links": true
+          },
+          "expected_center_tool0_m": [
+            0.0,
+            0.0,
+            0.15
+          ],
+          "expected_dimensions_m": [
+            0.1,
+            0.1,
+            0.3
+          ],
+          "expected_frame_id": "tool0",
+          "expected_link_name": "tool0",
+          "expected_span_tool0_z_m": [
+            0.0,
+            0.3
+          ],
+          "expected_touch_links": [
+            "tool0",
+            "flange",
+            "wrist_3_link"
+          ],
+          "matched_object_count": 1,
+          "modeling_strategy": "one conservative attached box for camera, cup holder, and straw",
+          "object_id": "combined_camera_cup_holder_straw_collision",
+          "object_pose_orientation_quat_xyzw": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "object_pose_position_tool0_m": [
+            0.0,
+            0.0,
+            0.15
+          ],
+          "primitive_pose_orientation_quat_xyzw": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "primitive_pose_position_m": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "real_execution_geometry_complete": true,
+          "reason": null,
+          "success": true,
+          "tool0_positive_z_is_base_link_negative_z_when_flange_down": true
+        }
+      },
+      "dynamic_octomap_readiness": {
+        "degraded": false,
+        "dynamic_obstacle_layer_active": false,
+        "failures": [],
+        "status": "dynamic_obstacle_layer_disabled",
+        "success": true,
+        "use_octomap": false
+      },
+      "execution_attempted": false,
+      "execution_sent": false,
+      "failures": [
+        "real_human_obstacle_0_torso <-> combined_camera_cup_holder_straw_collision"
+      ],
+      "mode": "execute",
+      "reason": "real_human_obstacle_0_torso <-> combined_camera_cup_holder_straw_collision",
+      "stage": "return_target_or_scene_refused",
+      "success": false,
+      "target_validation": {
+        "collision_checking_required": true,
+        "config": {
+          "authoritative_target": "joint_positions_deg",
+          "config_path": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/initial_position.json",
+          "joint_names": [
+            "shoulder_pan_joint",
+            "shoulder_lift_joint",
+            "elbow_joint",
+            "wrist_1_joint",
+            "wrist_2_joint",
+            "wrist_3_joint"
+          ],
+          "joint_positions_deg": [
+            3.23,
+            -56.38,
+            -100.43,
+            -112.69,
+            91.03,
+            5.54
+          ],
+          "joint_positions_rad": [
+            0.05637413,
+            -0.98401663,
+            -1.75283417,
+            -1.96681153,
+            1.58877322,
+            0.09669124
+          ],
+          "moveit_tool0_fk_reference": {
+            "frame_id": "base_link",
+            "orientation_quat_xyzw": [
+              0.72115323,
+              0.69270354,
+              -0.00916316,
+              0.0039827
+            ],
+            "position_m": [
+              -0.31619894,
+              0.15448432,
+              0.80049741
+            ],
+            "source": "live MoveIt GetPositionFK using the calibrated real-UR10e robot_description on 2026-08-05"
+          },
+          "name": "initial_position",
+          "operator_displayed_tool_pose": {
+            "frame_id": "unverified_polyscope_active_feature",
+            "moveit_target_position_delta_m": 0.40042946,
+            "note": "The live calibrated FK check on 2026-08-05 found an almost exact 0.400 m Z offset, so the active PolyScope feature cannot safely be assumed to be the physical UR base frame.",
+            "orientation_quat_xyzw": [
+              0.7108605,
+              -0.70326448,
+              -0.00411451,
+              -0.00891627
+            ],
+            "position_m": [
+              0.32366,
+              -0.13817,
+              0.40047
+            ],
+            "rotation_convention": "polyscope_axis_angle_vector",
+            "rotation_vector_rad": [
+              2.246,
+              -2.222,
+              -0.013
+            ],
+            "verification_status": "not_used_as_a_moveit_base_frame_reference"
+          },
+          "schema_version": 2,
+          "verification": {
+            "maximum_final_joint_error_deg": 1.0,
+            "maximum_final_tool_orientation_error_deg": 1.0,
+            "maximum_final_tool_position_error_m": 0.02,
+            "maximum_fk_orientation_error_deg": 3.0,
+            "maximum_fk_position_error_m": 0.02,
+            "maximum_tool_vertical_tilt_deg": 5.0
+          }
+        },
+        "execution_sent": false,
+        "failures": [
+          "real_human_obstacle_0_torso <-> combined_camera_cup_holder_straw_collision"
+        ],
+        "planning_scene": {
+          "allowed_collision_exceptions_added": false,
+          "attached_collision_objects": [
+            {
+              "frame_id": "tool0",
+              "id": "combined_camera_cup_holder_straw_collision",
+              "link_name": "tool0",
+              "mesh_count": 0,
+              "primitive_count": 1,
+              "touch_links": [
+                "flange",
+                "tool0",
+                "wrist_3_link"
+              ]
+            }
+          ],
+          "available": true,
+          "combined_tool_collision_geometry": {
+            "actual_center_tool0_m": [
+              0.0,
+              0.0,
+              0.15
+            ],
+            "actual_dimensions_m": [
+              0.1,
+              0.1,
+              0.3
+            ],
+            "actual_frame_id": "tool0",
+            "actual_link_name": "tool0",
+            "actual_orientation_quat_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "actual_shape": "box",
+            "actual_touch_links": [
+              "flange",
+              "tool0",
+              "wrist_3_link"
+            ],
+            "checks": {
+              "center": true,
+              "dimensions": true,
+              "frame": true,
+              "link": true,
+              "orientation": true,
+              "shape": true,
+              "touch_links": true
+            },
+            "expected_center_tool0_m": [
+              0.0,
+              0.0,
+              0.15
+            ],
+            "expected_dimensions_m": [
+              0.1,
+              0.1,
+              0.3
+            ],
+            "expected_frame_id": "tool0",
+            "expected_link_name": "tool0",
+            "expected_span_tool0_z_m": [
+              0.0,
+              0.3
+            ],
+            "expected_touch_links": [
+              "tool0",
+              "flange",
+              "wrist_3_link"
+            ],
+            "matched_object_count": 1,
+            "modeling_strategy": "one conservative attached box for camera, cup holder, and straw",
+            "object_id": "combined_camera_cup_holder_straw_collision",
+            "object_pose_orientation_quat_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "object_pose_position_tool0_m": [
+              0.0,
+              0.0,
+              0.15
+            ],
+            "primitive_pose_orientation_quat_xyzw": [
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "primitive_pose_position_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "real_execution_geometry_complete": true,
+            "reason": null,
+            "success": true,
+            "tool0_positive_z_is_base_link_negative_z_when_flange_down": true
+          },
+          "human_allowed_collision_pairs": [],
+          "human_collision_objects_preserved": true,
+          "human_object_ids": [
+            "real_human_obstacle_0_face_safety",
+            "real_human_obstacle_0_head",
+            "real_human_obstacle_0_torso"
+          ],
+          "link_padding": [
+            {
+              "link_name": "base_link_inertia",
+              "padding_m": 0.0
+            },
+            {
+              "link_name": "forearm_link",
+              "padding_m": 0.0
+            },
+            {
+              "link_name": "shoulder_link",
+              "padding_m": 0.0
+            },
+            {
+              "link_name": "upper_arm_link",
+              "padding_m": 0.0
+            },
+            {
+              "link_name": "wrist_1_link",
+              "padding_m": 0.0
+            },
+            {
+              "link_name": "wrist_2_link",
+              "padding_m": 0.0
+            },
+            {
+              "link_name": "wrist_3_link",
+              "padding_m": 0.0
+            }
+          ],
+          "link_scale": [
+            {
+              "link_name": "base_link_inertia",
+              "scale": 1.0
+            },
+            {
+              "link_name": "forearm_link",
+              "scale": 1.0
+            },
+            {
+              "link_name": "shoulder_link",
+              "scale": 1.0
+            },
+            {
+              "link_name": "upper_arm_link",
+              "scale": 1.0
+            },
+            {
+              "link_name": "wrist_1_link",
+              "scale": 1.0
+            },
+            {
+              "link_name": "wrist_2_link",
+              "scale": 1.0
+            },
+            {
+              "link_name": "wrist_3_link",
+              "scale": 1.0
+            }
+          ],
+          "octomap": {
+            "binary": false,
+            "frame_id": "world",
+            "id": "",
+            "present": false,
+            "resolution_m": 0.0,
+            "serialized_byte_count": 0
+          },
+          "world_collision_objects": [
+            {
+              "frame_id": "world",
+              "id": "real_human_obstacle_0_face_safety",
+              "mesh_count": 0,
+              "object_pose": {
+                "orientation_quat_xyzw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "position_m": [
+                  -1.07864586,
+                  0.30281939,
+                  0.64347666
+                ]
+              },
+              "primitives": [
+                {
+                  "dimensions_m": [
+                    0.16
+                  ],
+                  "pose": {
+                    "orientation_quat_xyzw": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      1.0
+                    ],
+                    "position_m": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ]
+                  },
+                  "type": "sphere"
+                }
+              ]
+            },
+            {
+              "frame_id": "world",
+              "id": "real_human_obstacle_0_head",
+              "mesh_count": 0,
+              "object_pose": {
+                "orientation_quat_xyzw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "position_m": [
+                  -1.03009191,
+                  0.29783259,
+                  0.65432311
+                ]
+              },
+              "primitives": [
+                {
+                  "dimensions_m": [
+                    0.12
+                  ],
+                  "pose": {
+                    "orientation_quat_xyzw": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      1.0
+                    ],
+                    "position_m": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ]
+                  },
+                  "type": "sphere"
+                }
+              ]
+            },
+            {
+              "frame_id": "world",
+              "id": "real_human_obstacle_0_torso",
+              "mesh_count": 0,
+              "object_pose": {
+                "orientation_quat_xyzw": [
+                  0.0,
+                  0.0,
+                  0.0,
+                  1.0
+                ],
+                "position_m": [
+                  -1.03009191,
+                  0.29783259,
+                  0.27432311
+                ]
+              },
+              "primitives": [
+                {
+                  "dimensions_m": [
+                    0.4,
+                    0.25,
+                    0.6
+                  ],
+                  "pose": {
+                    "orientation_quat_xyzw": [
+                      0.0,
+                      0.0,
+                      0.0,
+                      1.0
+                    ],
+                    "position_m": [
+                      0.0,
+                      0.0,
+                      0.0
+                    ]
+                  },
+                  "type": "box"
+                }
+              ]
+            }
+          ]
+        },
+        "reason": "real_human_obstacle_0_torso <-> combined_camera_cup_holder_straw_collision",
+        "stage": "initial_position_validation",
+        "start_state_validity": {
+          "available": true,
+          "classifications": [
+            "HUMAN_SAFETY_GEOMETRY_COLLISION",
+            "CAMERA_CUP_OR_STRAW_COLLISION"
+          ],
+          "collision_pairs": [
+            "real_human_obstacle_0_torso <-> combined_camera_cup_holder_straw_collision"
+          ],
+          "constraint_results": [],
+          "contacts": [
+            {
+              "body_1": "real_human_obstacle_0_torso",
+              "body_2": "combined_camera_cup_holder_straw_collision",
+              "body_type_1": 1,
+              "body_type_2": 2,
+              "camera_cup_or_straw_collision": true,
+              "depth_m": 0.00855505,
+              "human_geometry_collision": true,
+              "normal": [
+                0.99918677,
+                -0.04032121,
+                -0.0
+              ],
+              "octomap_collision": false,
+              "pair": "real_human_obstacle_0_torso <-> combined_camera_cup_holder_straw_collision",
+              "position_m": [
+                -0.83436596,
+                0.17300507,
+                0.38058596
+              ],
+              "self_collision": false
+            }
+          ],
+          "label": "return_start_state",
+          "reason": "real_human_obstacle_0_torso <-> combined_camera_cup_holder_straw_collision",
+          "valid": false
+        },
+        "success": false,
+        "target_fk": {
+          "available": true,
+          "missing_links": [],
+          "poses": {
+            "tool0": {
+              "orientation_quat_xyzw": [
+                0.72115323,
+                0.69270354,
+                -0.00916316,
+                0.0039827
+              ],
+              "position_m": [
+                -0.31619894,
+                0.15448432,
+                0.80049741
+              ]
+            }
+          },
+          "requested_links": [
+            "tool0"
+          ]
+        },
+        "target_state_validity": {
+          "available": true,
+          "classifications": [
+            "VALID"
+          ],
+          "collision_pairs": [],
+          "constraint_results": [],
+          "contacts": [],
+          "label": "fixed_initial_position_state",
+          "reason": null,
+          "valid": true
+        },
+        "ur_base_tf": {
+          "available": true,
+          "child_frame": "base_link",
+          "orientation_quat_xyzw": [
+            0.0,
+            0.0,
+            1.0,
+            -0.0
+          ],
+          "parent_frame": "base",
+          "position_m": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "vertical_axis_constraint_active": true,
+        "wrist_3_direct_command": false
+      },
+      "vertical_axis_constraint_active": true,
+      "wrist_3_direct_command": false
+    },
+    "stationary_wait": {
+      "maximum_allowed_joint_speed_rad_sec": 0.01,
+      "maximum_joint_speed_rad_sec": 0.00972147,
+      "stationary_sample_count": 2,
+      "success": true,
+      "timeout_sec": 3.0
+    },
+    "success": false
+  },
+  "fixed_planning_scene": {
+    "camera_position": [
+      -0.313452,
+      0.224229,
+      0.784413
+    ],
+    "combined_tool_collision_geometry": {
+      "center_tool0_m": [
+        0.0,
+        0.0,
+        0.15
+      ],
+      "collision_checking_enabled_against_non_touch_links": true,
+      "dimensions_m": [
+        0.1,
+        0.1,
+        0.3
+      ],
+      "execution_sent": false,
+      "follows_tool0": true,
+      "frame_id": "tool0",
+      "link_name": "tool0",
+      "object_id": "combined_camera_cup_holder_straw_collision",
+      "operation": "attach_combined_tool_collision",
+      "span_tool0_z_m": [
+        0.0,
+        0.3
+      ],
+      "success": true,
+      "touch_links": [
+        "tool0",
+        "flange",
+        "wrist_3_link"
+      ],
+      "verification": {
+        "actual_center_tool0_m": [
+          -0.0,
+          -0.0,
+          0.15
+        ],
+        "actual_dimensions_m": [
+          0.1,
+          0.1,
+          0.3
+        ],
+        "actual_frame_id": "tool0",
+        "actual_link_name": "tool0",
+        "actual_orientation_quat_xyzw": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "actual_shape": "box",
+        "actual_touch_links": [
+          "flange",
+          "tool0",
+          "wrist_3_link"
+        ],
+        "checks": {
+          "center": true,
+          "dimensions": true,
+          "frame": true,
+          "link": true,
+          "orientation": true,
+          "shape": true,
+          "touch_links": true
+        },
+        "expected_center_tool0_m": [
+          0.0,
+          0.0,
+          0.15
+        ],
+        "expected_dimensions_m": [
+          0.1,
+          0.1,
+          0.3
+        ],
+        "expected_frame_id": "tool0",
+        "expected_link_name": "tool0",
+        "expected_span_tool0_z_m": [
+          0.0,
+          0.3
+        ],
+        "expected_touch_links": [
+          "tool0",
+          "flange",
+          "wrist_3_link"
+        ],
+        "matched_object_count": 1,
+        "modeling_strategy": "one conservative attached box for camera, cup holder, and straw",
+        "object_id": "combined_camera_cup_holder_straw_collision",
+        "object_pose_orientation_quat_xyzw": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "object_pose_position_tool0_m": [
+          -0.0,
+          -0.0,
+          0.15
+        ],
+        "primitive_pose_orientation_quat_xyzw": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "primitive_pose_position_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "real_execution_geometry_complete": true,
+        "reason": null,
+        "success": true,
+        "tool0_positive_z_is_base_link_negative_z_when_flange_down": true
+      }
+    },
+    "config": {
+      "base_frame": "base_link",
+      "face_safety_offset_m": [
+        0.0,
+        0.15,
+        0.03
+      ],
+      "face_safety_radius_m": 0.16,
+      "head_offset_m": [
+        0.0,
+        0.1,
+        0.03
+      ],
+      "head_radius_m": 0.12,
+      "include_table": false,
+      "mouth_topic": "/detected_mouth_pose",
+      "mouth_wait_timeout_sec": 1.0,
+      "service_timeout_sec": 5.0,
+      "table_center_m": [
+        0.4,
+        0.55,
+        -0.05
+      ],
+      "table_size_m": [
+        1.2,
+        0.8,
+        0.1
+      ],
+      "torso_offset_m": [
+        0.0,
+        0.1,
+        -0.35
+      ],
+      "torso_size_m": [
+        0.4,
+        0.25,
+        0.6
+      ]
+    },
+    "dynamic_octomap_modified": false,
+    "frame_id": "base_link",
+    "frozen_candidate_positions_m": [
+      [
+        -0.932984,
+        0.287859,
+        0.646016
+      ]
+    ],
+    "geometry_layer": "fixed_human_safety_objects",
+    "object_ids": [
+      "real_human_obstacle_0_head",
+      "real_human_obstacle_0_torso",
+      "real_human_obstacle_0_face_safety"
+    ],
+    "operation": "apply_people",
+    "people": [
+      {
+        "behind_face_unit_vector": [
+          -0.971079,
+          0.099736,
+          -0.216929
+        ],
+        "face_safety_center": [
+          -1.078646,
+          0.302819,
+          0.643477
+        ],
+        "head_center": [
+          -1.030092,
+          0.297833,
+          0.654323
+        ],
+        "mouth_position": [
+          -0.932984,
+          0.287859,
+          0.646016
+        ],
+        "object_ids": [
+          "real_human_obstacle_0_head",
+          "real_human_obstacle_0_torso",
+          "real_human_obstacle_0_face_safety"
+        ],
+        "person_index": 0,
+        "torso_center": [
+          -1.030092,
+          0.297833,
+          0.274323
+        ]
+      }
+    ],
+    "person_count": 1,
+    "removed_stale_object_ids": [],
+    "selected_candidate_index": 0,
+    "selected_mouth_position_m": [
+      -0.932984,
+      0.287859,
+      0.646016
+    ],
+    "success": true,
+    "target_selection": "center",
+    "verification": {
+      "missing_object_ids": [],
+      "present_object_ids": [
+        "real_human_obstacle_0_face_safety",
+        "real_human_obstacle_0_head",
+        "real_human_obstacle_0_torso"
+      ],
+      "stale_object_ids_still_present": [],
+      "success": true
+    }
+  },
+  "initial_position_before": {
+    "at_initial_position": true,
+    "available": true,
+    "joint_errors_rad": {
+      "elbow_joint": 3.66e-06,
+      "shoulder_lift_joint": 1.202e-05,
+      "shoulder_pan_joint": 2.121e-05,
+      "wrist_1_joint": 3.55e-05,
+      "wrist_2_joint": 2.697e-05,
+      "wrist_3_joint": 8.8e-07
+    },
+    "maximum_allowed_joint_error_deg": 1.0,
+    "maximum_allowed_joint_error_rad": 0.01745329,
+    "maximum_joint_error_deg": 0.00203404,
+    "maximum_joint_error_rad": 3.55e-05,
+    "reason": null,
+    "stage": "current_initial_position_check"
+  },
+  "initial_target_acquisition": {
+    "active_search_required": false,
+    "elapsed_sec": 0.28831686,
+    "last_observation_update": {
+      "accepted": true,
+      "confidence": 1.0,
+      "confidence_source": "accepted_mediapipe_rgbd_observation",
+      "depth_m": 0.622,
+      "reason": "accepted",
+      "source_timestamp_sec": 1786417461.9609134
+    },
+    "reason": "stable_target_acquired",
+    "state": "STABLE_TARGET",
+    "success": true,
+    "target_report": {
+      "available": true,
+      "confidence": 1.0,
+      "frame_id": "base_link",
+      "position_m": [
+        -0.932984,
+        0.287859,
+        0.646016
+      ],
+      "predicted_position_m": [
+        -0.93305374,
+        0.28186797,
+        0.64561374
+      ],
+      "prediction_m": 0.00600492,
+      "provisional": false,
+      "reason": null,
+      "sample_count": 3,
+      "source_timestamp_sec": 1786417461.9609134,
+      "spread_m": 0.01000942,
+      "stable": true,
+      "target_age_sec": 9.9e-05,
+      "target_id": "center",
+      "tracking_state": "STABLE_TARGET",
+      "velocity_mps": [
+        -0.00069744,
+        -0.0599103,
+        -0.00402257
+      ]
+    }
+  },
+  "integrated_real_feed_water": {
+    "active_search_vertical_axis_constraint": true,
+    "mouth_tracking_during_execution": true,
+    "multi_target_identity_lock": true,
+    "same_target_replanning": true,
+    "segmented_approach_enabled": false,
+    "tool_axis_spin_free": true,
+    "tracking_policy": "continuous_moveit_servo_approach_and_hold",
+    "vertical_axis_detour_after_direct_rejection": true
+  },
+  "mode": "execute",
+  "monitored_planning_scene": {
+    "allowed_collision_exceptions_added": false,
+    "attached_collision_objects": [
+      {
+        "frame_id": "tool0",
+        "id": "combined_camera_cup_holder_straw_collision",
+        "link_name": "tool0",
+        "mesh_count": 0,
+        "primitive_count": 1,
+        "touch_links": [
+          "flange",
+          "tool0",
+          "wrist_3_link"
+        ]
+      }
+    ],
+    "available": true,
+    "combined_tool_collision_geometry": {
+      "actual_center_tool0_m": [
+        -0.0,
+        -0.0,
+        0.15
+      ],
+      "actual_dimensions_m": [
+        0.1,
+        0.1,
+        0.3
+      ],
+      "actual_frame_id": "tool0",
+      "actual_link_name": "tool0",
+      "actual_orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "actual_shape": "box",
+      "actual_touch_links": [
+        "flange",
+        "tool0",
+        "wrist_3_link"
+      ],
+      "checks": {
+        "center": true,
+        "dimensions": true,
+        "frame": true,
+        "link": true,
+        "orientation": true,
+        "shape": true,
+        "touch_links": true
+      },
+      "expected_center_tool0_m": [
+        0.0,
+        0.0,
+        0.15
+      ],
+      "expected_dimensions_m": [
+        0.1,
+        0.1,
+        0.3
+      ],
+      "expected_frame_id": "tool0",
+      "expected_link_name": "tool0",
+      "expected_span_tool0_z_m": [
+        0.0,
+        0.3
+      ],
+      "expected_touch_links": [
+        "tool0",
+        "flange",
+        "wrist_3_link"
+      ],
+      "matched_object_count": 1,
+      "modeling_strategy": "one conservative attached box for camera, cup holder, and straw",
+      "object_id": "combined_camera_cup_holder_straw_collision",
+      "object_pose_orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "object_pose_position_tool0_m": [
+        -0.0,
+        -0.0,
+        0.15
+      ],
+      "primitive_pose_orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "primitive_pose_position_m": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "real_execution_geometry_complete": true,
+      "reason": null,
+      "success": true,
+      "tool0_positive_z_is_base_link_negative_z_when_flange_down": true
+    },
+    "human_allowed_collision_pairs": [],
+    "human_collision_objects_preserved": true,
+    "human_object_ids": [
+      "real_human_obstacle_0_face_safety",
+      "real_human_obstacle_0_head",
+      "real_human_obstacle_0_torso"
+    ],
+    "link_padding": [
+      {
+        "link_name": "base_link_inertia",
+        "padding_m": 0.0
+      },
+      {
+        "link_name": "forearm_link",
+        "padding_m": 0.0
+      },
+      {
+        "link_name": "shoulder_link",
+        "padding_m": 0.0
+      },
+      {
+        "link_name": "upper_arm_link",
+        "padding_m": 0.0
+      },
+      {
+        "link_name": "wrist_1_link",
+        "padding_m": 0.0
+      },
+      {
+        "link_name": "wrist_2_link",
+        "padding_m": 0.0
+      },
+      {
+        "link_name": "wrist_3_link",
+        "padding_m": 0.0
+      }
+    ],
+    "link_scale": [
+      {
+        "link_name": "base_link_inertia",
+        "scale": 1.0
+      },
+      {
+        "link_name": "forearm_link",
+        "scale": 1.0
+      },
+      {
+        "link_name": "shoulder_link",
+        "scale": 1.0
+      },
+      {
+        "link_name": "upper_arm_link",
+        "scale": 1.0
+      },
+      {
+        "link_name": "wrist_1_link",
+        "scale": 1.0
+      },
+      {
+        "link_name": "wrist_2_link",
+        "scale": 1.0
+      },
+      {
+        "link_name": "wrist_3_link",
+        "scale": 1.0
+      }
+    ],
+    "octomap": {
+      "binary": false,
+      "frame_id": "world",
+      "id": "",
+      "present": false,
+      "resolution_m": 0.0,
+      "serialized_byte_count": 0
+    },
+    "world_collision_objects": [
+      {
+        "frame_id": "world",
+        "id": "real_human_obstacle_0_face_safety",
+        "mesh_count": 0,
+        "object_pose": {
+          "orientation_quat_xyzw": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "position_m": [
+            -1.07864586,
+            0.30281939,
+            0.64347666
+          ]
+        },
+        "primitives": [
+          {
+            "dimensions_m": [
+              0.16
+            ],
+            "pose": {
+              "orientation_quat_xyzw": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "position_m": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "type": "sphere"
+          }
+        ]
+      },
+      {
+        "frame_id": "world",
+        "id": "real_human_obstacle_0_head",
+        "mesh_count": 0,
+        "object_pose": {
+          "orientation_quat_xyzw": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "position_m": [
+            -1.03009191,
+            0.29783259,
+            0.65432311
+          ]
+        },
+        "primitives": [
+          {
+            "dimensions_m": [
+              0.12
+            ],
+            "pose": {
+              "orientation_quat_xyzw": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "position_m": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "type": "sphere"
+          }
+        ]
+      },
+      {
+        "frame_id": "world",
+        "id": "real_human_obstacle_0_torso",
+        "mesh_count": 0,
+        "object_pose": {
+          "orientation_quat_xyzw": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "position_m": [
+            -1.03009191,
+            0.29783259,
+            0.27432311
+          ]
+        },
+        "primitives": [
+          {
+            "dimensions_m": [
+              0.4,
+              0.25,
+              0.6
+            ],
+            "pose": {
+              "orientation_quat_xyzw": [
+                0.0,
+                0.0,
+                0.0,
+                1.0
+              ],
+              "position_m": [
+                0.0,
+                0.0,
+                0.0
+              ]
+            },
+            "type": "box"
+          }
+        ]
+      }
+    ]
+  },
+  "octomap": {
+    "configuration_valid": true,
+    "degraded": false,
+    "dynamic_obstacle_layer_active": false,
+    "status": "dynamic_obstacle_layer_disabled",
+    "use_octomap": false
+  },
+  "parameters": {
+    "coarse_staging_standoff_m": 0.17,
+    "control_gain": 0.8,
+    "final_pre_mouth_standoff_m": 0.08,
+    "hold_duration_sec": 5.0,
+    "hold_entry_tolerance_m": 0.01,
+    "initial_target_acquisition_timeout_sec": 3.0,
+    "lost_target_timeout_sec": 0.5,
+    "maximum_angular_speed_rps": 0.15,
+    "maximum_flange_tilt_deg": 5.0,
+    "maximum_linear_acceleration_mps2": 0.1,
+    "maximum_linear_speed_mps": 0.02,
+    "maximum_prediction_m": 0.02,
+    "maximum_tool_radius_m": 1.3,
+    "maximum_tracking_duration_sec": 45.0,
+    "minimum_confidence": 0.6,
+    "orientation_correction_gain": 1.0,
+    "prediction_horizon_sec": 0.1,
+    "provisional_linear_speed_mps": 0.01,
+    "provisional_standoff_m": 0.17,
+    "servo_command_frame": "base_link",
+    "servo_ee_frame": "tool0",
+    "servo_replan_enter_m": 0.1,
+    "servo_replan_exit_m": 0.06,
+    "servo_startup_max_error_m": 0.12,
+    "servo_status_topic": "/servo_node/status",
+    "servo_tracking_max_error_m": 0.1,
+    "servo_twist_topic": "/servo_node/delta_twist_cmds",
+    "stable_max_spread_m": 0.025,
+    "stable_sample_count": 3,
+    "target_timeout_sec": 0.3,
+    "use_octomap": false
+  },
+  "pre_mouth_hold": {
+    "completed": false,
+    "duration_sec": 5.0,
+    "motion_command_sent": true,
+    "tracking": {
+      "elapsed_sec": 1.99752073,
+      "final_tool0_pose": {
+        "available": true,
+        "child_frame": "tool0",
+        "link_name": "tool0",
+        "orientation_quat_xyzw": [
+          0.72120091,
+          0.69271966,
+          -0.00270542,
+          0.00118297
+        ],
+        "parent_frame": "base_link",
+        "position_m": [
+          -0.78667571,
+          0.14805756,
+          0.68122824
+        ]
+      },
+      "hold_duration_sec": 5.0,
+      "hold_elapsed_sec": 0.0,
+      "maximum_target_displacement_m": 0.00475876,
+      "maximum_target_error_m": 0.10369344,
+      "octomap": {
+        "configuration_valid": true,
+        "degraded": false,
+        "dynamic_obstacle_layer_active": false,
+        "status": "dynamic_obstacle_layer_disabled",
+        "use_octomap": false
+      },
+      "post_staging_target_acquisition": {
+        "active_search_required": false,
+        "elapsed_sec": 0.26514919,
+        "last_observation_update": {
+          "accepted": true,
+          "confidence": 1.0,
+          "confidence_source": "accepted_mediapipe_rgbd_observation",
+          "depth_m": 0.161,
+          "reason": "accepted",
+          "source_timestamp_sec": 1786417478.3752246
+        },
+        "reason": "stable_target_acquired",
+        "state": "STABLE_TARGET",
+        "success": true,
+        "target_report": {
+          "available": true,
+          "confidence": 1.0,
+          "frame_id": "base_link",
+          "position_m": [
+            -0.934671,
+            0.20453,
+            0.656814
+          ],
+          "predicted_position_m": [
+            -0.93484395,
+            0.2045904,
+            0.65735761
+          ],
+          "prediction_m": 0.00057365,
+          "provisional": false,
+          "reason": null,
+          "sample_count": 3,
+          "source_timestamp_sec": 1786417478.3752246,
+          "spread_m": 0.0008467,
+          "stable": true,
+          "target_age_sec": 0.00011405,
+          "target_id": "center",
+          "tracking_state": "STABLE_TARGET",
+          "velocity_mps": [
+            -0.00172951,
+            0.00060395,
+            0.00543612
+          ]
+        }
+      },
+      "recent_diagnostics": [
+        {
+          "elapsed_sec": 1.83103487,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00155519,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.24134817,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83165063,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00217095,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.24196393,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83205,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00257032,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.2423633,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83247332,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00299365,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.24278663,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83289024,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 6.57e-06,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.24320355,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83351569,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00063202,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.243829,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83390025,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00101658,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.24421356,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83429884,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00141517,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.24461215,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83485807,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.0019744,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.24517137,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83528849,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00240483,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.2456018,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.8357252,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00284154,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.24603851,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83630019,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00341653,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.2466135,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83670268,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00381901,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.24701598,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83708602,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00420235,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.24739933,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83752625,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 6.48e-06,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.24783955,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83807789,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00055812,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.2483912,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83846377,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.000944,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.24877708,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83886836,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00134859,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.24918167,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.8394402,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00192043,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.2497535,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.83984084,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00232107,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25015415,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84023733,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00271756,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25055064,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84062729,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 6.49e-06,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25094059,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.8411663,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00054551,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25147961,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84162288,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00100209,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25193619,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.8420231,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00140231,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25233641,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84257116,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00195036,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25288446,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84294188,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00232108,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25325518,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84336909,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.0027483,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.2536824,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.8439174,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00329661,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25423071,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84429788,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00367708,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25461118,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84469306,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00407227,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25500637,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84504903,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 6.3e-06,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25536234,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84563329,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00059056,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.2559466,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84600567,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00096294,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25631898,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.8463864,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00134367,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.2566997,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84693867,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00189594,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25725198,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84736274,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00232001,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25767604,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84779314,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00275041,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25810644,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84816028,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 6.52e-06,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25847359,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84870532,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00055156,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25901862,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84908798,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00093421,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25940128,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.84954149,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00138773,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.25985479,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85010785,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00195409,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26042116,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85049039,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00233663,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.2608037,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85088171,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00272795,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26119501,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85145805,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00330429,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26177135,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85190576,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.003752,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26221907,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85230137,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 6.62e-06,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26261467,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85283744,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00054269,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26315075,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85323345,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.0009387,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26354676,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85365926,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00136452,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26397257,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85427798,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00198323,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26459128,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85470477,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00241002,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26501807,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85512571,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00283097,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26543902,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.8558179,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00352315,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26613121,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85626954,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 7.48e-06,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26658285,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85685406,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.000592,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26716737,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85729394,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00103188,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26760725,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85795103,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00168897,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26826434,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85877552,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00251346,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.26908883,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.85974378,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00348171,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.27005708,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.86069465,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00443258,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.27100795,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.86151823,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00525617,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.27183154,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.86205664,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00579458,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.27236994,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.8626685,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00640643,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.2729818,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.86324444,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00698237,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.27355774,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.86384115,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 1.014e-05,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.27415446,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.86476194,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00093093,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.27507525,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.86530724,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00147622,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.27562055,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.86588304,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00205202,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.27619634,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.86668863,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00285762,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.27700194,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.86728465,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00345363,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.27759795,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.86821144,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00438042,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.27852475,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.8689797,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00514869,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.27929301,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.86952377,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00569275,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.27983707,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.87015096,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00631994,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.28046427,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.87069286,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 8.42e-06,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.28100617,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.87144506,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00076062,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.28175837,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.87217113,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00148669,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.28248444,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.87269004,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.0020056,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.28300335,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.873136,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 8.73e-06,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.2834493,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.87424815,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00112088,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.28456145,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.87470543,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00157817,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.28501874,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04258385
+        },
+        {
+          "elapsed_sec": 1.87533085,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00220358,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.28564415,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.87712447,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.0039972,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.28743777,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.87900337,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00587611,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.28931668,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.88023669,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00710942,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.29055,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.88075363,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 9.39e-06,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.29106694,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.88148125,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00073701,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.29179456,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.88211698,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00137274,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.29243028,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.88260427,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00186003,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.29291757,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.88357004,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.0028258,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.29388334,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.88428904,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00354481,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.29460235,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.88500809,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00426385,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.29532139,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.88565452,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 1.149e-05,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.29596782,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.88696708,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00132406,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.29728039,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.88766514,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00202212,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.29797845,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.88830069,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00265767,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.298614,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.88921657,
+          "fallback_reason": null,
+          "safety_stop_reason": null,
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00357355,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "TRACKING",
+          "target_age_sec": 0.29952988,
+          "target_confidence": 1.0,
+          "target_displacement_m": 0.00475876,
+          "target_error_m": 0.04269265
+        },
+        {
+          "elapsed_sec": 1.88976492,
+          "fallback_reason": null,
+          "safety_stop_reason": "target_stale",
+          "servo_status": {
+            "code": 0,
+            "delivery_policy": "reliable_transient_local_event_driven",
+            "last_event_age_sec": 0.00412189,
+            "message": "No warnings",
+            "publisher_count": 1,
+            "reason": null,
+            "success": true
+          },
+          "state": "ABORTED",
+          "target_age_sec": 0.30007822,
+          "target_confidence": 0.0,
+          "target_displacement_m": 0.0,
+          "target_error_m": Infinity
+        }
+      ],
+      "recovery_attempts": [],
+      "servo_activation": {
+        "active": true,
+        "reason": null,
+        "success": true
+      },
+      "servo_command_count": 3311,
+      "stage": "continuous_servo_approach_and_hold",
+      "stop_reason": "target_stale",
+      "success": false
+    }
+  },
+  "pre_mouth_pose": {
+    "frame_id": "base_link",
+    "position_m": [
+      -0.85530807,
+      0.27463901,
+      0.66303074
+    ],
+    "standoff_m": 0.08
+  },
+  "reason": "target_stale",
+  "servo_command_interface": "/servo_node/delta_twist_cmds",
+  "stage": "continuous_servo_stopped",
+  "success": false,
+  "target_tool0_pose": {
+    "frame_id": "base_link",
+    "orientation_quat_xyzw": [
+      0.72115223,
+      0.69270463,
+      -0.00917564,
+      0.00394617
+    ],
+    "position_m": [
+      -0.85972481,
+      0.16474697,
+      0.66508787
+    ]
+  }
+}

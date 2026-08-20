@@ -1,0 +1,167 @@
+{
+  "captured_at": "2026-07-23T11:18:11.002+08:00",
+  "coordinate_convention": {
+    "+X": "robot forward",
+    "+Y": "robot right",
+    "+Z": "upward",
+    "-X": "robot backward",
+    "-Y": "robot left",
+    "-Z": "downward"
+  },
+  "derived": {
+    "camera_to_mouth_distance_m": 1.138725799750137,
+    "camera_to_mouth_vector_base_link_m": [
+      -0.28264271393415996,
+      1.1016643792233805,
+      -0.056081537308507734
+    ]
+  },
+  "diagnostic": "mouth_coordinate_axes",
+  "duration_requested_sec": 15.0,
+  "frames": {
+    "base": "base_link",
+    "camera_optical": "d435i_color_optical_frame",
+    "tool": "tool0"
+  },
+  "known_tool_geometry": {
+    "note": "Reference physical geometry supplied for this diagnostic; live TF is recorded separately.",
+    "tool0_to_camera_optical_center_translation_m": [
+      0.07,
+      0.0,
+      0.015
+    ],
+    "tool0_to_straw_tip_translation_m": [
+      0.11,
+      0.0,
+      0.0
+    ]
+  },
+  "label": "center",
+  "markers": {
+    "contents": [
+      "red mouth mean sphere",
+      "XYZ text label",
+      "camera-to-mouth arrow"
+    ],
+    "published_marker_count": 3,
+    "qos_durability": "transient_local",
+    "topic": "/mouth_coordinate_axes_debug"
+  },
+  "rejected_samples": {
+    "non_finite": 0,
+    "wrong_frame": 0
+  },
+  "safety": {
+    "action_clients_created": false,
+    "controller_services_called": false,
+    "moveit_imported": false,
+    "perception_tf_diagnostic_only": true,
+    "robot_motion_sent": false,
+    "trajectory_commands_sent": false
+  },
+  "samples": {
+    "count": 112,
+    "duration_sec": 15.000399395998102,
+    "failure": "maximum distance from mean is 0.029717 m, over 0.025000 m",
+    "latest_pose_age_sec": 0.19671940803527832,
+    "latest_receive_age_sec": 0.09050150099210441,
+    "max_distance_from_mean_m": 0.029716725803951544,
+    "max_m": {
+      "x": -0.5818116010057259,
+      "y": 1.550619674392177,
+      "z": 0.6147864232676825
+    },
+    "mean_m": {
+      "x": -0.6026769749297028,
+      "y": 1.5221554826990062,
+      "z": 0.6116633560087983
+    },
+    "mean_position_m": [
+      -0.6026769749297028,
+      1.5221554826990062,
+      0.6116633560087983
+    ],
+    "min_m": {
+      "x": -0.6161644044226617,
+      "y": 1.4931040608301003,
+      "z": 0.6087626158154077
+    },
+    "spread_m": {
+      "x": 0.034352803416935807,
+      "y": 0.057515613562076684,
+      "z": 0.006023807452274821
+    },
+    "stability_requirements": {
+      "maximum_distance_from_mean_m": 0.025,
+      "minimum_samples": 3
+    },
+    "stable": false,
+    "stddev_m": {
+      "x": 0.008931924011365451,
+      "y": 0.015399709009061964,
+      "z": 0.00117253175432427
+    }
+  },
+  "schema_version": 1,
+  "success": false,
+  "tf": {
+    "base_link_to_camera_optical": {
+      "available": true,
+      "interpretation": "pose of d435i_color_optical_frame expressed in base_link",
+      "orientation_quat_xyzw": [
+        -0.7120506731393244,
+        -0.08778410421436007,
+        0.09535199135056013,
+        0.6900621621814951
+      ],
+      "source_frame": "d435i_color_optical_frame",
+      "stamp_sec": 1784776687.9715111,
+      "target_frame": "base_link",
+      "translation_m": [
+        -0.3200342609955429,
+        0.4204911034756258,
+        0.667744893317306
+      ]
+    },
+    "base_link_to_tool0": {
+      "available": true,
+      "interpretation": "pose of tool0 expressed in base_link",
+      "orientation_quat_xyzw": [
+        0.6724874257773282,
+        0.7400970986049579,
+        -0.003296736312376462,
+        -0.002465428480468617
+      ],
+      "source_frame": "tool0",
+      "stamp_sec": 1784776687.9715111,
+      "target_frame": "base_link",
+      "translation_m": [
+        -0.3132758353122708,
+        0.3507153599771321,
+        0.6825875537153087
+      ]
+    },
+    "tool0_to_camera_optical": {
+      "available": true,
+      "interpretation": "pose of d435i_color_optical_frame expressed in tool0",
+      "orientation_quat_xyzw": [
+        0.5325829481634182,
+        0.44872100676123616,
+        0.4659130615101219,
+        0.54582953431544
+      ],
+      "source_frame": "d435i_color_optical_frame",
+      "stamp_sec": 0.0,
+      "target_frame": "tool0",
+      "translation_m": [
+        0.07011388448249163,
+        5.7893373886079916e-05,
+        0.014787667744015683
+      ]
+    }
+  },
+  "topics": {
+    "markers": "/mouth_coordinate_axes_debug",
+    "mouth_pose": "/detected_mouth_pose"
+  }
+}

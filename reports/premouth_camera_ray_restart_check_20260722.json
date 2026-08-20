@@ -1,0 +1,155 @@
+{
+  "checks": {
+    "camera_tf": {
+      "available": true,
+      "child_frame": "d435i_color_optical_frame",
+      "orientation_quat_xyzw": [
+        -0.71223411,
+        -0.08869427,
+        0.09661561,
+        0.68958054
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.50955721,
+        0.55070991,
+        0.63282186
+      ]
+    },
+    "controllers": {
+      "available": true,
+      "joint_state_broadcaster_active": true,
+      "scaled_joint_trajectory_controller_active": true
+    },
+    "current_straw_tip_pose": {
+      "frame_id": "base_link",
+      "orientation_quat_xyzw": [
+        0.67133998,
+        0.74113623,
+        -0.00380843,
+        -0.00228517
+      ],
+      "position_m": [
+        -0.51342168,
+        0.59043402,
+        0.64754059
+      ]
+    },
+    "execute_trajectory_available": null,
+    "joint_state": {
+      "complete": true,
+      "expected_joint_count": 6,
+      "received": true,
+      "received_expected_joint_count": 6
+    },
+    "mount_calibration": {
+      "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+      "metrics": null,
+      "status": "provisional"
+    },
+    "mouth_pose": {
+      "available": true,
+      "frame_id": "base_link",
+      "jitter_stddev_m": [
+        0.00151145,
+        0.00026987,
+        0.00026523
+      ],
+      "latest_position_m": [
+        -0.68730117,
+        0.86395175,
+        0.57626562
+      ],
+      "latest_received_age_sec": 0.13482501,
+      "latest_source_stamp_sec": 1784707077.727398,
+      "max_distance_from_mean_m": 0.00309121,
+      "mean_position_m": [
+        -0.68815446,
+        0.86419513,
+        0.57566435
+      ],
+      "sample_count": 7,
+      "sample_duration_sec": 5.0,
+      "stability_requirements": {
+        "maximum_age_sec": 1.0,
+        "maximum_spread_m": 0.025,
+        "minimum_samples": 3
+      },
+      "stable": true,
+      "surface_normal": {
+        "available": true,
+        "frame_id": "base_link",
+        "max_angular_spread_deg": 1.76635315,
+        "max_angular_spread_rad": 0.03082868,
+        "mean_vector": [
+          0.30814259,
+          -0.88891038,
+          -0.33894909
+        ],
+        "sample_count": 7,
+        "stability_requirements": {
+          "maximum_angular_spread_deg": 12.0,
+          "minimum_samples": 3
+        },
+        "stable": true
+      }
+    },
+    "move_group_available": true,
+    "required_nodes": {
+      "controller_manager_exists": true,
+      "move_group_exists": true
+    },
+    "speed_slider_percent": 15.0,
+    "tool0_pose": {
+      "available": true,
+      "child_frame": "tool0",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.67133998,
+        0.74113623,
+        -0.00380843,
+        -0.00228517
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.50257625,
+        0.48097014,
+        0.64773048
+      ]
+    },
+    "ur_base_tf": {
+      "available": true,
+      "child_frame": "base_link",
+      "orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        1.0,
+        -0.0
+      ],
+      "parent_frame": "base",
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "execution_disabled": true,
+  "execution_sent": false,
+  "failures": [],
+  "feeding_vector_input": [
+    1.0,
+    0.0,
+    0.0
+  ],
+  "feeding_vector_normalized": [
+    1.0,
+    0.0,
+    0.0
+  ],
+  "feeding_vector_sign": "plus",
+  "mode": "check",
+  "premouth_policy": "camera-ray",
+  "safe_distance_m": 0.05,
+  "success": true
+}

@@ -1,0 +1,45 @@
+[WARN] [1786690808.947702207] [rcl]: ROS_LOCALHOST_ONLY is deprecated but still honored if it is enabled. Use ROS_AUTOMATIC_DISCOVERY_RANGE and ROS_STATIC_PEERS instead.
+[WARN] [1786690808.947752621] [rcl]: 'localhost_only' is disabled, 'automatic_discovery_range' and 'static_peers' will be used.
+[INFO] [1786690808.964428513] [feed_water_recorder_20260814_150008_655828]: Event publisher thread: Started
+[INFO] [1786690808.971107899] [feed_water_recorder_20260814_150008_655828]: Starting recording to '/home/dase-hw101/ur_drinking_project/reports/execution_rosbags/feed_water_real_20260814_150008_655828'
+[INFO] [1786690808.974266813] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/rosout'
+[INFO] [1786690808.974394496] [feed_water_recorder_20260814_150008_655828]: Listening for topics...
+[INFO] [1786690808.974425885] [feed_water_recorder_20260814_150008_655828]: Recording...
+[INFO] [1786690808.974499392] [feed_water_recorder_20260814_150008_655828]: Topics discovery started.
+[INFO] [1786690809.078999639] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/tf_static'
+[INFO] [1786690809.081928438] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/detected_mouth_candidates'
+[INFO] [1786690809.085015953] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/detected_mouth_normal'
+[INFO] [1786690809.087457350] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/detected_mouth_pose'
+[INFO] [1786690809.088911021] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/mouth_detection/status'
+[INFO] [1786690809.099771689] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/tf'
+[INFO] [1786690809.108143498] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/scaled_joint_trajectory_controller/joint_trajectory'
+[INFO] [1786690809.187087624] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/d435i/d435i/color/camera_info'
+[INFO] [1786690809.191330825] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/d435i/d435i/color/image_raw'
+[INFO] [1786690809.194726590] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/d435i/d435i/aligned_depth_to_color/camera_info'
+[INFO] [1786690809.196765113] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/d435i/d435i/aligned_depth_to_color/image_raw'
+[INFO] [1786690809.211969983] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/diagnostics'
+[INFO] [1786690809.215449982] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/io_and_status_controller/robot_program_running'
+[INFO] [1786690809.219372598] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/io_and_status_controller/robot_mode'
+[INFO] [1786690809.220969674] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/force_torque_sensor_broadcaster/wrench_filtered'
+[INFO] [1786690809.224254272] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/io_and_status_controller/safety_mode'
+[INFO] [1786690809.226228243] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/joint_states'
+[INFO] [1786690809.228962817] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/speed_scaling_state_broadcaster/speed_scaling'
+[INFO] [1786690809.415613374] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/tracked_mouth_pose'
+[INFO] [1786690809.418858786] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/mouth_tracking/status'
+[INFO] [1786690809.771931629] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/scaled_joint_trajectory_controller/controller_state'
+[INFO] [1786690809.873049927] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/servo_node/delta_twist_cmds'
+[INFO] [1786690809.875238916] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/servo_node/pose_target_cmds'
+[WARN] [1786690809.979922098] [rosbag2_storage]: Some, but not all, publishers on topic "/display_planned_path" are offering RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL. Falling back to RMW_QOS_POLICY_DURABILITY_VOLATILE as it will connect to all publishers. Previously-published latched messages will not be retrieved.
+[INFO] [1786690809.992176425] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/display_planned_path'
+[INFO] [1786690809.995611840] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/monitored_planning_scene'
+[INFO] [1786690809.998561914] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/trajectory_execution_event'
+[INFO] [1786690810.000085965] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/servo_node/status'
+[INFO] [1786690810.307965822] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/continuous_mouth_tracking/status'
+[INFO] [1786690810.311232692] [feed_water_recorder_20260814_150008_655828]: Subscribed to topic '/continuous_mouth_tracking/target_pose'
+[INFO] [1786690810.311397422] [feed_water_recorder_20260814_150008_655828]: All requested topics are subscribed. Stopping discovery...
+[INFO] [1786690810.311460389] [feed_water_recorder_20260814_150008_655828]: Topics discovery stopped.
+[INFO] [1786690813.287073445] [feed_water_recorder_20260814_150008_655828]: Pausing recording.
+[INFO] [1786690813.287289479] [rosbag2_cpp]: Writing remaining messages from cache to the bag. It may take a while
+[INFO] [1786690813.315256750] [feed_water_recorder_20260814_150008_655828]: Recording stopped
+[WARN] [1786690813.315340906] [feed_water_recorder_20260814_150008_655828]: Number of messages lost on the transport layer: 207
+[INFO] [1786690813.317582575] [feed_water_recorder_20260814_150008_655828]: Event publisher thread: Exited

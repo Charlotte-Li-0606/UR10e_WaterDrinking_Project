@@ -1,0 +1,88 @@
+{
+  "mode": "plan_only",
+  "execution_sent": false,
+  "tracked_target_position": [
+    -0.8444730843307715,
+    0.2170355956800246,
+    0.6341605771561749
+  ],
+  "sample_count": 3,
+  "sample_spread_m": 0.000672288163155212,
+  "success": false,
+  "stage": "moveit_plan_only",
+  "plan": {
+    "success": false,
+    "stage": "move_group_plan_only",
+    "planner": "moveit_move_group",
+    "keep_flange_down": true,
+    "plan": {
+      "base_frame": "base_link",
+      "tool_frame": "tool0",
+      "target_label": "pre_mouth_safe_position",
+      "target_straw_tip_position": [
+        -0.8444730843307715,
+        0.1370355956800246,
+        0.6341605771561749
+      ],
+      "flange_to_straw_tip": [
+        0.11,
+        0.0,
+        0.0
+      ],
+      "flange_down_rpy": [
+        3.141592653589793,
+        0.0,
+        0.0
+      ],
+      "tool0_target_position": [
+        -0.9544730843307715,
+        0.1370355956800246,
+        0.6341605771561749
+      ],
+      "tool0_target_orientation_quat": [
+        1.0,
+        0.0,
+        0.0,
+        6.123233995736766e-17
+      ],
+      "tool0_target_endpose": [
+        -0.9544730843307715,
+        0.1370355956800246,
+        0.6341605771561749,
+        1.0,
+        0.0,
+        0.0,
+        6.123233995736766e-17
+      ],
+      "pre_mouth_safe_position": [
+        -0.8444730843307715,
+        0.1370355956800246,
+        0.6341605771561749
+      ]
+    },
+    "move_result": {
+      "success": false,
+      "stage": "move_group_plan_only",
+      "error_code": 99999,
+      "points": 0,
+      "planning_time": 0.0,
+      "planning_pipeline": "default",
+      "planner_id": "default",
+      "dynamic_obstacle_replanning": false,
+      "replan_enabled": true,
+      "replan_attempts": 3,
+      "replan_delay_sec": 0.2,
+      "move_group_feedback_states": [
+        "PLANNING",
+        "IDLE"
+      ],
+      "replanning_observed": false,
+      "target_policy": "existing MoveGroup pose policy"
+    }
+  },
+  "pre_mouth_position": [
+    -0.8444730843307715,
+    0.1370355956800246,
+    0.6341605771561749
+  ]
+}

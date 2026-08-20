@@ -1,0 +1,153 @@
+{
+  "approach_axis_base_link": [
+    1.0,
+    0.0,
+    0.0
+  ],
+  "checks": {
+    "camera_tf": {
+      "available": true,
+      "child_frame": "d435i_color_optical_frame",
+      "orientation_quat_xyzw": [
+        -0.71135933,
+        -0.0910389,
+        0.09665857,
+        0.69017167
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.49190017,
+        0.9317064,
+        0.51822213
+      ]
+    },
+    "camera_tf_calibration_status": "PROVISIONAL: translation is measured; rotation is inherited from simulation and needs physical hand-eye calibration before any execution.",
+    "controllers": {
+      "available": true,
+      "joint_state_broadcaster_active": true,
+      "scaled_joint_trajectory_controller_active": true
+    },
+    "current_straw_tip_pose": {
+      "frame_id": "base_link",
+      "orientation_quat_xyzw": [
+        0.67006566,
+        0.74229656,
+        -0.00191521,
+        -0.00204165
+      ],
+      "position_m": [
+        -0.49594399,
+        0.9713801,
+        0.53302841
+      ]
+    },
+    "execute_trajectory_available": true,
+    "joint_state": {
+      "complete": true,
+      "expected_joint_count": 6,
+      "received": true,
+      "received_expected_joint_count": 6
+    },
+    "mouth_pose": {
+      "available": true,
+      "frame_id": "base_link",
+      "jitter_stddev_m": [
+        0.00027983,
+        0.00322417,
+        0.00120691
+      ],
+      "latest_position_m": [
+        -0.53243883,
+        1.18447106,
+        0.47764654
+      ],
+      "latest_received_age_sec": 0.12304057,
+      "latest_source_stamp_sec": 1784686803.2669866,
+      "max_distance_from_mean_m": 0.00602477,
+      "mean_position_m": [
+        -0.53270301,
+        1.18814485,
+        0.47897415
+      ],
+      "sample_count": 7,
+      "sample_duration_sec": 5.0,
+      "stability_requirements": {
+        "maximum_age_sec": 1.0,
+        "maximum_spread_m": 0.025,
+        "minimum_samples": 3
+      },
+      "stable": true
+    },
+    "move_group_available": true,
+    "required_nodes": {
+      "controller_manager_exists": true,
+      "move_group_exists": true
+    },
+    "speed_slider_percent": 15.0,
+    "tool0_pose": {
+      "available": true,
+      "child_frame": "tool0",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.67006566,
+        0.74229656,
+        -0.00191521,
+        -0.00204165
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.48472227,
+        0.861954,
+        0.53297733
+      ]
+    },
+    "ur_base_tf": {
+      "available": true,
+      "child_frame": "base_link",
+      "orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        1.0,
+        -0.0
+      ],
+      "parent_frame": "base",
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "current_clearance_projection_m": 0.03675901,
+  "current_straw_tip_pose": [
+    -0.49594399,
+    0.9713801,
+    0.53302841
+  ],
+  "detected_mouth_pose": [
+    -0.53270301,
+    1.18814485,
+    0.47897415
+  ],
+  "execution_attempted": false,
+  "execution_disabled": false,
+  "execution_sent": false,
+  "failures": [
+    "the frozen-pose MoveIt plan did not succeed",
+    "the validated MoveIt trajectory is unavailable",
+    "target tool0 pose is outside the UR10e nominal reach envelope (0.0000 m > 1.30 m)",
+    "target tool orientation differs unexpectedly from the current tool orientation",
+    "pre-mouth straw target is too close to the detected face"
+  ],
+  "frozen_detected_mouth_pose": [
+    -0.53270301,
+    1.18814485,
+    0.47897415
+  ],
+  "frozen_target_policy": "The five-second stable mouth-pose mean is frozen before planning; no perception updates are consumed during motion.",
+  "minimum_clearance_m": 0.05,
+  "mode": "execute",
+  "reason": "current straw is not safely on the approved pre-mouth side of the detected face",
+  "stage": "execution_safety_guard",
+  "success": false
+}

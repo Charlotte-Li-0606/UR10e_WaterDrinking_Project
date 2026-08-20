@@ -1,0 +1,203 @@
+{
+  "mode": "plan_only",
+  "execution_sent": false,
+  "tracked_target_position": [
+    -0.8043478180597364,
+    0.28518431931327004,
+    0.6474442883219987
+  ],
+  "sample_count": 37,
+  "sample_spread_m": 0.0007472581626618991,
+  "success": false,
+  "stage": "moveit_adaptive_plan_only",
+  "attempts": [
+    {
+      "standoff_m": 0.15,
+      "yaw_deg": 60.0,
+      "success": false,
+      "result": {
+        "success": false,
+        "stage": "move_group_plan_only",
+        "error_code": 99999,
+        "points": 0,
+        "planning_time": 0.0,
+        "planning_pipeline": "default",
+        "planner_id": "default",
+        "dynamic_obstacle_replanning": false,
+        "replan_enabled": true,
+        "replan_attempts": 3,
+        "replan_delay_sec": 0.2,
+        "move_group_feedback_states": [
+          "PLANNING"
+        ],
+        "replanning_observed": false,
+        "target_policy": "existing MoveGroup pose policy"
+      }
+    },
+    {
+      "standoff_m": 0.15,
+      "yaw_deg": -60.0,
+      "success": false,
+      "result": {
+        "success": false,
+        "stage": "move_group_plan_only",
+        "error_code": 99999,
+        "points": 0,
+        "planning_time": 0.0,
+        "planning_pipeline": "default",
+        "planner_id": "default",
+        "dynamic_obstacle_replanning": false,
+        "replan_enabled": true,
+        "replan_attempts": 3,
+        "replan_delay_sec": 0.2,
+        "move_group_feedback_states": [
+          "PLANNING"
+        ],
+        "replanning_observed": false,
+        "target_policy": "existing MoveGroup pose policy"
+      }
+    },
+    {
+      "standoff_m": 0.15,
+      "yaw_deg": 45.0,
+      "success": false,
+      "result": {
+        "success": false,
+        "stage": "move_group_plan_only",
+        "error_code": 99999,
+        "points": 0,
+        "planning_time": 0.0,
+        "planning_pipeline": "default",
+        "planner_id": "default",
+        "dynamic_obstacle_replanning": false,
+        "replan_enabled": true,
+        "replan_attempts": 3,
+        "replan_delay_sec": 0.2,
+        "move_group_feedback_states": [
+          "PLANNING",
+          "IDLE"
+        ],
+        "replanning_observed": false,
+        "target_policy": "existing MoveGroup pose policy"
+      }
+    },
+    {
+      "standoff_m": 0.15,
+      "yaw_deg": -45.0,
+      "success": false,
+      "result": {
+        "success": false,
+        "stage": "move_group_plan_only",
+        "error_code": 99999,
+        "points": 0,
+        "planning_time": 0.0,
+        "planning_pipeline": "default",
+        "planner_id": "default",
+        "dynamic_obstacle_replanning": false,
+        "replan_enabled": true,
+        "replan_attempts": 3,
+        "replan_delay_sec": 0.2,
+        "move_group_feedback_states": [
+          "PLANNING",
+          "IDLE"
+        ],
+        "replanning_observed": false,
+        "target_policy": "existing MoveGroup pose policy"
+      }
+    },
+    {
+      "standoff_m": 0.15,
+      "yaw_deg": 30.0,
+      "success": false,
+      "result": {
+        "success": false,
+        "stage": "move_group_plan_only",
+        "error_code": 99999,
+        "points": 0,
+        "planning_time": 0.0,
+        "planning_pipeline": "default",
+        "planner_id": "default",
+        "dynamic_obstacle_replanning": false,
+        "replan_enabled": true,
+        "replan_attempts": 3,
+        "replan_delay_sec": 0.2,
+        "move_group_feedback_states": [
+          "PLANNING",
+          "IDLE"
+        ],
+        "replanning_observed": false,
+        "target_policy": "existing MoveGroup pose policy"
+      }
+    },
+    {
+      "standoff_m": 0.15,
+      "yaw_deg": -30.0,
+      "success": false,
+      "result": {
+        "success": false,
+        "stage": "move_group_plan_only",
+        "error_code": 99999,
+        "points": 0,
+        "planning_time": 0.0,
+        "planning_pipeline": "default",
+        "planner_id": "default",
+        "dynamic_obstacle_replanning": false,
+        "replan_enabled": true,
+        "replan_attempts": 3,
+        "replan_delay_sec": 0.2,
+        "move_group_feedback_states": [
+          "PLANNING"
+        ],
+        "replanning_observed": false,
+        "target_policy": "existing MoveGroup pose policy"
+      }
+    },
+    {
+      "standoff_m": 0.15,
+      "yaw_deg": 15.0,
+      "success": false,
+      "result": {
+        "success": false,
+        "stage": "move_group_plan_only",
+        "error_code": 99999,
+        "points": 0,
+        "planning_time": 0.0,
+        "planning_pipeline": "default",
+        "planner_id": "default",
+        "dynamic_obstacle_replanning": false,
+        "replan_enabled": true,
+        "replan_attempts": 3,
+        "replan_delay_sec": 0.2,
+        "move_group_feedback_states": [
+          "PLANNING"
+        ],
+        "replanning_observed": false,
+        "target_policy": "existing MoveGroup pose policy"
+      }
+    },
+    {
+      "standoff_m": 0.15,
+      "yaw_deg": -15.0,
+      "success": false,
+      "result": {
+        "success": false,
+        "stage": "move_group_plan_only",
+        "error_code": 99999,
+        "points": 0,
+        "planning_time": 0.0,
+        "planning_pipeline": "default",
+        "planner_id": "default",
+        "dynamic_obstacle_replanning": false,
+        "replan_enabled": true,
+        "replan_attempts": 3,
+        "replan_delay_sec": 0.2,
+        "move_group_feedback_states": [
+          "PLANNING"
+        ],
+        "replanning_observed": false,
+        "target_policy": "existing MoveGroup pose policy"
+      }
+    }
+  ],
+  "selected_candidate": null
+}

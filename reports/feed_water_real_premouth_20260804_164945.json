@@ -1,0 +1,2905 @@
+{
+  "active_search": {
+    "adaptive_distance_policy_m": {
+      "backward": [
+        0.04,
+        0.03,
+        0.02
+      ],
+      "skip_if_all_bounded_candidates_fail": true,
+      "up_down": [
+        0.05,
+        0.04,
+        0.03,
+        0.02
+      ]
+    },
+    "adaptive_left_right_angles_deg": [
+      15.0,
+      10.0,
+      5.0
+    ],
+    "camera_extrinsic_applied": true,
+    "checks": {
+      "camera_mount_match": {
+        "configured": {
+          "rpy_rad": [
+            3.0678492,
+            -0.00514696,
+            -1.46519711
+          ],
+          "translation_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        },
+        "live": {
+          "available": true,
+          "child_frame": "d435i_link",
+          "orientation_quat_xyzw": [
+            0.74286778,
+            -0.6684175,
+            -0.02274236,
+            0.02912556
+          ],
+          "parent_frame": "tool0",
+          "position_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        },
+        "matches": true,
+        "maximum_rotation_error_deg": 0.5,
+        "maximum_translation_error_m": 0.001,
+        "reason": null,
+        "rotation_error_deg": 0.0,
+        "rotation_error_rad": 0.0,
+        "translation_error_m": 0.0
+      },
+      "camera_tf": {
+        "available": true,
+        "child_frame": "d435i_color_optical_frame",
+        "orientation_quat_xyzw": [
+          -0.52249898,
+          -0.43430626,
+          0.43943876,
+          0.58759379
+        ],
+        "parent_frame": "base_link",
+        "position_m": [
+          -0.2950713,
+          0.22679311,
+          0.78974449
+        ]
+      },
+      "controllers": {
+        "available": true,
+        "joint_state_broadcaster_active": true,
+        "scaled_joint_trajectory_controller_active": true
+      },
+      "current_straw_tip_pose": {
+        "frame_id": "base_link",
+        "orientation_quat_xyzw": [
+          0.75381318,
+          0.65567168,
+          -0.03120218,
+          -0.02977857
+        ],
+        "position_m": [
+          -0.2883414,
+          0.26624415,
+          0.80416336
+        ]
+      },
+      "execute_trajectory_available": null,
+      "joint_state": {
+        "complete": true,
+        "expected_joint_count": 6,
+        "received": true,
+        "received_expected_joint_count": 6
+      },
+      "mount_calibration": {
+        "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+        "corrected_physical_profile": true,
+        "metrics": {
+          "captured_at": "2026-07-23T15:45:00+08:00",
+          "limitation": "One physical approach direction plus the upright-image constraint fixes the axis convention, but a three-marker solve is still required for metrology-grade 6-DoF verification.",
+          "method": "manual_physical_axis_alignment",
+          "preserved_tool0_to_optical_center_m": [
+            0.07011388,
+            5.789e-05,
+            0.01478767
+          ],
+          "rollback_tool0_to_d435i_link": {
+            "note": "Legacy simulation-derived provisional transform",
+            "rpy_rad": [
+              -3.14159265,
+              -0.027969,
+              -0.153885
+            ],
+            "translation_m": [
+              0.072299,
+              0.014823,
+              0.015
+            ]
+          },
+          "rotation_determinant": 1.0,
+          "rotation_orthogonality_error": 0.0,
+          "target_camera_optical_axes_in_base_link": {
+            "+X_image_right": [
+              0.0,
+              1.0,
+              0.0
+            ],
+            "+Y_image_down": [
+              0.0,
+              0.0,
+              -1.0
+            ],
+            "+Z_depth_forward": [
+              -1.0,
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "status": "provisional",
+        "tool0_to_d435i_link": {
+          "rpy_rad": [
+            3.0678492,
+            -0.00514696,
+            -1.46519711
+          ],
+          "translation_m": [
+            0.08492189,
+            0.00172131,
+            0.01390208
+          ]
+        }
+      },
+      "mouth_pose": {
+        "available": false,
+        "identity_locked": false,
+        "identity_unsafe": false,
+        "perception_status": {
+          "detected": false,
+          "latest_received_age_sec": 0.12891455,
+          "reason": "no_face"
+        },
+        "reason": "no mouth-candidate message has been received; /mouth_detection/status reports no_face",
+        "sample_duration_sec": 1.0,
+        "stable": false,
+        "target_selection": "center"
+      },
+      "move_group_available": true,
+      "required_nodes": {
+        "controller_manager_exists": true,
+        "move_group_exists": true
+      },
+      "robot_mode": 7,
+      "robot_mode_running": true,
+      "robot_program_running": true,
+      "safety_mode": 1,
+      "safety_mode_normal": true,
+      "speed_slider_percent": 60.0,
+      "tool0_pose": {
+        "available": true,
+        "child_frame": "tool0",
+        "link_name": "tool0",
+        "orientation_quat_xyzw": [
+          0.75381318,
+          0.65567168,
+          -0.03120218,
+          -0.02977857
+        ],
+        "parent_frame": "base_link",
+        "position_m": [
+          -0.30354803,
+          0.15730387,
+          0.80504241
+        ]
+      },
+      "tool0_to_camera_link_tf": {
+        "available": true,
+        "child_frame": "d435i_link",
+        "orientation_quat_xyzw": [
+          0.74286778,
+          -0.6684175,
+          -0.02274236,
+          0.02912556
+        ],
+        "parent_frame": "tool0",
+        "position_m": [
+          0.08492189,
+          0.00172131,
+          0.01390208
+        ]
+      },
+      "tool0_to_camera_optical_tf": {
+        "available": true,
+        "child_frame": "d435i_color_optical_frame",
+        "orientation_quat_xyzw": [
+          0.70195292,
+          0.05738397,
+          0.00995365,
+          0.70983808
+        ],
+        "parent_frame": "tool0",
+        "position_m": [
+          0.07011388,
+          5.789e-05,
+          0.01478767
+        ]
+      },
+      "tool_vertical_axis_guard": {
+        "available": true,
+        "maximum_tilt_deg": 5.0,
+        "maximum_tilt_rad": 0.08726646,
+        "required_axis_base_link": [
+          0.0,
+          0.0,
+          -1.0
+        ],
+        "tilt_deg": 4.9440573,
+        "tilt_rad": 0.08629008,
+        "tool_axis_tool0": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "within_limit": true
+      },
+      "ur_base_tf": {
+        "available": true,
+        "child_frame": "base_link",
+        "orientation_quat_xyzw": [
+          0.0,
+          0.0,
+          1.0,
+          -0.0
+        ],
+        "parent_frame": "base",
+        "position_m": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "elapsed_sec": 15.00034707,
+    "execute": true,
+    "fk_waypoint_vertical_axis_validation": true,
+    "intermediate_flange_orientation_unconstrained": false,
+    "left_right_rotation_each_side_deg": 15.0,
+    "left_right_search_strategy": "MoveIt tool0-local-Z pose rotations",
+    "left_right_total_sweep_deg": 30.0,
+    "maximum_cumulative_joint_travel_rad": 2.0,
+    "maximum_joint_excursion_rad": 0.78539816,
+    "maximum_search_trajectory_duration_sec": 3.0,
+    "maximum_time_sec": 15.0,
+    "maximum_tool_vertical_tilt_deg": 5.0,
+    "ompl_active_search_enabled": false,
+    "planner": "pilz_industrial_motion_planner/LIN",
+    "position_only_search_goals": false,
+    "reason": "selected mouth was not found within the bounded 15-second search; skipped unreachable candidates: backward_wide: SEARCH_PLANNING_FAILED; scan_left: SEARCH_PLANNING_FAILED; scan_right: SEARCH_PLANNING_FAILED; scan_up: SEARCH_PLANNING_FAILED; scan_down: SEARCH_PLANNING_FAILED",
+    "rotation_search_enabled": true,
+    "search_direction_reference": {
+      "backward_up_down": "d435i_color_optical_frame frozen at initial tool0 pose",
+      "left_right": "tool0 local Z rotation"
+    },
+    "search_order": [
+      "backward_wide",
+      "scan_left",
+      "scan_right",
+      "scan_up",
+      "scan_down"
+    ],
+    "search_steps": [
+      {
+        "camera_extrinsic_applied": true,
+        "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+        "failure_diagnostic": {
+          "classification": "SEARCH_PLANNING_FAILED",
+          "deadline_remaining_sec": 12.502754,
+          "goal_orientation_constraint": false,
+          "goal_vertical_axis_constraint": true,
+          "intermediate_flange_orientation_unconstrained": false,
+          "maximum_tool_vertical_tilt_rad": 0.08726646,
+          "orientation_path_constraint": true,
+          "planner": "pilz_industrial_motion_planner/LIN",
+          "position_goal_constraint": true,
+          "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+          "search_motion_type": "cartesian_translation",
+          "target": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "orientation_quat_xyzw": [
+              0.75379264,
+              0.65569543,
+              -0.03119682,
+              -0.02978098
+            ],
+            "position_m": [
+              -0.28415595,
+              0.15265722,
+              0.80350749
+            ],
+            "search_motion_type": "cartesian_translation",
+            "tool_local_z_rotation_rad": 0.0
+          },
+          "tool_axis_spin_free": true,
+          "wrist_3_direct_command": false
+        },
+        "name": "backward_wide",
+        "offset_camera_optical_m": [
+          0.0,
+          0.0,
+          -0.04
+        ],
+        "offset_from_origin_m": [
+          0.03878416,
+          -0.00929329,
+          -0.00306983
+        ],
+        "offset_initial_tool0_m": [
+          -0.00381763,
+          0.03981614,
+          -0.00031753
+        ],
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.52172578,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "cartesian_translation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.75379264,
+                  0.65569543,
+                  -0.03119682,
+                  -0.02978098
+                ],
+                "position_m": [
+                  -0.26476387,
+                  0.14801058,
+                  0.80197258
+                ],
+                "search_motion_type": "cartesian_translation",
+                "tool_local_z_rotation_rad": 0.0
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": false,
+            "goal_vertical_axis_constraint": true,
+            "intermediate_flange_orientation_unconstrained": false,
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "backward_wide",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              -0.04
+            ],
+            "offset_from_origin_m": [
+              0.03878416,
+              -0.00929329,
+              -0.00306983
+            ],
+            "offset_initial_tool0_m": [
+              -0.00381763,
+              0.03981614,
+              -0.00031753
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.40376235,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 6
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.00103073,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "cartesian_translation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.0,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "cartesian_translation",
+            "segment_distance_m": 0.04002186,
+            "segment_orientation_distance_rad": 6.389e-05,
+            "target_tool0_orientation_quat_xyzw": [
+              0.75381318,
+              0.65567168,
+              -0.03120218,
+              -0.02977857
+            ],
+            "target_tool0_position_m": [
+              -0.26476387,
+              0.14801058,
+              0.80197258
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.85741883,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_rad": 0.0,
+            "wrist_3_direct_command": false
+          },
+          {
+            "adaptive_candidate_index": 1,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.51189179,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "cartesian_translation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.75379264,
+                  0.65569543,
+                  -0.03119682,
+                  -0.02978098
+                ],
+                "position_m": [
+                  -0.27445991,
+                  0.1503339,
+                  0.80274003
+                ],
+                "search_motion_type": "cartesian_translation",
+                "tool_local_z_rotation_rad": 0.0
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": false,
+            "goal_vertical_axis_constraint": true,
+            "intermediate_flange_orientation_unconstrained": false,
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "backward_wide",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              -0.03
+            ],
+            "offset_from_origin_m": [
+              0.02908812,
+              -0.00696997,
+              -0.00230237
+            ],
+            "offset_initial_tool0_m": [
+              -0.00286322,
+              0.0298621,
+              -0.00023815
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.40351151,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 6
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.0009779,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "cartesian_translation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.0,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "cartesian_translation",
+            "segment_distance_m": 0.03002187,
+            "segment_orientation_distance_rad": 6.389e-05,
+            "target_tool0_orientation_quat_xyzw": [
+              0.75381318,
+              0.65567168,
+              -0.03120218,
+              -0.02977857
+            ],
+            "target_tool0_position_m": [
+              -0.27445991,
+              0.1503339,
+              0.80274003
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.86158,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_rad": 0.0,
+            "wrist_3_direct_command": false
+          },
+          {
+            "adaptive_candidate_index": 2,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.502754,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "cartesian_translation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.75379264,
+                  0.65569543,
+                  -0.03119682,
+                  -0.02978098
+                ],
+                "position_m": [
+                  -0.28415595,
+                  0.15265722,
+                  0.80350749
+                ],
+                "search_motion_type": "cartesian_translation",
+                "tool_local_z_rotation_rad": 0.0
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": false,
+            "goal_vertical_axis_constraint": true,
+            "intermediate_flange_orientation_unconstrained": false,
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "backward_wide",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              -0.02
+            ],
+            "offset_from_origin_m": [
+              0.01939208,
+              -0.00464665,
+              -0.00153492
+            ],
+            "offset_initial_tool0_m": [
+              -0.00190881,
+              0.01990807,
+              -0.00015877
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.40339632,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 6
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.00087496,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "cartesian_translation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.0,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "cartesian_translation",
+            "segment_distance_m": 0.02002188,
+            "segment_orientation_distance_rad": 6.389e-05,
+            "target_tool0_orientation_quat_xyzw": [
+              0.75381318,
+              0.65567168,
+              -0.03120218,
+              -0.02977857
+            ],
+            "target_tool0_position_m": [
+              -0.28415595,
+              0.15265722,
+              0.80350749
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.86583666,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_rad": 0.0,
+            "wrist_3_direct_command": false
+          }
+        ],
+        "search_motion_type": "cartesian_translation",
+        "skipped": true,
+        "target_tool0_orientation_quat_xyzw": [
+          0.75381318,
+          0.65567168,
+          -0.03120218,
+          -0.02977857
+        ],
+        "target_tool0_position_m": [
+          -0.26476387,
+          0.14801058,
+          0.80197258
+        ],
+        "tool_local_z_rotation_rad": 0.0
+      },
+      {
+        "camera_extrinsic_applied": false,
+        "direction_reference": "tool0 local +Z axis",
+        "failure_diagnostic": {
+          "classification": "SEARCH_PLANNING_FAILED",
+          "deadline_remaining_sec": 12.47082577,
+          "goal_orientation_constraint": true,
+          "goal_vertical_axis_constraint": false,
+          "intermediate_flange_orientation_unconstrained": false,
+          "maximum_tool_vertical_tilt_rad": 0.08726646,
+          "orientation_path_constraint": true,
+          "planner": "pilz_industrial_motion_planner/LIN",
+          "position_goal_constraint": true,
+          "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+          "search_motion_type": "tool_local_z_rotation",
+          "target": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "orientation_quat_xyzw": [
+              0.78169571,
+              0.62216676,
+              -0.03247141,
+              -0.02838921
+            ],
+            "position_m": [
+              -0.30355932,
+              0.15730673,
+              0.80504534
+            ],
+            "search_motion_type": "tool_local_z_rotation",
+            "tool_local_z_rotation_rad": 0.08726646
+          },
+          "tool_axis_spin_free": true,
+          "wrist_3_direct_command": false
+        },
+        "joint_selection": "MoveIt pose-goal IK and planning",
+        "name": "scan_left",
+        "offset_camera_optical_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "offset_from_origin_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "offset_initial_tool0_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": false,
+            "direction_reference": "tool0 local +Z axis",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.48788917,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "tool_local_z_rotation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.83294653,
+                  0.55166995,
+                  -0.03482213,
+                  -0.02545111
+                ],
+                "position_m": [
+                  -0.30355932,
+                  0.15730673,
+                  0.80504534
+                ],
+                "search_motion_type": "tool_local_z_rotation",
+                "tool_local_z_rotation_rad": 0.26179939
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": true,
+            "goal_vertical_axis_constraint": false,
+            "intermediate_flange_orientation_unconstrained": false,
+            "joint_selection": "MoveIt pose-goal IK and planning",
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_left",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_from_origin_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_initial_tool0_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.70280448,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 9
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.0014039,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "tool_local_z_rotation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.26179939,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "tool_local_z_rotation",
+            "segment_distance_m": 0.0,
+            "segment_orientation_distance_rad": 0.26176174,
+            "target_tool0_orientation_quat_xyzw": [
+              0.83294653,
+              0.55166995,
+              -0.03482213,
+              -0.02545111
+            ],
+            "target_tool0_position_m": [
+              -0.30355932,
+              0.15730673,
+              0.80504534
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.87463802,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_deg": 15.0,
+            "tool_local_z_rotation_rad": 0.26179939,
+            "wrist_3_direct_command": false
+          },
+          {
+            "adaptive_candidate_index": 1,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": false,
+            "direction_reference": "tool0 local +Z axis",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.47832722,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "tool_local_z_rotation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.80809024,
+                  0.5874775,
+                  -0.03367882,
+                  -0.02694581
+                ],
+                "position_m": [
+                  -0.30355932,
+                  0.15730673,
+                  0.80504534
+                ],
+                "search_motion_type": "tool_local_z_rotation",
+                "tool_local_z_rotation_rad": 0.17453293
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": true,
+            "goal_vertical_axis_constraint": false,
+            "intermediate_flange_orientation_unconstrained": false,
+            "joint_selection": "MoveIt pose-goal IK and planning",
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_left",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_from_origin_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_initial_tool0_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.57386469,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 7
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.0008377,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "tool_local_z_rotation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.17453293,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "tool_local_z_rotation",
+            "segment_distance_m": 0.0,
+            "segment_orientation_distance_rad": 0.17449527,
+            "target_tool0_orientation_quat_xyzw": [
+              0.80809024,
+              0.5874775,
+              -0.03367882,
+              -0.02694581
+            ],
+            "target_tool0_position_m": [
+              -0.30355932,
+              0.15730673,
+              0.80504534
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.87463802,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_deg": 10.0,
+            "tool_local_z_rotation_rad": 0.17453293,
+            "wrist_3_direct_command": false
+          },
+          {
+            "adaptive_candidate_index": 2,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": false,
+            "direction_reference": "tool0 local +Z axis",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.47082577,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "tool_local_z_rotation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.78169571,
+                  0.62216676,
+                  -0.03247141,
+                  -0.02838921
+                ],
+                "position_m": [
+                  -0.30355932,
+                  0.15730673,
+                  0.80504534
+                ],
+                "search_motion_type": "tool_local_z_rotation",
+                "tool_local_z_rotation_rad": 0.08726646
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": true,
+            "goal_vertical_axis_constraint": false,
+            "intermediate_flange_orientation_unconstrained": false,
+            "joint_selection": "MoveIt pose-goal IK and planning",
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_left",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_from_origin_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_initial_tool0_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.40572338,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 6
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.00075964,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "tool_local_z_rotation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.08726646,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "tool_local_z_rotation",
+            "segment_distance_m": 0.0,
+            "segment_orientation_distance_rad": 0.08722881,
+            "target_tool0_orientation_quat_xyzw": [
+              0.78169571,
+              0.62216676,
+              -0.03247141,
+              -0.02838921
+            ],
+            "target_tool0_position_m": [
+              -0.30355932,
+              0.15730673,
+              0.80504534
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.87463802,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_deg": 5.0,
+            "tool_local_z_rotation_rad": 0.08726646,
+            "wrist_3_direct_command": false
+          }
+        ],
+        "search_motion_type": "tool_local_z_rotation",
+        "skipped": true,
+        "target_tool0_orientation_quat_xyzw": [
+          0.83294653,
+          0.55166995,
+          -0.03482213,
+          -0.02545111
+        ],
+        "target_tool0_position_m": [
+          -0.30354803,
+          0.15730387,
+          0.80504241
+        ],
+        "tool_local_z_rotation_deg": 15.0,
+        "tool_local_z_rotation_rad": 0.26179939,
+        "wrist_3_direct_command": false
+      },
+      {
+        "camera_extrinsic_applied": false,
+        "direction_reference": "tool0 local +Z axis",
+        "failure_diagnostic": {
+          "classification": "SEARCH_PLANNING_FAILED",
+          "deadline_remaining_sec": 12.41805953,
+          "goal_orientation_constraint": true,
+          "goal_vertical_axis_constraint": false,
+          "intermediate_flange_orientation_unconstrained": false,
+          "maximum_tool_vertical_tilt_rad": 0.08726646,
+          "orientation_path_constraint": true,
+          "planner": "pilz_industrial_motion_planner/LIN",
+          "position_goal_constraint": true,
+          "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+          "search_motion_type": "tool_local_z_rotation",
+          "target": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "orientation_quat_xyzw": [
+              0.72449572,
+              0.68792849,
+              -0.02987356,
+              -0.03111125
+            ],
+            "position_m": [
+              -0.30357589,
+              0.1572891,
+              0.80500804
+            ],
+            "search_motion_type": "tool_local_z_rotation",
+            "tool_local_z_rotation_rad": -0.08726646
+          },
+          "tool_axis_spin_free": true,
+          "wrist_3_direct_command": false
+        },
+        "joint_selection": "MoveIt pose-goal IK and planning",
+        "name": "scan_right",
+        "offset_camera_optical_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "offset_from_origin_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "offset_initial_tool0_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": false,
+            "direction_reference": "tool0 local +Z axis",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.4573513,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "tool_local_z_rotation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.66178187,
+                  0.74845468,
+                  -0.02704836,
+                  -0.03359652
+                ],
+                "position_m": [
+                  -0.30357589,
+                  0.1572891,
+                  0.80500804
+                ],
+                "search_motion_type": "tool_local_z_rotation",
+                "tool_local_z_rotation_rad": -0.26179939
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": true,
+            "goal_vertical_axis_constraint": false,
+            "intermediate_flange_orientation_unconstrained": false,
+            "joint_selection": "MoveIt pose-goal IK and planning",
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_right",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_from_origin_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_initial_tool0_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.7029344,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 9
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.00156751,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "tool_local_z_rotation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": -0.26179939,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "tool_local_z_rotation",
+            "segment_distance_m": 0.0,
+            "segment_orientation_distance_rad": 0.26182436,
+            "target_tool0_orientation_quat_xyzw": [
+              0.66178187,
+              0.74845468,
+              -0.02704836,
+              -0.03359652
+            ],
+            "target_tool0_position_m": [
+              -0.30357589,
+              0.1572891,
+              0.80500804
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.87460627,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_deg": -15.0,
+            "tool_local_z_rotation_rad": -0.26179939,
+            "wrist_3_direct_command": false
+          },
+          {
+            "adaptive_candidate_index": 1,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": false,
+            "direction_reference": "tool0 local +Z axis",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.42731782,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "tool_local_z_rotation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.69379914,
+                  0.7188758,
+                  -0.02848807,
+                  -0.03238471
+                ],
+                "position_m": [
+                  -0.30357589,
+                  0.1572891,
+                  0.80500804
+                ],
+                "search_motion_type": "tool_local_z_rotation",
+                "tool_local_z_rotation_rad": -0.17453293
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": true,
+            "goal_vertical_axis_constraint": false,
+            "intermediate_flange_orientation_unconstrained": false,
+            "joint_selection": "MoveIt pose-goal IK and planning",
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_right",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_from_origin_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_initial_tool0_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.57394869,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 7
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.00137142,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "tool_local_z_rotation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": -0.17453293,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "tool_local_z_rotation",
+            "segment_distance_m": 0.0,
+            "segment_orientation_distance_rad": 0.17455791,
+            "target_tool0_orientation_quat_xyzw": [
+              0.69379914,
+              0.7188758,
+              -0.02848807,
+              -0.03238471
+            ],
+            "target_tool0_position_m": [
+              -0.30357589,
+              0.1572891,
+              0.80500804
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.87460627,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_deg": -10.0,
+            "tool_local_z_rotation_rad": -0.17453293,
+            "wrist_3_direct_command": false
+          },
+          {
+            "adaptive_candidate_index": 2,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": false,
+            "direction_reference": "tool0 local +Z axis",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.41805953,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "tool_local_z_rotation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.72449572,
+                  0.68792849,
+                  -0.02987356,
+                  -0.03111125
+                ],
+                "position_m": [
+                  -0.30357589,
+                  0.1572891,
+                  0.80500804
+                ],
+                "search_motion_type": "tool_local_z_rotation",
+                "tool_local_z_rotation_rad": -0.08726646
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": true,
+            "goal_vertical_axis_constraint": false,
+            "intermediate_flange_orientation_unconstrained": false,
+            "joint_selection": "MoveIt pose-goal IK and planning",
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_right",
+            "offset_camera_optical_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_from_origin_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "offset_initial_tool0_m": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": true,
+              "goal_vertical_axis_constraint": false,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.40576557,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 6
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.00081033,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "tool_local_z_rotation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": -0.08726646,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "tool_local_z_rotation",
+            "segment_distance_m": 0.0,
+            "segment_orientation_distance_rad": 0.08729146,
+            "target_tool0_orientation_quat_xyzw": [
+              0.72449572,
+              0.68792849,
+              -0.02987356,
+              -0.03111125
+            ],
+            "target_tool0_position_m": [
+              -0.30357589,
+              0.1572891,
+              0.80500804
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.87460627,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_deg": -5.0,
+            "tool_local_z_rotation_rad": -0.08726646,
+            "wrist_3_direct_command": false
+          }
+        ],
+        "search_motion_type": "tool_local_z_rotation",
+        "skipped": true,
+        "target_tool0_orientation_quat_xyzw": [
+          0.66178187,
+          0.74845468,
+          -0.02704836,
+          -0.03359652
+        ],
+        "target_tool0_position_m": [
+          -0.30354803,
+          0.15730387,
+          0.80504241
+        ],
+        "tool_local_z_rotation_deg": -15.0,
+        "tool_local_z_rotation_rad": -0.26179939,
+        "wrist_3_direct_command": false
+      },
+      {
+        "camera_extrinsic_applied": true,
+        "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+        "failure_diagnostic": {
+          "classification": "SEARCH_PLANNING_FAILED",
+          "deadline_remaining_sec": 12.37568329,
+          "goal_orientation_constraint": false,
+          "goal_vertical_axis_constraint": true,
+          "intermediate_flange_orientation_unconstrained": false,
+          "maximum_tool_vertical_tilt_rad": 0.08726646,
+          "orientation_path_constraint": true,
+          "planner": "pilz_industrial_motion_planner/LIN",
+          "position_goal_constraint": true,
+          "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+          "search_motion_type": "cartesian_translation",
+          "target": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "orientation_quat_xyzw": [
+              0.7538275,
+              0.65565697,
+              -0.03117095,
+              -0.0297726
+            ],
+            "position_m": [
+              -0.30229655,
+              0.15594833,
+              0.82495713
+            ],
+            "search_motion_type": "cartesian_translation",
+            "tool_local_z_rotation_rad": 0.0
+          },
+          "tool_axis_spin_free": true,
+          "wrist_3_direct_command": false
+        },
+        "name": "scan_up",
+        "offset_camera_optical_m": [
+          0.0,
+          -0.05,
+          -0.04
+        ],
+        "offset_from_origin_m": [
+          0.04191285,
+          -0.01268213,
+          0.04671698
+        ],
+        "offset_initial_tool0_m": [
+          -0.00713916,
+          0.03909984,
+          -0.05020194
+        ],
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.40468259,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "cartesian_translation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.7538275,
+                  0.65565697,
+                  -0.03117095,
+                  -0.0297726
+                ],
+                "position_m": [
+                  -0.30041934,
+                  0.15391503,
+                  0.85482922
+                ],
+                "search_motion_type": "cartesian_translation",
+                "tool_local_z_rotation_rad": 0.0
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": false,
+            "goal_vertical_axis_constraint": true,
+            "intermediate_flange_orientation_unconstrained": false,
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_up",
+            "offset_camera_optical_m": [
+              0.0,
+              -0.05,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              0.00312869,
+              -0.00338884,
+              0.04978682
+            ],
+            "offset_initial_tool0_m": [
+              -0.00332154,
+              -0.0007163,
+              -0.04988441
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.40354515,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 6
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.00151508,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "cartesian_translation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.0,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "cartesian_translation",
+            "segment_distance_m": 0.05003694,
+            "segment_orientation_distance_rad": 7.571e-05,
+            "target_tool0_orientation_quat_xyzw": [
+              0.75381318,
+              0.65567168,
+              -0.03120218,
+              -0.02977857
+            ],
+            "target_tool0_position_m": [
+              -0.30041934,
+              0.15391503,
+              0.85482922
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.91906181,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_rad": 0.0,
+            "wrist_3_direct_command": false
+          },
+          {
+            "adaptive_candidate_index": 1,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.39551212,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "cartesian_translation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.7538275,
+                  0.65565697,
+                  -0.03117095,
+                  -0.0297726
+                ],
+                "position_m": [
+                  -0.30104508,
+                  0.1545928,
+                  0.84487186
+                ],
+                "search_motion_type": "cartesian_translation",
+                "tool_local_z_rotation_rad": 0.0
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": false,
+            "goal_vertical_axis_constraint": true,
+            "intermediate_flange_orientation_unconstrained": false,
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_up",
+            "offset_camera_optical_m": [
+              0.0,
+              -0.04,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              0.00250295,
+              -0.00271107,
+              0.03982945
+            ],
+            "offset_initial_tool0_m": [
+              -0.00265723,
+              -0.00057304,
+              -0.03990753
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.40364966,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 6
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.00149437,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "cartesian_translation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.0,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "cartesian_translation",
+            "segment_distance_m": 0.04003694,
+            "segment_orientation_distance_rad": 7.571e-05,
+            "target_tool0_orientation_quat_xyzw": [
+              0.75381318,
+              0.65567168,
+              -0.03120218,
+              -0.02977857
+            ],
+            "target_tool0_position_m": [
+              -0.30104508,
+              0.1545928,
+              0.84487186
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.9101294,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_rad": 0.0,
+            "wrist_3_direct_command": false
+          },
+          {
+            "adaptive_candidate_index": 2,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.38502944,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "cartesian_translation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.7538275,
+                  0.65565697,
+                  -0.03117095,
+                  -0.0297726
+                ],
+                "position_m": [
+                  -0.30167082,
+                  0.15527057,
+                  0.8349145
+                ],
+                "search_motion_type": "cartesian_translation",
+                "tool_local_z_rotation_rad": 0.0
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": false,
+            "goal_vertical_axis_constraint": true,
+            "intermediate_flange_orientation_unconstrained": false,
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_up",
+            "offset_camera_optical_m": [
+              0.0,
+              -0.03,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              0.00187721,
+              -0.0020333,
+              0.02987209
+            ],
+            "offset_initial_tool0_m": [
+              -0.00199292,
+              -0.00042978,
+              -0.02993065
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.40347532,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 6
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.00140012,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "cartesian_translation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.0,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "cartesian_translation",
+            "segment_distance_m": 0.03003695,
+            "segment_orientation_distance_rad": 7.571e-05,
+            "target_tool0_orientation_quat_xyzw": [
+              0.75381318,
+              0.65567168,
+              -0.03120218,
+              -0.02977857
+            ],
+            "target_tool0_position_m": [
+              -0.30167082,
+              0.15527057,
+              0.8349145
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.90121942,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_rad": 0.0,
+            "wrist_3_direct_command": false
+          },
+          {
+            "adaptive_candidate_index": 3,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.37568329,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "cartesian_translation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.7538275,
+                  0.65565697,
+                  -0.03117095,
+                  -0.0297726
+                ],
+                "position_m": [
+                  -0.30229655,
+                  0.15594833,
+                  0.82495713
+                ],
+                "search_motion_type": "cartesian_translation",
+                "tool_local_z_rotation_rad": 0.0
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": false,
+            "goal_vertical_axis_constraint": true,
+            "intermediate_flange_orientation_unconstrained": false,
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_up",
+            "offset_camera_optical_m": [
+              0.0,
+              -0.02,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              0.00125148,
+              -0.00135554,
+              0.01991473
+            ],
+            "offset_initial_tool0_m": [
+              -0.00132861,
+              -0.00028652,
+              -0.01995376
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.40339956,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 6
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.00084262,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "cartesian_translation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.0,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "cartesian_translation",
+            "segment_distance_m": 0.02003695,
+            "segment_orientation_distance_rad": 7.571e-05,
+            "target_tool0_orientation_quat_xyzw": [
+              0.75381318,
+              0.65567168,
+              -0.03120218,
+              -0.02977857
+            ],
+            "target_tool0_position_m": [
+              -0.30229655,
+              0.15594833,
+              0.82495713
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.89233254,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_rad": 0.0,
+            "wrist_3_direct_command": false
+          }
+        ],
+        "search_motion_type": "cartesian_translation",
+        "skipped": true,
+        "target_tool0_orientation_quat_xyzw": [
+          0.75381318,
+          0.65567168,
+          -0.03120218,
+          -0.02977857
+        ],
+        "target_tool0_position_m": [
+          -0.26163518,
+          0.14462174,
+          0.85175939
+        ],
+        "tool_local_z_rotation_rad": 0.0
+      },
+      {
+        "camera_extrinsic_applied": true,
+        "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+        "failure_diagnostic": {
+          "classification": "SEARCH_PLANNING_FAILED",
+          "deadline_remaining_sec": 12.33228932,
+          "goal_orientation_constraint": false,
+          "goal_vertical_axis_constraint": true,
+          "intermediate_flange_orientation_unconstrained": false,
+          "maximum_tool_vertical_tilt_rad": 0.08726646,
+          "orientation_path_constraint": true,
+          "planner": "pilz_industrial_motion_planner/LIN",
+          "position_goal_constraint": true,
+          "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+          "search_motion_type": "cartesian_translation",
+          "target": {
+            "frame_id": "base_link",
+            "link_name": "tool0",
+            "orientation_quat_xyzw": [
+              0.7538275,
+              0.65565697,
+              -0.03117095,
+              -0.0297726
+            ],
+            "position_m": [
+              -0.30479951,
+              0.1586594,
+              0.78512768
+            ],
+            "search_motion_type": "cartesian_translation",
+            "tool_local_z_rotation_rad": 0.0
+          },
+          "tool_axis_spin_free": true,
+          "wrist_3_direct_command": false
+        },
+        "name": "scan_down",
+        "offset_camera_optical_m": [
+          0.0,
+          0.05,
+          -0.04
+        ],
+        "offset_from_origin_m": [
+          0.03565547,
+          -0.00590445,
+          -0.05285665
+        ],
+        "offset_initial_tool0_m": [
+          -0.00049609,
+          0.04053244,
+          0.04956687
+        ],
+        "planning_attempts": [
+          {
+            "adaptive_candidate_index": 0,
+            "adaptive_scale_applied": false,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.36181279,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "cartesian_translation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.7538275,
+                  0.65565697,
+                  -0.03117095,
+                  -0.0297726
+                ],
+                "position_m": [
+                  -0.30667672,
+                  0.16069271,
+                  0.75525559
+                ],
+                "search_motion_type": "cartesian_translation",
+                "tool_local_z_rotation_rad": 0.0
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": false,
+            "goal_vertical_axis_constraint": true,
+            "intermediate_flange_orientation_unconstrained": false,
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_down",
+            "offset_camera_optical_m": [
+              0.0,
+              0.05,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              -0.00312869,
+              0.00338884,
+              -0.04978682
+            ],
+            "offset_initial_tool0_m": [
+              0.00332154,
+              0.0007163,
+              0.04988441
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.40357861,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 6
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.00165852,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "cartesian_translation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.0,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "cartesian_translation",
+            "segment_distance_m": 0.04996307,
+            "segment_orientation_distance_rad": 7.571e-05,
+            "target_tool0_orientation_quat_xyzw": [
+              0.75381318,
+              0.65567168,
+              -0.03120218,
+              -0.02977857
+            ],
+            "target_tool0_position_m": [
+              -0.30667672,
+              0.16069271,
+              0.75525559
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.83083318,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_rad": 0.0,
+            "wrist_3_direct_command": false
+          },
+          {
+            "adaptive_candidate_index": 1,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.35185221,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "cartesian_translation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.7538275,
+                  0.65565697,
+                  -0.03117095,
+                  -0.0297726
+                ],
+                "position_m": [
+                  -0.30605098,
+                  0.16001494,
+                  0.76521295
+                ],
+                "search_motion_type": "cartesian_translation",
+                "tool_local_z_rotation_rad": 0.0
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": false,
+            "goal_vertical_axis_constraint": true,
+            "intermediate_flange_orientation_unconstrained": false,
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_down",
+            "offset_camera_optical_m": [
+              0.0,
+              0.04,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              -0.00250295,
+              0.00271107,
+              -0.03982945
+            ],
+            "offset_initial_tool0_m": [
+              0.00265723,
+              0.00057304,
+              0.03990753
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.40340015,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 6
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.00096191,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "cartesian_translation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.0,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "cartesian_translation",
+            "segment_distance_m": 0.03996307,
+            "segment_orientation_distance_rad": 7.571e-05,
+            "target_tool0_orientation_quat_xyzw": [
+              0.75381318,
+              0.65567168,
+              -0.03120218,
+              -0.02977857
+            ],
+            "target_tool0_position_m": [
+              -0.30605098,
+              0.16001494,
+              0.76521295
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.83953728,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_rad": 0.0,
+            "wrist_3_direct_command": false
+          },
+          {
+            "adaptive_candidate_index": 2,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.34183133,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "cartesian_translation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.7538275,
+                  0.65565697,
+                  -0.03117095,
+                  -0.0297726
+                ],
+                "position_m": [
+                  -0.30542525,
+                  0.15933717,
+                  0.77517032
+                ],
+                "search_motion_type": "cartesian_translation",
+                "tool_local_z_rotation_rad": 0.0
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": false,
+            "goal_vertical_axis_constraint": true,
+            "intermediate_flange_orientation_unconstrained": false,
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_down",
+            "offset_camera_optical_m": [
+              0.0,
+              0.03,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              -0.00187721,
+              0.0020333,
+              -0.02987209
+            ],
+            "offset_initial_tool0_m": [
+              0.00199292,
+              0.00042978,
+              0.02993065
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.40372304,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 6
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.0011252,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "cartesian_translation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.0,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "cartesian_translation",
+            "segment_distance_m": 0.02996307,
+            "segment_orientation_distance_rad": 7.571e-05,
+            "target_tool0_orientation_quat_xyzw": [
+              0.75381318,
+              0.65567168,
+              -0.03120218,
+              -0.02977857
+            ],
+            "target_tool0_position_m": [
+              -0.30542525,
+              0.15933717,
+              0.77517032
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.84826997,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_rad": 0.0,
+            "wrist_3_direct_command": false
+          },
+          {
+            "adaptive_candidate_index": 3,
+            "adaptive_scale_applied": true,
+            "camera_extrinsic_applied": true,
+            "direction_reference": "d435i_color_optical_frame frozen at initial tool0 pose",
+            "failure_diagnostic": {
+              "classification": "SEARCH_PLANNING_FAILED",
+              "deadline_remaining_sec": 12.33228932,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "position_goal_constraint": true,
+              "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route",
+              "search_motion_type": "cartesian_translation",
+              "target": {
+                "frame_id": "base_link",
+                "link_name": "tool0",
+                "orientation_quat_xyzw": [
+                  0.7538275,
+                  0.65565697,
+                  -0.03117095,
+                  -0.0297726
+                ],
+                "position_m": [
+                  -0.30479951,
+                  0.1586594,
+                  0.78512768
+                ],
+                "search_motion_type": "cartesian_translation",
+                "tool_local_z_rotation_rad": 0.0
+              },
+              "tool_axis_spin_free": true,
+              "wrist_3_direct_command": false
+            },
+            "goal_orientation_constraint": false,
+            "goal_vertical_axis_constraint": true,
+            "intermediate_flange_orientation_unconstrained": false,
+            "maximum_tool_vertical_tilt_rad": 0.08726646,
+            "name": "scan_down",
+            "offset_camera_optical_m": [
+              0.0,
+              0.02,
+              -0.0
+            ],
+            "offset_from_origin_m": [
+              -0.00125148,
+              0.00135554,
+              -0.01991473
+            ],
+            "offset_initial_tool0_m": [
+              0.00132861,
+              0.00028652,
+              0.01995376
+            ],
+            "orientation_path_constraint": true,
+            "plan_result": {
+              "error_code": 99999,
+              "error_message": "",
+              "execution_sent": false,
+              "goal_orientation_constraint": false,
+              "goal_vertical_axis_constraint": true,
+              "intermediate_flange_orientation_unconstrained": false,
+              "joint_motion_validation": null,
+              "maximum_tool_vertical_tilt_rad": 0.08726646,
+              "orientation_path_constraint": true,
+              "planned_trajectory": {
+                "duration_sec": 0.40359077,
+                "joint_names": [
+                  "shoulder_pan_joint",
+                  "shoulder_lift_joint",
+                  "elbow_joint",
+                  "wrist_1_joint",
+                  "wrist_2_joint",
+                  "wrist_3_joint"
+                ],
+                "points": 6
+              },
+              "planner": "pilz_industrial_motion_planner/LIN",
+              "planning_time_sec": 0.00161222,
+              "position_goal_constraint": true,
+              "reason": null,
+              "search_motion_type": "cartesian_translation",
+              "stage": "search_plan_only",
+              "success": false,
+              "tool_axis_spin_free": true,
+              "tool_local_z_rotation_rad": 0.0,
+              "vertical_axis_validation": null,
+              "wrist_3_direct_command": false
+            },
+            "position_goal_constraint": true,
+            "search_motion_type": "cartesian_translation",
+            "segment_distance_m": 0.01996307,
+            "segment_orientation_distance_rad": 7.571e-05,
+            "target_tool0_orientation_quat_xyzw": [
+              0.75381318,
+              0.65567168,
+              -0.03120218,
+              -0.02977857
+            ],
+            "target_tool0_position_m": [
+              -0.30479951,
+              0.1586594,
+              0.78512768
+            ],
+            "target_tool0_radius_from_ur_base_m": 0.85703035,
+            "tool_axis_spin_free": true,
+            "tool_local_z_rotation_rad": 0.0,
+            "wrist_3_direct_command": false
+          }
+        ],
+        "search_motion_type": "cartesian_translation",
+        "skipped": true,
+        "target_tool0_orientation_quat_xyzw": [
+          0.75381318,
+          0.65567168,
+          -0.03120218,
+          -0.02977857
+        ],
+        "target_tool0_position_m": [
+          -0.26789256,
+          0.15139942,
+          0.75218576
+        ],
+        "tool_local_z_rotation_rad": 0.0
+      }
+    ],
+    "selected_mouth": {
+      "available": false,
+      "identity_locked": false,
+      "identity_unsafe": false,
+      "reason": "no mouth-candidate message has been received",
+      "stable": false,
+      "target_selection": "center"
+    },
+    "skipped_search_waypoints": [
+      {
+        "classification": "SEARCH_PLANNING_FAILED",
+        "name": "backward_wide",
+        "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route"
+      },
+      {
+        "classification": "SEARCH_PLANNING_FAILED",
+        "name": "scan_left",
+        "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route"
+      },
+      {
+        "classification": "SEARCH_PLANNING_FAILED",
+        "name": "scan_right",
+        "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route"
+      },
+      {
+        "classification": "SEARCH_PLANNING_FAILED",
+        "name": "scan_up",
+        "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route"
+      },
+      {
+        "classification": "SEARCH_PLANNING_FAILED",
+        "name": "scan_down",
+        "reason": "Pilz LIN could not generate a collision-free bounded route to the bounded search goal before the deadline; this may be a start-state collision, IK failure, or unavailable route"
+      }
+    ],
+    "stage": "active_search_timeout",
+    "start_state_checks": [
+      {
+        "before": {
+          "available": true,
+          "classification": "START_STATE_VALID",
+          "contacts": [],
+          "octomap_only_collision": false,
+          "valid": true
+        },
+        "before_search_waypoint": "backward_wide",
+        "octomap_clear_attempted": false,
+        "octomap_rebuilt_from_fresh_clouds": false,
+        "recovered": false
+      },
+      {
+        "before": {
+          "available": true,
+          "classification": "START_STATE_VALID",
+          "contacts": [],
+          "octomap_only_collision": false,
+          "valid": true
+        },
+        "before_search_waypoint": "scan_left",
+        "octomap_clear_attempted": false,
+        "octomap_rebuilt_from_fresh_clouds": false,
+        "recovered": false
+      },
+      {
+        "before": {
+          "available": true,
+          "classification": "START_STATE_VALID",
+          "contacts": [],
+          "octomap_only_collision": false,
+          "valid": true
+        },
+        "before_search_waypoint": "scan_right",
+        "octomap_clear_attempted": false,
+        "octomap_rebuilt_from_fresh_clouds": false,
+        "recovered": false
+      },
+      {
+        "before": {
+          "available": true,
+          "classification": "START_STATE_VALID",
+          "contacts": [],
+          "octomap_only_collision": false,
+          "valid": true
+        },
+        "before_search_waypoint": "scan_up",
+        "octomap_clear_attempted": false,
+        "octomap_rebuilt_from_fresh_clouds": false,
+        "recovered": false
+      },
+      {
+        "before": {
+          "available": true,
+          "classification": "START_STATE_VALID",
+          "contacts": [],
+          "octomap_only_collision": false,
+          "valid": true
+        },
+        "before_search_waypoint": "scan_down",
+        "octomap_clear_attempted": false,
+        "octomap_rebuilt_from_fresh_clouds": false,
+        "recovered": false
+      }
+    ],
+    "success": false,
+    "target_selection": "center",
+    "tool_axis_spin_free": true,
+    "trajectory_sent": false,
+    "translation_only": false,
+    "vertical_axis_constraint_active": true,
+    "wrist_3_direct_command": false
+  },
+  "combined_tool_collision_geometry": {
+    "center_tool0_m": [
+      0.0,
+      0.0,
+      0.15
+    ],
+    "collision_checking_enabled_against_non_touch_links": true,
+    "dimensions_m": [
+      0.1,
+      0.1,
+      0.3
+    ],
+    "execution_sent": false,
+    "follows_tool0": true,
+    "frame_id": "tool0",
+    "link_name": "tool0",
+    "object_id": "combined_camera_cup_holder_straw_collision",
+    "operation": "attach_combined_tool_collision",
+    "span_tool0_z_m": [
+      0.0,
+      0.3
+    ],
+    "success": true,
+    "touch_links": [
+      "tool0",
+      "flange",
+      "wrist_3_link"
+    ],
+    "verification": {
+      "actual_center_tool0_m": [
+        0.0,
+        0.0,
+        0.15
+      ],
+      "actual_dimensions_m": [
+        0.1,
+        0.1,
+        0.3
+      ],
+      "actual_frame_id": "tool0",
+      "actual_link_name": "tool0",
+      "actual_orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "actual_shape": "box",
+      "actual_touch_links": [
+        "flange",
+        "tool0",
+        "wrist_3_link"
+      ],
+      "checks": {
+        "center": true,
+        "dimensions": true,
+        "frame": true,
+        "link": true,
+        "orientation": true,
+        "shape": true,
+        "touch_links": true
+      },
+      "expected_center_tool0_m": [
+        0.0,
+        0.0,
+        0.15
+      ],
+      "expected_dimensions_m": [
+        0.1,
+        0.1,
+        0.3
+      ],
+      "expected_frame_id": "tool0",
+      "expected_link_name": "tool0",
+      "expected_span_tool0_z_m": [
+        0.0,
+        0.3
+      ],
+      "expected_touch_links": [
+        "tool0",
+        "flange",
+        "wrist_3_link"
+      ],
+      "matched_object_count": 1,
+      "modeling_strategy": "one conservative attached box for camera, cup holder, and straw",
+      "object_id": "combined_camera_cup_holder_straw_collision",
+      "object_pose_orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "object_pose_position_tool0_m": [
+        0.0,
+        0.0,
+        0.15
+      ],
+      "primitive_pose_orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "primitive_pose_position_m": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "real_execution_geometry_complete": true,
+      "reason": null,
+      "success": true,
+      "tool0_positive_z_is_base_link_negative_z_when_flange_down": true
+    }
+  },
+  "dynamic_octomap_readiness": {
+    "execution_mode": true,
+    "failures": [],
+    "filtered_cloud": {
+      "active": true,
+      "age_sec": 0.17456551,
+      "frame_id": "d435i_color_optical_frame",
+      "height": 1,
+      "maximum_age_sec": 0.75,
+      "point_count": 7180,
+      "topic": "/wrist_rgbd/filtered_cloud",
+      "width": 7180
+    },
+    "move_group_parameters": {
+      "allow_trajectory_execution": true,
+      "available": true,
+      "octomap_resolution_m": 0.03,
+      "sensors": [
+        "wrist_rgbd_pointcloud"
+      ]
+    },
+    "raw_cloud": {
+      "active": true,
+      "age_sec": 5.084e-05,
+      "frame_id": "d435i_color_optical_frame",
+      "height": 1,
+      "maximum_age_sec": 0.75,
+      "point_count": 7309,
+      "topic": "/wrist_rgbd/points",
+      "width": 7309
+    },
+    "success": true
+  },
+  "execution_attempted": false,
+  "execution_sent": false,
+  "integrated_real_feed_water": {
+    "active_search": true,
+    "active_search_camera_extrinsic_applied": true,
+    "active_search_direction_reference": {
+      "backward_up_down": "d435i_color_optical_frame frozen at initial tool0 pose",
+      "left_right": "tool0 local Z rotation"
+    },
+    "active_search_intermediate_flange_orientation_unconstrained": false,
+    "active_search_order": [
+      "backward_wide",
+      "scan_left",
+      "scan_right",
+      "scan_up",
+      "scan_down"
+    ],
+    "active_search_planner": "pilz_industrial_motion_planner/LIN",
+    "active_search_vertical_axis_constraint": true,
+    "adaptive_left_right_angles_deg": [
+      15.0,
+      10.0,
+      5.0
+    ],
+    "adaptive_search_distances_m": {
+      "backward": [
+        0.04,
+        0.03,
+        0.02
+      ],
+      "skip_unreachable_direction": true,
+      "up_down": [
+        0.05,
+        0.04,
+        0.03,
+        0.02
+      ]
+    },
+    "combined_camera_cup_holder_straw_collision_geometry": {
+      "center_tool0_m": [
+        0.0,
+        0.0,
+        0.15
+      ],
+      "dimensions_m": [
+        0.1,
+        0.1,
+        0.3
+      ],
+      "follows_tool0": true,
+      "link_name": "tool0",
+      "object_id": "combined_camera_cup_holder_straw_collision",
+      "required": true,
+      "verified": true
+    },
+    "combined_static_and_dynamic_scene_checks": true,
+    "detour_final_goal_orientation_constraint": true,
+    "direct_clear_path_first": true,
+    "dynamic_obstacle_avoidance": true,
+    "fk_waypoint_vertical_axis_validation": true,
+    "left_right_rotation_each_side_deg": 15.0,
+    "left_right_search_strategy": "MoveIt tool0-local-Z pose rotations",
+    "left_right_total_sweep_deg": 30.0,
+    "maximum_cumulative_joint_travel_rad": 2.0,
+    "maximum_joint_excursion_rad": 0.78539816,
+    "maximum_search_trajectory_duration_sec": 3.0,
+    "maximum_tool_vertical_tilt_deg": 5.0,
+    "multi_target_identity_lock": true,
+    "ompl_active_search_enabled": false,
+    "ompl_dynamic_obstacle_detour_enabled": true,
+    "position_only_active_search_goals": false,
+    "rotation_search_enabled": true,
+    "same_target_replanning": true,
+    "target_selection": "center",
+    "tool_axis_spin_free": true,
+    "translation_only_search": false,
+    "vertical_axis_detour_after_direct_rejection": true,
+    "wait_for_clear": false,
+    "wrist_3_direct_command": false
+  },
+  "mode": "execute",
+  "reason": "selected mouth was not found within the bounded 15-second search; skipped unreachable candidates: backward_wide: SEARCH_PLANNING_FAILED; scan_left: SEARCH_PLANNING_FAILED; scan_right: SEARCH_PLANNING_FAILED; scan_up: SEARCH_PLANNING_FAILED; scan_down: SEARCH_PLANNING_FAILED",
+  "stage": "active_search",
+  "success": false
+}

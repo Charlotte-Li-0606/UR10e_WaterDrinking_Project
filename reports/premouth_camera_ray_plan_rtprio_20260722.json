@@ -1,0 +1,103 @@
+{
+  "checks": {
+    "camera_tf": {
+      "available": true,
+      "child_frame": "d435i_color_optical_frame",
+      "orientation_quat_xyzw": [
+        -0.71129626,
+        -0.09112111,
+        0.09677616,
+        0.69020935
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.51145847,
+        0.55096389,
+        0.63262103
+      ]
+    },
+    "controllers": {
+      "available": true,
+      "joint_state_broadcaster_active": true,
+      "scaled_joint_trajectory_controller_active": false
+    },
+    "current_straw_tip_pose": {
+      "frame_id": "base_link",
+      "orientation_quat_xyzw": [
+        0.66996023,
+        0.74239158,
+        -0.00188976,
+        -0.00211371
+      ],
+      "position_m": [
+        -0.51551246,
+        0.59063443,
+        0.64743297
+      ]
+    },
+    "execute_trajectory_available": null,
+    "joint_state": {
+      "complete": true,
+      "expected_joint_count": 6,
+      "received": true,
+      "received_expected_joint_count": 6
+    },
+    "mount_calibration": {
+      "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+      "metrics": null,
+      "status": "provisional"
+    },
+    "mouth_pose": {
+      "available": false,
+      "reason": "no /detected_mouth_pose messages received in 5.0 seconds"
+    },
+    "move_group_available": true,
+    "required_nodes": {
+      "controller_manager_exists": true,
+      "move_group_exists": false
+    },
+    "speed_slider_percent": 0.0,
+    "tool0_pose": {
+      "available": true,
+      "child_frame": "tool0",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.66996023,
+        0.74239158,
+        -0.00188976,
+        -0.00211371
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.50425972,
+        0.48121153,
+        0.64736628
+      ]
+    },
+    "ur_base_tf": {
+      "available": true,
+      "child_frame": "base_link",
+      "orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        1.0,
+        -0.0
+      ],
+      "parent_frame": "base",
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "execution_sent": false,
+  "failures": [
+    "/move_action is unavailable",
+    "scaled_joint_trajectory_controller is not active",
+    "no /detected_mouth_pose messages received in 5.0 seconds"
+  ],
+  "mode": "plan",
+  "stage": "readiness",
+  "success": false
+}

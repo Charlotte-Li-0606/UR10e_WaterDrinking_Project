@@ -5724,7 +5724,11 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         )
         return report
 
-    def _acquire_continuous_target(self) -> dict[str, Any]:
+    def _acquire_continuous_target(
+        self,
+        *,
+        allow_single_candidate_initial_reacquisition: bool = False,
+    ) -> dict[str, Any]:
         """Accept the first fresh valid target, including provisional data."""
         self._continuous_tracker.reset(searching=True)
         started = time.monotonic()
@@ -5736,17 +5740,25 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             timeout_sec=timeout_sec,
         )
         decision = None
-        while rclpy.ok():
-            rclpy.spin_once(self, timeout_sec=0.05)
-            now = time.monotonic()
-            target = self._continuous_tracker.target(now_monotonic_sec=now)
-            decision = acquirer.evaluate(target, now_monotonic_sec=now)
-            self._publish_continuous_diagnostics(
-                target,
-                state=decision.state.value,
+        self.target_tracker.set_single_candidate_initial_reacquisition_allowed(
+            allow_single_candidate_initial_reacquisition
+        )
+        try:
+            while rclpy.ok():
+                rclpy.spin_once(self, timeout_sec=0.05)
+                now = time.monotonic()
+                target = self._continuous_tracker.target(now_monotonic_sec=now)
+                decision = acquirer.evaluate(target, now_monotonic_sec=now)
+                self._publish_continuous_diagnostics(
+                    target,
+                    state=decision.state.value,
+                )
+                if decision.complete:
+                    break
+        finally:
+            self.target_tracker.set_single_candidate_initial_reacquisition_allowed(
+                False
             )
-            if decision.complete:
-                break
         assert decision is not None
         return {
             "success": bool(decision.target.available),
@@ -5756,6 +5768,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             "elapsed_sec": time.monotonic() - started,
             "require_stable": False,
             "acceptance_policy": "fresh_valid_provisional_or_stable",
+            "single_candidate_initial_reacquisition_allowed": bool(
+                allow_single_candidate_initial_reacquisition
+            ),
             "target": decision.target,
             "target_report": self._continuous_target_report(decision.target),
             "last_observation_update": dict(
@@ -7047,7 +7062,9 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
                 return 2, report
 
         _emit_stage_progress("mouth_target_acquisition")
-        acquisition = self._acquire_continuous_target()
+        acquisition = self._acquire_continuous_target(
+            allow_single_candidate_initial_reacquisition=True
+        )
         report["initial_target_acquisition"] = {
             key: value for key, value in acquisition.items() if key != "target"
         }

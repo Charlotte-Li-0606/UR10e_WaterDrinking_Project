@@ -1,0 +1,10 @@
+{
+  "continuous_tracking_implementation": "base_y_backup",
+  "execution_attempted": null,
+  "execution_sent": null,
+  "execution_state_unknown": true,
+  "final_state": "refused",
+  "reason": "NameError: name 'np' is not defined",
+  "stage": "pipeline_exception",
+  "success": false
+}

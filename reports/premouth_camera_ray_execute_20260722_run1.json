@@ -1,0 +1,334 @@
+{
+  "actual": {
+    "actual_tool0_displacement_m": [
+      -0.03485815,
+      0.13644274,
+      -0.00414673
+    ],
+    "final_straw_tip_pose": {
+      "frame_id": "base_link",
+      "position_m": [
+        -0.31160775,
+        0.74854175,
+        0.53291187
+      ]
+    },
+    "final_straw_tip_to_pre_mouth_error_m": 0.11057861,
+    "final_tool0_pose": {
+      "available": true,
+      "child_frame": "tool0",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.67002412,
+        0.74233411,
+        -0.00189022,
+        -0.00204412
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.30037378,
+        0.63911691,
+        0.53285667
+      ]
+    },
+    "orientation_difference_from_start_rad": 9.854e-05,
+    "orientation_stable": true,
+    "straw_tip_within_target_tolerance": false
+  },
+  "automatic_retreat_sent": false,
+  "camera_position": [
+    -0.27270748,
+    0.57243568,
+    0.52222898
+  ],
+  "camera_ray_details": {
+    "camera_to_mouth_distance_m": 0.34094546,
+    "camera_to_mouth_unit_vector": [
+      -0.22764974,
+      0.97340038,
+      0.0258321
+    ],
+    "camera_to_mouth_vector_m": [
+      -0.07761615,
+      0.33187644,
+      0.00880734
+    ]
+  },
+  "checks": {
+    "camera_tf": {
+      "available": true,
+      "child_frame": "d435i_color_optical_frame",
+      "orientation_quat_xyzw": [
+        -0.71134583,
+        -0.09106657,
+        0.09669034,
+        0.69017749
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.27270748,
+        0.57243568,
+        0.52222898
+      ]
+    },
+    "controllers": {
+      "available": true,
+      "joint_state_broadcaster_active": true,
+      "scaled_joint_trajectory_controller_active": true
+    },
+    "current_straw_tip_pose": {
+      "frame_id": "base_link",
+      "orientation_quat_xyzw": [
+        0.67004584,
+        0.74231436,
+        -0.00192121,
+        -0.00206872
+      ],
+      "position_m": [
+        -0.27674317,
+        0.61209966,
+        0.53705803
+      ]
+    },
+    "execute_trajectory_available": true,
+    "joint_state": {
+      "complete": true,
+      "expected_joint_count": 6,
+      "received": true,
+      "received_expected_joint_count": 6
+    },
+    "mount_calibration": {
+      "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+      "metrics": null,
+      "status": "provisional"
+    },
+    "mouth_pose": {
+      "available": true,
+      "frame_id": "base_link",
+      "jitter_stddev_m": [
+        0.00090802,
+        0.00091078,
+        0.00039485
+      ],
+      "latest_position_m": [
+        -0.35157241,
+        0.9026138,
+        0.53114663
+      ],
+      "latest_received_age_sec": 0.13761086,
+      "latest_source_stamp_sec": 1784691210.64387,
+      "max_distance_from_mean_m": 0.00211091,
+      "mean_position_m": [
+        -0.35032362,
+        0.90431212,
+        0.53103631
+      ],
+      "sample_count": 7,
+      "sample_duration_sec": 5.0,
+      "stability_requirements": {
+        "maximum_age_sec": 1.0,
+        "maximum_spread_m": 0.025,
+        "minimum_samples": 3
+      },
+      "stable": true,
+      "surface_normal": {
+        "available": true,
+        "frame_id": "base_link",
+        "max_angular_spread_deg": 3.69153198,
+        "max_angular_spread_rad": 0.06442939,
+        "mean_vector": [
+          0.28465244,
+          -0.95625179,
+          -0.06749454
+        ],
+        "sample_count": 7,
+        "stability_requirements": {
+          "maximum_angular_spread_deg": 12.0,
+          "minimum_samples": 3
+        },
+        "stable": true
+      }
+    },
+    "move_group_available": true,
+    "required_nodes": {
+      "controller_manager_exists": true,
+      "move_group_exists": true
+    },
+    "speed_slider_percent": 15.0,
+    "tool0_pose": {
+      "available": true,
+      "child_frame": "tool0",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.67004584,
+        0.74231436,
+        -0.00192121,
+        -0.00206872
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.26551563,
+        0.50267417,
+        0.5370034
+      ]
+    },
+    "ur_base_tf": {
+      "available": true,
+      "child_frame": "base_link",
+      "orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        1.0,
+        -0.0
+      ],
+      "parent_frame": "base",
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "current_straw_tip_pose": {
+    "frame_id": "base_link",
+    "orientation_quat_xyzw": [
+      0.67004584,
+      0.74231436,
+      -0.00192121,
+      -0.00206872
+    ],
+    "position_m": [
+      -0.27674317,
+      0.61209966,
+      0.53705803
+    ]
+  },
+  "detected_mouth_pose": {
+    "frame_id": "base_link",
+    "position_m": [
+      -0.35032362,
+      0.90431212,
+      0.53103631
+    ]
+  },
+  "estimated_final_straw_tip_to_pre_mouth_m": 0.0,
+  "execution_attempted": true,
+  "execution_disabled": false,
+  "execution_result": {
+    "controller_goal_type": "MoveIt ExecuteTrajectory (validated MoveIt plan; no raw FollowJointTrajectory goal)",
+    "error_code": -4,
+    "error_message": "",
+    "execution_attempted": true,
+    "result_status": 6,
+    "stage": "execute_trajectory",
+    "success": false
+  },
+  "execution_sent": true,
+  "final_straw_tip_to_detected_mouth_standoff_m": 0.05,
+  "frozen_detected_mouth_pose": {
+    "frame_id": "base_link",
+    "position_m": [
+      -0.35032362,
+      0.90431212,
+      0.53103631
+    ]
+  },
+  "frozen_target_policy": "The five-second stable mouth-pose mean is frozen before planning; no perception updates are consumed during motion.",
+  "maximum_plan_translation_m": 0.3,
+  "maximum_radius_m": 1.3,
+  "mode": "execute",
+  "mount_calibration": {
+    "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+    "metrics": null,
+    "status": "provisional"
+  },
+  "orientation_difference_rad": 0.0,
+  "orientation_preserved": true,
+  "plan_result": {
+    "error_code": 1,
+    "error_message": "",
+    "execution_sent": false,
+    "planned_trajectory": {
+      "duration_sec": 5.47394278,
+      "joint_names": [
+        "shoulder_pan_joint",
+        "shoulder_lift_joint",
+        "elbow_joint",
+        "wrist_1_joint",
+        "wrist_2_joint",
+        "wrist_3_joint"
+      ],
+      "points": 56
+    },
+    "planning_time_sec": 0.00585905,
+    "result_status": 4,
+    "stage": "move_group_plan_only",
+    "success": true
+  },
+  "planned_tool0_translation_m": [
+    -0.06219796,
+    0.24354243,
+    -0.00731333
+  ],
+  "planned_tool0_translation_norm_m": 0.25146568,
+  "planned_trajectory_duration_sec": 5.47394278,
+  "pre_mouth_candidates": {
+    "frame_id": "base_link",
+    "positions_m": {
+      "base-x": [
+        -0.30032362,
+        0.90431212,
+        0.53103631
+      ],
+      "camera-ray": [
+        -0.33894113,
+        0.8556421,
+        0.52974471
+      ],
+      "camera-ray-alternative": [
+        -0.36170611,
+        0.95298214,
+        0.53232792
+      ]
+    }
+  },
+  "pre_mouth_offset_base_link_m": [
+    0.01138249,
+    -0.04867002,
+    -0.0012916
+  ],
+  "pre_mouth_pose": {
+    "frame_id": "base_link",
+    "position_m": [
+      -0.33894113,
+      0.8556421,
+      0.52974471
+    ]
+  },
+  "premouth_policy": "camera-ray",
+  "reason": "MoveIt execution failed, the tool orientation changed, or the straw missed the pre-mouth target",
+  "safe_distance_m": 0.05,
+  "stage": "execution_verification",
+  "success": false,
+  "target_tool0_pose": {
+    "frame_id": "base_link",
+    "link_name": "tool0",
+    "orientation_quat_xyzw": [
+      0.67004584,
+      0.74231436,
+      -0.00192121,
+      -0.00206872
+    ],
+    "position_m": [
+      -0.32771359,
+      0.7462166,
+      0.52969007
+    ]
+  },
+  "target_tool0_position_in_ur_base_m": [
+    0.32771359,
+    -0.7462166,
+    0.52969007
+  ],
+  "target_tool0_radius_from_ur_base_m": 0.97201182
+}

@@ -1,0 +1,33 @@
+{
+  "automatic_retreat_sent": false,
+  "captured_at": "2026-08-13T15:42:50.462+08:00",
+  "cup_tilt_commanded": false,
+  "direct_mouth_contact": false,
+  "execution_attempted": false,
+  "execution_sent": false,
+  "final_state": "refused",
+  "hold_duration_sec": 5.0,
+  "mode": "execute",
+  "pour_commanded": false,
+  "reason": "validated real pre-mouth pipeline did not produce a readable report: [Errno 2] No such file or directory: '/home/dase-hw101/ur_drinking_project/reports/feed_water_real_premouth_20260813_154250.json'",
+  "report_path": "/home/dase-hw101/ur_drinking_project/reports/feed_water_real_20260813_154250.json",
+  "safety_gates": {
+    "backend_real": true,
+    "continuous_mouth_tracking_requested": true,
+    "explicit_runtime_confirmation": true,
+    "hold_duration_in_range": true,
+    "no_direct_mouth_contact": true,
+    "no_tilt_or_pour": true,
+    "pipeline_exit_code": 1,
+    "pre_mouth_only": true,
+    "real_execution_environment_enabled": true,
+    "target_is_center_mouth": true,
+    "tracked_feed_requested": false,
+    "use_octomap": false
+  },
+  "schema_version": 1,
+  "selected_backend": "real",
+  "stage": "pipeline_report",
+  "success": false,
+  "tool": "feed_water"
+}

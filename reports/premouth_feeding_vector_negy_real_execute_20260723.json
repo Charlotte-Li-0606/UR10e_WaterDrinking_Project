@@ -1,0 +1,363 @@
+{
+  "actual": {
+    "actual_tool0_displacement_m": [
+      -0.06256275,
+      0.30373009,
+      -0.035261
+    ],
+    "final_straw_tip_pose": {
+      "frame_id": "base_link",
+      "position_m": [
+        -0.38633405,
+        0.76394343,
+        0.64722633
+      ]
+    },
+    "final_straw_tip_to_pre_mouth_error_m": 0.28176793,
+    "final_tool0_pose": {
+      "available": true,
+      "child_frame": "tool0",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.67250145,
+        0.74008438,
+        -0.00329841,
+        -0.0024555
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.37583218,
+        0.65444593,
+        0.64731453
+      ]
+    },
+    "orientation_difference_from_start_rad": 5.738e-05,
+    "orientation_stable": true,
+    "straw_tip_within_target_tolerance": false
+  },
+  "automatic_retreat_sent": false,
+  "camera_position": [
+    -0.32006281,
+    0.4205059,
+    0.66771043
+  ],
+  "camera_ray_details": {
+    "camera_to_mouth_distance_m": 0.68084755,
+    "camera_to_mouth_unit_vector": [
+      -0.18031415,
+      0.98060024,
+      -0.07687637
+    ],
+    "camera_to_mouth_vector_m": [
+      -0.12276645,
+      0.66763927,
+      -0.05234109
+    ],
+    "feeding_vector_input": [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    "feeding_vector_normalized": [
+      0.0,
+      -1.0,
+      0.0
+    ],
+    "feeding_vector_sign": "plus"
+  },
+  "checks": {
+    "camera_tf": {
+      "available": true,
+      "child_frame": "d435i_color_optical_frame",
+      "orientation_quat_xyzw": [
+        -0.71208059,
+        -0.08780309,
+        0.09532911,
+        0.69003203
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.32006281,
+        0.4205059,
+        0.66771043
+      ]
+    },
+    "controllers": {
+      "available": null,
+      "inspection": "skipped in plan mode; controller state is checked only immediately before execution"
+    },
+    "current_straw_tip_pose": {
+      "frame_id": "base_link",
+      "orientation_quat_xyzw": [
+        0.67248574,
+        0.74009872,
+        -0.00329705,
+        -0.0024363
+      ],
+      "position_m": [
+        -0.32377597,
+        0.46021289,
+        0.68248442
+      ]
+    },
+    "execute_trajectory_available": true,
+    "joint_state": {
+      "complete": true,
+      "expected_joint_count": 6,
+      "received": true,
+      "received_expected_joint_count": 6
+    },
+    "mount_calibration": {
+      "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+      "metrics": null,
+      "status": "provisional"
+    },
+    "mouth_pose": {
+      "available": true,
+      "frame_id": "base_link",
+      "jitter_stddev_m": [
+        0.00061926,
+        0.00170102,
+        0.00040715
+      ],
+      "latest_position_m": [
+        -0.44265556,
+        1.0901454,
+        0.61479681
+      ],
+      "latest_received_age_sec": 0.03120063,
+      "latest_source_stamp_sec": 1784778962.7811356,
+      "max_distance_from_mean_m": 0.002122,
+      "mean_position_m": [
+        -0.44282926,
+        1.08814517,
+        0.61536934
+      ],
+      "sample_count": 8,
+      "sample_duration_sec": 5.0,
+      "stability_requirements": {
+        "maximum_age_sec": 1.0,
+        "maximum_spread_m": 0.025,
+        "minimum_samples": 3
+      },
+      "stable": true,
+      "surface_normal": {
+        "available": true,
+        "frame_id": "base_link",
+        "max_angular_spread_deg": 7.2896111,
+        "max_angular_spread_rad": 0.12722771,
+        "mean_vector": [
+          -0.12162813,
+          -0.98224583,
+          -0.14282759
+        ],
+        "sample_count": 7,
+        "stability_requirements": {
+          "maximum_angular_spread_deg": 12.0,
+          "minimum_samples": 3
+        },
+        "stable": true
+      }
+    },
+    "move_group_available": true,
+    "required_nodes": {
+      "controller_manager_exists": true,
+      "move_group_exists": true
+    },
+    "speed_slider_percent": 10.0,
+    "tool0_pose": {
+      "available": true,
+      "child_frame": "tool0",
+      "link_name": "tool0",
+      "orientation_quat_xyzw": [
+        0.67248574,
+        0.74009872,
+        -0.00329705,
+        -0.0024363
+      ],
+      "parent_frame": "base_link",
+      "position_m": [
+        -0.31326943,
+        0.35071584,
+        0.68257553
+      ]
+    },
+    "ur_base_tf": {
+      "available": true,
+      "child_frame": "base_link",
+      "orientation_quat_xyzw": [
+        0.0,
+        0.0,
+        1.0,
+        -0.0
+      ],
+      "parent_frame": "base",
+      "position_m": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "current_straw_tip_pose": {
+    "frame_id": "base_link",
+    "orientation_quat_xyzw": [
+      0.67248574,
+      0.74009872,
+      -0.00329705,
+      -0.0024363
+    ],
+    "position_m": [
+      -0.32377597,
+      0.46021289,
+      0.68248442
+    ]
+  },
+  "detected_mouth_pose": {
+    "frame_id": "base_link",
+    "position_m": [
+      -0.44282926,
+      1.08814517,
+      0.61536934
+    ]
+  },
+  "estimated_final_straw_tip_to_pre_mouth_m": 0.0,
+  "execution_attempted": true,
+  "execution_disabled": false,
+  "execution_result": {
+    "execution_attempted": true,
+    "reason": "MoveIt did not finish within 60 seconds; cancel requested",
+    "stage": "execute_trajectory_timeout",
+    "success": false
+  },
+  "execution_sent": true,
+  "feeding_vector_input": [
+    0.0,
+    -1.0,
+    0.0
+  ],
+  "feeding_vector_normalized": [
+    0.0,
+    -1.0,
+    0.0
+  ],
+  "feeding_vector_sign": "plus",
+  "final_straw_tip_to_detected_mouth_standoff_m": 0.05,
+  "frozen_detected_mouth_pose": {
+    "frame_id": "base_link",
+    "position_m": [
+      -0.44282926,
+      1.08814517,
+      0.61536934
+    ]
+  },
+  "frozen_target_policy": "The five-second stable mouth-pose mean is frozen before planning; no perception updates are consumed during motion.",
+  "maximum_plan_translation_m": 1.0,
+  "maximum_radius_m": 1.3,
+  "mode": "execute",
+  "mount_calibration": {
+    "config": "/home/dase-hw101/ur_drinking_project/config/ur10e_real/d435i_mount_calibration.json",
+    "metrics": null,
+    "status": "provisional"
+  },
+  "orientation_difference_rad": 0.0,
+  "orientation_preserved": true,
+  "plan_result": {
+    "error_code": 1,
+    "error_message": "",
+    "execution_sent": false,
+    "planned_trajectory": {
+      "duration_sec": 12.32171619,
+      "joint_names": [
+        "shoulder_pan_joint",
+        "shoulder_lift_joint",
+        "elbow_joint",
+        "wrist_1_joint",
+        "wrist_2_joint",
+        "wrist_3_joint"
+      ],
+      "points": 125
+    },
+    "planning_time_sec": 0.01492374,
+    "result_status": 4,
+    "stage": "move_group_plan_only",
+    "success": true
+  },
+  "planned_tool0_translation_m": [
+    -0.11905329,
+    0.57793227,
+    -0.06711508
+  ],
+  "planned_tool0_translation_norm_m": 0.5938719,
+  "planned_trajectory_duration_sec": 12.32171619,
+  "pre_mouth_candidates": {
+    "frame_id": "base_link",
+    "positions_m": {
+      "base-x": [
+        -0.39282926,
+        1.08814517,
+        0.61536934
+      ],
+      "camera-ray": [
+        -0.43381355,
+        1.03911515,
+        0.61921316
+      ],
+      "camera-ray-alternative": [
+        -0.45184497,
+        1.13717518,
+        0.61152552
+      ],
+      "feeding-vector-minus": [
+        -0.44282926,
+        1.13814517,
+        0.61536934
+      ],
+      "feeding-vector-plus": [
+        -0.44282926,
+        1.03814517,
+        0.61536934
+      ]
+    }
+  },
+  "pre_mouth_offset_base_link_m": [
+    0.0,
+    -0.05,
+    0.0
+  ],
+  "pre_mouth_pose": {
+    "frame_id": "base_link",
+    "position_m": [
+      -0.44282926,
+      1.03814517,
+      0.61536934
+    ]
+  },
+  "premouth_policy": "feeding-vector",
+  "reason": "MoveIt execution failed, the tool orientation changed, or the straw missed the pre-mouth target",
+  "safe_distance_m": 0.05,
+  "selected_candidate": "feeding-vector-plus",
+  "stage": "execution_verification",
+  "success": false,
+  "target_tool0_pose": {
+    "frame_id": "base_link",
+    "link_name": "tool0",
+    "orientation_quat_xyzw": [
+      0.67248574,
+      0.74009872,
+      -0.00329705,
+      -0.0024363
+    ],
+    "position_m": [
+      -0.43232272,
+      0.92864811,
+      0.61546045
+    ]
+  },
+  "target_tool0_position_in_ur_base_m": [
+    0.43232272,
+    -0.92864811,
+    0.61546045
+  ],
+  "target_tool0_radius_from_ur_base_m": 1.19502377
+}
