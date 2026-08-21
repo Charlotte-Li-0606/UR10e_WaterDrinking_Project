@@ -78,7 +78,48 @@ def _operator_warning_from_tracking_status(payload: str) -> tuple[str, ...]:
     warning = status.get("operator_warning")
     if not isinstance(warning, str) or not warning.strip():
         return ()
-    return (warning.strip(), "HOLD not reached - guarded return only")
+    if status.get("state") == "SAFETY_STOPPED":
+        return (warning.strip(), "HOLD not reached - guarded return only")
+    return (warning.strip(),)
+
+
+def _guarded_return_clears_operator_warning(payload: str) -> bool:
+    """Accept only a verified guarded-return event as an overlay clear."""
+    try:
+        status = json.loads(payload)
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return bool(
+        isinstance(status, dict)
+        and status.get("state") == "GUARDED_RETURN_COMPLETE"
+        and status.get("guarded_return_verified") is True
+        and status.get("collision_warning") is False
+    )
+
+
+def _updated_operator_warning_lines(
+    current: Sequence[str],
+    payload: str,
+) -> tuple[str, ...]:
+    """Latch a collision warning until a verified guarded return clears it."""
+    warning = _operator_warning_from_tracking_status(payload)
+    if warning:
+        return warning
+    if _guarded_return_clears_operator_warning(payload):
+        return ()
+    return tuple(current)
+
+
+def _candidate_image_labels(count: int) -> tuple[str, ...]:
+    """Label valid mouths using the camera-image target-selection contract."""
+    if count <= 0:
+        return ()
+    if count == 1:
+        return ("C",)
+    return tuple(
+        "L" if index == 0 else "R" if index == count - 1 else "C"
+        for index in range(count)
+    )
 
 
 def _rotation_matrix(transform: TransformStamped) -> np.ndarray:
@@ -315,9 +356,10 @@ class MouthPerceptionNode(Node):
         self._status_publisher.publish(message)
 
     def _continuous_status_callback(self, message: String) -> None:
-        """Latch the latest integrated-tracking warning into the debug image."""
-        self._continuous_operator_warning_lines = (
-            _operator_warning_from_tracking_status(message.data)
+        """Latch collision warnings until the guarded return is verified."""
+        self._continuous_operator_warning_lines = _updated_operator_warning_lines(
+            self._continuous_operator_warning_lines,
+            message.data,
         )
 
     @staticmethod
@@ -422,11 +464,25 @@ class MouthPerceptionNode(Node):
         text: str,
         mouth_pixel: tuple[float, float] | None = None,
         mouth_base_position: Sequence[float] | None = None,
+        candidate_pixels: Sequence[tuple[float, float]] | None = None,
     ) -> None:
         """Publish the annotated RGB frame consumed by rqt_image_view."""
         if self._debug_publisher is None:
             return
         image = rgb_bgr.copy()
+        pixels = list(candidate_pixels or ())
+        for label, pixel in zip(_candidate_image_labels(len(pixels)), pixels):
+            u, v = (int(round(value)) for value in pixel)
+            cv2.circle(image, (u, v), 8, (0, 165, 255), 1)
+            cv2.putText(
+                image,
+                label,
+                (u + 7, v - 7),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.45,
+                (0, 165, 255),
+                1,
+            )
         if mouth_pixel is not None:
             u, v = (int(round(value)) for value in mouth_pixel)
             cv2.circle(image, (u, v), 4, (0, 0, 255), 1)
@@ -808,6 +864,10 @@ class MouthPerceptionNode(Node):
         # perception node intentionally does not select a person; the feeding
         # target manager applies the user's left/center/right request.
         candidates.sort(key=lambda candidate: float(candidate["image_x"]))
+        candidate_pixels = [
+            (float(candidate["image_x"]), float(candidate["image_y"]))
+            for candidate in candidates
+        ]
         candidate_message = String()
         candidate_message.data = json.dumps(
             {
@@ -852,6 +912,7 @@ class MouthPerceptionNode(Node):
                 "Primary mouth outlier rejected",
                 (float(primary["image_x"]), float(primary["image_y"])),
                 primary["position"],
+                candidate_pixels,
             )
             return
 
@@ -895,6 +956,7 @@ class MouthPerceptionNode(Node):
             f"Mouth candidates: {len(candidates)}",
             (float(primary["image_x"]), float(primary["image_y"])),
             filtered_point,
+            candidate_pixels,
         )
 
 

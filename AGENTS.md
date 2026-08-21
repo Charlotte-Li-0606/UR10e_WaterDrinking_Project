@@ -8,8 +8,12 @@
   OpenClaw, its gateway, its workspace skill, or `openclaw_*.sh`.
 - Preserve the OpenClaw implementation as a legacy fallback. Do not delete or
   modify it unless the user explicitly asks to maintain or remove that version.
-- The physical workflow supports only the high-level, center-target
-  `feed_water` operation. Its outbound segment ends at a validated pre-mouth
+- The physical workflow supports only the high-level, identity-locked
+  `feed_water` operation. It defaults to the mouth nearest the image center;
+  an explicit left/right request selects that mouth in camera-image order at
+  initial acquisition, after which the existing fail-closed 3D tracker must
+  retain the same person. Never fall back from an unavailable requested side
+  to another visible person. Its outbound segment ends at a validated pre-mouth
   hold. The nominal camera-ray stand-off is 50 mm, adaptive candidates are
   50/70/90/120/150 mm, and real MoveIt velocity/acceleration scaling is capped
   at 0.30. Keep tool0 +Z

@@ -31,13 +31,15 @@ class RealFeedWaterBackendTest(unittest.TestCase):
         command = backend._pipeline_command(
             execute=False,
             report_path=Path("/tmp/plan.json"),
-            target_selection="center",
+            target_selection="left",
             hold_duration_sec=5.0,
             continuous_mouth_tracking=True,
         )
 
         self.assertEqual(str(backend.REAL_FEED_WATER_SCRIPT), command[1])
         self.assertIn("--continuous-mouth-tracking", command)
+        target_selection_argument = command.index("--target-selection") + 1
+        self.assertEqual("left", command[target_selection_argument])
 
     def test_non_continuous_modes_retain_untouched_current_runner(self) -> None:
         command = backend._pipeline_command(
@@ -117,15 +119,37 @@ class RealFeedWaterBackendTest(unittest.TestCase):
         self.assertFalse(result["execution_attempted"])
         run.assert_not_called()
 
-    def test_real_backend_refuses_non_center_target_before_pipeline(self) -> None:
+    def test_real_backend_delegates_explicit_left_target_to_pipeline(self) -> None:
         with tempfile.TemporaryDirectory() as directory, patch.object(
             backend, "REPORT_DIR", Path(directory)
         ), patch.object(backend.subprocess, "run") as run:
+            run.return_value = subprocess.CompletedProcess(
+                ["pipeline"], 2, "", "pipeline refused safely"
+            )
             result = backend.run_real_feed_water(
                 execute=False,
                 target_selection="left",
                 environ={"UR10E_BACKEND": "real"},
             )
+
+        self.assertFalse(result["success"])
+        self.assertEqual("pipeline_report", result["stage"])
+        self.assertFalse(result["execution_attempted"])
+        run.assert_called_once()
+        command = run.call_args.args[0]
+        target_selection_argument = command.index("--target-selection") + 1
+        self.assertEqual("left", command[target_selection_argument])
+
+    def test_real_backend_refuses_unknown_target_before_pipeline(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, patch.object(
+            backend, "REPORT_DIR", Path(directory)
+        ), patch.object(backend.subprocess, "run") as run:
+            result = backend.run_real_feed_water(
+                execute=False,
+                target_selection="front",
+                environ={"UR10E_BACKEND": "real"},
+            )
+
         self.assertFalse(result["success"])
         self.assertEqual("target_selection", result["stage"])
         self.assertFalse(result["execution_attempted"])

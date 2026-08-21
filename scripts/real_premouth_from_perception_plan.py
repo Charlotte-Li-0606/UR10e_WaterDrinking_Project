@@ -3247,8 +3247,6 @@ class RealPreMouthFromPerceptionPlan(Node):
     def _execution_guards(self, prepared: dict[str, Any], *, confirm_real_motion: bool) -> list[str]:
         """Return every reason the already-planned trajectory cannot move."""
         guards: list[str] = []
-        if self.target_selection != "center":
-            guards.append("guarded real execution supports only the center mouth target")
         if not confirm_real_motion:
             guards.append("--confirm-real-motion is required")
         if os.environ.get("UR10E_ALLOW_REAL_EXECUTION") != "1":
@@ -3374,17 +3372,6 @@ class RealPreMouthFromPerceptionPlan(Node):
                 "mode": "execute",
                 "stage": "no_execute_policy",
                 "reason": "--no-execute prohibits all real motion for this invocation",
-                "execution_attempted": False,
-                "execution_sent": False,
-                "execution_disabled": True,
-            }
-        if self.target_selection != "center":
-            return 2, {
-                "success": False,
-                "mode": "execute",
-                "stage": "target_selection_execution_gate",
-                "reason": "guarded real execution supports only the center mouth target",
-                "target_selection": self.target_selection,
                 "execution_attempted": False,
                 "execution_sent": False,
                 "execution_disabled": True,
@@ -3647,7 +3634,7 @@ def _parse_args() -> argparse.Namespace:
         default="center",
         help=(
             "Select the initially left, center, or right visible mouth and retain that 3D identity. "
-            "Guarded real execution remains center-only."
+            "Left/right use camera-image order at initial acquisition."
         ),
     )
     parser.add_argument(

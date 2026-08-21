@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
+import sys
 import unittest
 
 
@@ -24,6 +26,20 @@ class CodexFeedWaterEntrypointTest(unittest.TestCase):
         self.assertNotIn("openclaw_feeding_tool.sh", content)
         self.assertNotIn("ensure_ur10e_feeding_sim.sh", content)
         self.assertTrue(DIRECT_RUNNER.is_file())
+
+    def test_direct_runner_exposes_and_forwards_image_order_target_selection(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, str(DIRECT_RUNNER), "--help"],
+            cwd=PROJECT_ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        content = DIRECT_RUNNER.read_text(encoding="utf-8")
+
+        self.assertEqual(0, completed.returncode)
+        self.assertIn("--target-selection {left,center,right}", completed.stdout)
+        self.assertIn('"target_selection": args.target_selection', content)
 
     def test_codex_route_serializes_and_clears_only_stale_workflow_runners(
         self,

@@ -8,15 +8,24 @@ import numpy as np
 
 from .mouth_perception_node import (
     MouthPerceptionNode,
+    _candidate_image_labels,
     _displacement_scale_diagnostic,
+    _guarded_return_clears_operator_warning,
     _operator_warning_from_tracking_status,
+    _updated_operator_warning_lines,
 )
 
 
 class MouthPerceptionDiagnosticTests(unittest.TestCase):
+    def test_camera_order_labels_every_visible_mouth_candidate(self) -> None:
+        self.assertEqual((), _candidate_image_labels(0))
+        self.assertEqual(("C",), _candidate_image_labels(1))
+        self.assertEqual(("L", "R"), _candidate_image_labels(2))
+
     def test_collision_warning_is_rendered_as_a_safety_stop(self) -> None:
         lines = _operator_warning_from_tracking_status(
-            '{"collision_warning": true, "operator_warning": "Collision may happen"}'
+            '{"state": "SAFETY_STOPPED", "collision_warning": true, '
+            '"operator_warning": "Collision may happen"}'
         )
 
         self.assertEqual(
@@ -32,6 +41,32 @@ class MouthPerceptionDiagnosticTests(unittest.TestCase):
             ),
         )
         self.assertEqual((), _operator_warning_from_tracking_status("not-json"))
+
+    def test_servo_collision_warning_is_latched_until_verified_return(self) -> None:
+        code_four = (
+            '{"state": "TRACKING", "collision_warning": true, '
+            '"operator_warning": "Collision may happen"}'
+        )
+        ordinary_update = (
+            '{"state": "TRACKING", "collision_warning": false, '
+            '"operator_warning": null}'
+        )
+        guarded_return = (
+            '{"state": "GUARDED_RETURN_COMPLETE", '
+            '"guarded_return_verified": true, "collision_warning": false}'
+        )
+
+        warning = _updated_operator_warning_lines((), code_four)
+        self.assertEqual(("Collision may happen",), warning)
+        self.assertEqual(
+            warning,
+            _updated_operator_warning_lines(warning, ordinary_update),
+        )
+        self.assertTrue(_guarded_return_clears_operator_warning(guarded_return))
+        self.assertEqual(
+            (),
+            _updated_operator_warning_lines(warning, guarded_return),
+        )
 
     def test_recorded_close_range_ratio_is_reproduced(self) -> None:
         result = _displacement_scale_diagnostic(

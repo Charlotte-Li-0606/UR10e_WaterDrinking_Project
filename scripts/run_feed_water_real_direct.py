@@ -45,6 +45,15 @@ def _parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--target-selection",
+        choices=("left", "center", "right"),
+        default="center",
+        help=(
+            "Select the initially left, center, or right mouth in camera-image "
+            "order and retain that person's 3D identity."
+        ),
+    )
+    parser.add_argument(
         "--track-mouth-during-execution",
         action="store_true",
         help=(
@@ -88,7 +97,7 @@ def main() -> int:
         environment.pop("UR10E_ALLOW_REAL_EXECUTION", None)
 
     tool_args = {
-        "target_selection": "center",
+        "target_selection": args.target_selection,
         "execute": bool(args.execute),
         "allow_vertical_adjust": False,
         "hold_duration_sec": args.hold_duration,

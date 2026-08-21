@@ -1202,6 +1202,10 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         self._integrated_tracking_enabled = False
         self._latest_servo_status: ServoStatus | None = None
         self._latest_servo_status_monotonic: float | None = None
+        # Once Servo reports DECELERATE_FOR_COLLISION (status code 4), keep
+        # the operator-facing warning visible for the remainder of this
+        # workflow.  Only a verified guarded return is allowed to clear it.
+        self._continuous_collision_warning_latched = False
         # A fresh CLI process owns a fresh human/OctoMap scene lifecycle.  The
         # first integrated workflow must retire the previous process's managed
         # geometry before it can rebuild the current scene or plan any motion.
@@ -2442,8 +2446,6 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
 
     def _execution_state_failures(self, *, confirm_real_motion: bool) -> list[str]:
         failures: list[str] = []
-        if self.target_selection != "center":
-            failures.append("guarded physical feed_water execution remains center-target only")
         if not confirm_real_motion:
             failures.append("--confirm-real-motion is required")
         if os.environ.get("UR10E_ALLOW_REAL_EXECUTION") != "1":
@@ -5644,6 +5646,23 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
         octomap: dict[str, Any] | None = None,
     ) -> None:
         """Publish the latest local tracking state without network calls."""
+        servo_collision_deceleration = False
+        if isinstance(servo_status, dict):
+            try:
+                servo_collision_deceleration = (
+                    int(servo_status.get("code"))
+                    == ServoStatus.DECELERATE_FOR_COLLISION
+                )
+            except (TypeError, ValueError):
+                servo_collision_deceleration = False
+        if servo_collision_deceleration or collision_warning:
+            self._continuous_collision_warning_latched = True
+        collision_warning = bool(
+            getattr(self, "_continuous_collision_warning_latched", False)
+        )
+        if collision_warning:
+            operator_warning = "Collision may happen"
+
         report = self._continuous_target_report(target)
         report.update(
             {
@@ -5713,6 +5732,7 @@ class RealIntegratedFeedWater(RealDynamicObstacleAvoidancePlan):
             sort_keys=True,
         )
         publisher.publish(status)
+        self._continuous_collision_warning_latched = False
         report.update(
             {
                 "success": True,

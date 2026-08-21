@@ -27,7 +27,9 @@ the Codex route. Simulation remains backed by `FeedingSkillLibrary`; with
 `UR10E_BACKEND=real`, the safe-tool runner
 accepts only one high-level `feed_water` call and delegates it to the same
 integrated real state machine. That state machine locks the center-selected
-person among the visible mouth candidates, performs the bounded
+person by default, or the explicitly requested left/right person in initial
+camera-image order, among the visible mouth candidates. It then retains that
+person's fail-closed 3D identity, performs the bounded
 translation-only active search when that target is absent, freezes the
 corrected camera-ray 50 mm pre-mouth target, and uses the wrist OctoMap for
 same-target alternate-path replanning. The real branch exposes no arbitrary

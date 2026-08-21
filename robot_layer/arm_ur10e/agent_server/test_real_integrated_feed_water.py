@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import math
+import os
 import unittest
 from contextlib import redirect_stderr
 from types import SimpleNamespace
@@ -20,9 +21,11 @@ from moveit_msgs.msg import (
     PlanningScene,
     RobotState,
     RobotTrajectory,
+    ServoStatus,
 )
 from sensor_msgs.msg import CameraInfo, JointState
 from trajectory_msgs.msg import JointTrajectoryPoint
+from ur_dashboard_msgs.msg import RobotMode, SafetyMode
 
 from robot_layer.arm_ur10e.agent_server import real_feed_water_backend as backend
 from scripts.real_dynamic_obstacle_avoidance_plan import (
@@ -81,6 +84,25 @@ from robot_layer.arm_ur10e.control.continuous_servo_tracking import (
 
 
 class RealIntegratedFeedWaterTest(unittest.TestCase):
+    def test_execution_readiness_accepts_explicit_left_target(self) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node.target_selection = "left"
+        node._controller_status = Mock(
+            return_value={"scaled_joint_trajectory_controller_active": True}
+        )
+        node.latest_speed_scaling = SimpleNamespace(data=15.0)
+        node.latest_robot_program_running = SimpleNamespace(data=True)
+        node.latest_safety_mode = SimpleNamespace(mode=SafetyMode.NORMAL)
+        node.latest_robot_mode = SimpleNamespace(mode=RobotMode.RUNNING)
+
+        with patch.dict(
+            os.environ,
+            {"UR10E_ALLOW_REAL_EXECUTION": "1"},
+        ):
+            failures = node._execution_state_failures(confirm_real_motion=True)
+
+        self.assertEqual([], failures)
+
     def test_stage_progress_is_machine_readable_and_operator_visible(self) -> None:
         output = io.StringIO()
 
@@ -122,9 +144,44 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertTrue(status["collision_warning"])
         node._continuous_target_publisher.publish.assert_not_called()
 
+    def test_servo_code_four_latches_collision_warning_until_guarded_return(
+        self,
+    ) -> None:
+        node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
+        node._continuous_target_report = Mock(return_value={"available": False})
+        node._continuous_status_publisher = Mock()
+        node._continuous_target_publisher = Mock()
+        node._continuous_collision_warning_latched = False
+
+        node._publish_continuous_diagnostics(
+            SimpleNamespace(available=False),
+            state="TRACKING",
+            servo_status={
+                "code": ServoStatus.DECELERATE_FOR_COLLISION,
+                "message": "Close to a collision, decelerating",
+            },
+        )
+        first = json.loads(
+            node._continuous_status_publisher.publish.call_args.args[0].data
+        )
+        self.assertEqual("Collision may happen", first["operator_warning"])
+        self.assertTrue(first["collision_warning"])
+
+        node._publish_continuous_diagnostics(
+            SimpleNamespace(available=False),
+            state="TRACKING",
+            servo_status={"code": ServoStatus.NO_WARNING, "message": "No warnings"},
+        )
+        second = json.loads(
+            node._continuous_status_publisher.publish.call_args.args[0].data
+        )
+        self.assertEqual("Collision may happen", second["operator_warning"])
+        self.assertTrue(second["collision_warning"])
+
     def test_verified_guarded_return_clears_rqt_collision_warning(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
         node._continuous_status_publisher = Mock()
+        node._continuous_collision_warning_latched = True
 
         result = node._clear_continuous_collision_warning_after_guarded_return(
             verification={"available": True, "at_initial_position": True},
@@ -140,10 +197,12 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertIsNone(status["operator_warning"])
         self.assertFalse(status["collision_warning"])
         self.assertIsNone(status["safety_stop_reason"])
+        self.assertFalse(node._continuous_collision_warning_latched)
 
     def test_unverified_guarded_return_preserves_rqt_collision_warning(self) -> None:
         node = RealIntegratedFeedWater.__new__(RealIntegratedFeedWater)
         node._continuous_status_publisher = Mock()
+        node._continuous_collision_warning_latched = True
 
         result = node._clear_continuous_collision_warning_after_guarded_return(
             verification={
@@ -156,6 +215,7 @@ class RealIntegratedFeedWaterTest(unittest.TestCase):
         self.assertFalse(result["success"])
         self.assertFalse(result["published"])
         node._continuous_status_publisher.publish.assert_not_called()
+        self.assertTrue(node._continuous_collision_warning_latched)
 
     def test_continuous_recovery_detects_structured_collision_evidence(self) -> None:
         self.assertTrue(

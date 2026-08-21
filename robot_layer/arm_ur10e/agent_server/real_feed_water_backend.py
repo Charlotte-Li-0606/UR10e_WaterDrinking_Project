@@ -36,6 +36,7 @@ MAX_HOLD_SECONDS = 5.0
 DEFAULT_HOLD_SECONDS = 5.0
 PIPELINE_TIMEOUT_SECONDS = 240.0
 MAXIMUM_PIPELINE_ERROR_DETAIL_CHARACTERS = 2000
+SUPPORTED_TARGET_SELECTIONS = frozenset({"left", "center", "right"})
 
 
 def _timestamp() -> tuple[str, str]:
@@ -398,6 +399,7 @@ def run_real_feed_water(
             environment.get("UR10E_ALLOW_REAL_EXECUTION") == "1" if execute else None
         ),
         "explicit_runtime_confirmation": bool(confirm_real_motion) if execute else None,
+        "target_selection_supported": target_selection in SUPPORTED_TARGET_SELECTIONS,
         "target_is_center_mouth": target_selection == "center",
         "pre_mouth_only": True,
         "no_direct_mouth_contact": True,
@@ -417,14 +419,14 @@ def run_real_feed_water(
             reason="real feed_water requires UR10E_BACKEND=real",
             gates=gates,
         )
-    if not gates["target_is_center_mouth"]:
+    if not gates["target_selection_supported"]:
         return _failure_report(
             captured_at=captured_at,
             report_path=report_path,
             execute=execute,
             hold_duration_sec=duration,
             stage="target_selection",
-            reason="the validated real backend currently supports only the center mouth target",
+            reason="target_selection must be one of: left, center, right",
             gates=gates,
         )
     if execute and not gates["real_execution_environment_enabled"]:

@@ -25,11 +25,12 @@ loop.
 8. Perform the existing guarded return to the immutable initial position after
    success, and attempt it after every stop that follows a sent motion. Failure
    recovery preserves and collision-checks the current human scene.
-9. If local recovery contains explicit collision evidence, keep Servo stopped,
-   publish `Collision may happen` and `HOLD not reached - guarded return only`
-   on `/mouth_detection/debug_image`, and attempt the existing guarded return.
-   This remains a failed safety stop: it never claims pre-mouth/HOLD arrival and
-   never executes a collision-rejected recovery trajectory.
+9. As soon as MoveIt Servo publishes status code 4
+   (`DECELERATE_FOR_COLLISION`), publish and latch `Collision may happen` on
+   `/mouth_detection/debug_image`. If a local recovery then fails with explicit
+   collision evidence, also show `HOLD not reached - guarded return only`. The
+   warning remains visible until a guarded return is independently verified at
+   `initial_position`; ordinary Servo or tracking updates cannot clear it.
 
 Tool0 +Z remains aligned with `base_link` -Z. The controller applies only the
 angular correction needed for this axis alignment, so spin/yaw about the
@@ -104,12 +105,13 @@ The implementation uses the installed Jazzy MoveIt Servo configuration:
 - diagnostic target: `/continuous_mouth_tracking/target_pose`;
 - diagnostic state: `/continuous_mouth_tracking/status`.
 
-The mouth-perception debug image subscribes to the diagnostic state. A
-collision-related recovery refusal latches the operator warning into the rqt
-image while the guarded return is in progress. Immediately after that return
-is independently verified at `initial_position`, the tracking runner publishes
-`GUARDED_RETURN_COMPLETE` with `collision_warning=false`, which removes the
-overlay. If the return or its verification fails, the warning remains visible.
+The mouth-perception debug image subscribes to the diagnostic state. Servo
+status code 4 or a collision-related recovery refusal latches the operator
+warning into the rqt image while the workflow continues or the guarded return
+is in progress. Immediately after that return is independently verified at
+`initial_position`, the tracking runner publishes `GUARDED_RETURN_COMPLETE`
+with `collision_warning=false`, which removes the overlay. If the return or its
+verification fails, the warning remains visible.
 The guarded return still runs only if its independent scene, controller,
 orientation, collision, and target checks pass.
 
@@ -160,7 +162,8 @@ contains occupancy while the option is disabled is also refused as a launch
 configuration mismatch rather than being mislabeled as deterministic-only.
 
 Real execution remains protected by `UR10E_ALLOW_REAL_EXECUTION=1`,
-`--execute`, `--confirm-real-motion`, the center-target policy, the initial
+`--execute`, `--confirm-real-motion`, the explicit camera-image-order target
+selection and 3D identity-lock policy, the initial
 position check, controller/External Control/robot/safety checks, collision and
 workspace validation, and the existing return gates. Implementation and tests
 do not start a real execution automatically.
