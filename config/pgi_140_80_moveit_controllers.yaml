@@ -1,0 +1,35 @@
+# MoveIt controller mapping used only by the isolated PGI simulation.
+moveit_controller_manager: moveit_simple_controller_manager/MoveItSimpleControllerManager
+
+trajectory_execution:
+  allowed_execution_duration_scaling: 1.2
+  allowed_goal_duration_margin: 0.5
+  allowed_start_tolerance: 0.01
+  execution_duration_monitoring: false
+
+moveit_simple_controller_manager:
+  controller_names:
+    - joint_trajectory_controller
+    - pgi_gripper_controller
+
+  joint_trajectory_controller:
+    action_ns: follow_joint_trajectory
+    type: FollowJointTrajectory
+    default: true
+    joints:
+      - shoulder_pan_joint
+      - shoulder_lift_joint
+      - elbow_joint
+      - wrist_1_joint
+      - wrist_2_joint
+      - wrist_3_joint
+
+  pgi_gripper_controller:
+    action_ns: gripper_cmd
+    type: GripperCommand
+    default: true
+    joints:
+      - pgi_left_finger_joint
+    command_joint: pgi_left_finger_joint
+    parallel: false
+    max_effort: 140.0

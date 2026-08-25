@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- PGI-only MoveIt semantics. The physical UR workflow continues to use the
+     upstream ur_moveit_config SRDF and is not affected by this file. -->
+<robot name="ur">
+  <!-- Keep the established group name so the official UR KDL and OMPL
+       configuration remains reusable. Extending the chain through fixed tool
+       links makes the provisional adapter and gripper body part of the arm's
+       collision-aware kinematic chain. -->
+  <group name="ur_manipulator">
+    <chain base_link="base_link" tip_link="pgi_body"/>
+  </group>
+
+  <!-- Only the master jaw is active. The right jaw is a passive URDF mimic.
+       These links are the intended touch-link set for the later cup-attachment
+       stage; pgi_grasp_center is collisionless and provides the grasp frame. -->
+  <group name="pgi_gripper">
+    <link name="pgi_left_finger"/>
+    <link name="pgi_right_finger"/>
+    <link name="pgi_grasp_center"/>
+    <joint name="pgi_left_finger_joint"/>
+    <passive_joint name="pgi_right_finger_joint"/>
+  </group>
+
+  <group name="ur10e_pgi">
+    <group name="ur_manipulator"/>
+    <group name="pgi_gripper"/>
+  </group>
+
+  <group_state name="home" group="ur_manipulator">
+    <joint name="elbow_joint" value="0"/>
+    <joint name="shoulder_lift_joint" value="-1.5707"/>
+    <joint name="shoulder_pan_joint" value="0"/>
+    <joint name="wrist_1_joint" value="0"/>
+    <joint name="wrist_2_joint" value="0"/>
+    <joint name="wrist_3_joint" value="0"/>
+  </group_state>
+  <group_state name="up" group="ur_manipulator">
+    <joint name="elbow_joint" value="0"/>
+    <joint name="shoulder_lift_joint" value="-1.5707"/>
+    <joint name="shoulder_pan_joint" value="0"/>
+    <joint name="wrist_1_joint" value="-1.5707"/>
+    <joint name="wrist_2_joint" value="0"/>
+    <joint name="wrist_3_joint" value="0"/>
+  </group_state>
+  <group_state name="test_configuration" group="ur_manipulator">
+    <joint name="elbow_joint" value="1.4"/>
+    <joint name="shoulder_lift_joint" value="-1.62"/>
+    <joint name="shoulder_pan_joint" value="1.54"/>
+    <joint name="wrist_1_joint" value="-1.2"/>
+    <joint name="wrist_2_joint" value="-1.6"/>
+    <joint name="wrist_3_joint" value="-0.11"/>
+  </group_state>
+  <group_state name="open" group="pgi_gripper">
+    <joint name="pgi_left_finger_joint" value="0.040"/>
+    <joint name="pgi_right_finger_joint" value="0.040"/>
+  </group_state>
+  <group_state name="closed" group="pgi_gripper">
+    <joint name="pgi_left_finger_joint" value="0.0"/>
+    <joint name="pgi_right_finger_joint" value="0.0"/>
+  </group_state>
+
+  <end_effector name="pgi_140_80"
+                parent_link="pgi_body"
+                group="pgi_gripper"
+                parent_group="ur_manipulator"/>
+
+  <!-- Preserve the upstream UR self-collision matrix. -->
+  <disable_collisions link1="base_link" link2="base_link_inertia" reason="Adjacent"/>
+  <disable_collisions link1="base_link_inertia" link2="shoulder_link" reason="Adjacent"/>
+  <disable_collisions link1="tool0" link2="wrist_1_link" reason="Never"/>
+  <disable_collisions link1="tool0" link2="wrist_2_link" reason="Never"/>
+  <disable_collisions link1="tool0" link2="wrist_3_link" reason="Adjacent"/>
+  <disable_collisions link1="forearm_link" link2="upper_arm_link" reason="Adjacent"/>
+  <disable_collisions link1="forearm_link" link2="wrist_1_link" reason="Adjacent"/>
+  <disable_collisions link1="shoulder_link" link2="upper_arm_link" reason="Adjacent"/>
+  <disable_collisions link1="wrist_1_link" link2="wrist_2_link" reason="Adjacent"/>
+  <disable_collisions link1="wrist_1_link" link2="wrist_3_link" reason="Never"/>
+  <disable_collisions link1="wrist_2_link" link2="wrist_3_link" reason="Adjacent"/>
+
+  <!-- PGI fixed-neighbour and internal pairs. Do not disable collisions
+       between the tool and unrelated arm links: those must remain checked. -->
+  <disable_collisions link1="tool0" link2="pgi_camera_interposer" reason="Adjacent"/>
+  <disable_collisions link1="pgi_camera_interposer" link2="pgi_mount" reason="Adjacent"/>
+  <disable_collisions link1="pgi_mount" link2="pgi_body" reason="Adjacent"/>
+  <disable_collisions link1="pgi_body" link2="pgi_left_finger" reason="Adjacent"/>
+  <disable_collisions link1="pgi_body" link2="pgi_right_finger" reason="Adjacent"/>
+  <disable_collisions link1="pgi_left_finger" link2="pgi_right_finger" reason="Never"/>
+  <disable_collisions link1="pgi_camera_interposer" link2="d435i_mount" reason="Adjacent"/>
+  <disable_collisions link1="d435i_mount" link2="d435i_link" reason="Adjacent"/>
+</robot>

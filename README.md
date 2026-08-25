@@ -56,13 +56,15 @@ instructions are in
 complete ten-step plan is in
 [`docs/gripper_simulation_workflow.md`](docs/gripper_simulation_workflow.md).
 
-## PGI Gazebo model and simulated control
+## PGI Gazebo, simulated control, and MoveIt
 
-The first two Gazebo stages are implemented on the feature branch:
+The first three Gazebo stages are implemented on the feature branch:
 
 1. spawn the UR10e, PGI gripper, and provisional D435i assembly in Gazebo;
 2. control the symmetric jaws through `gz_ros2_control` and the standard
-   `control_msgs/action/GripperCommand` interface.
+   `control_msgs/action/GripperCommand` interface;
+3. load simulation-only MoveIt semantics for the arm, gripper, camera adapter,
+   touch links, grasp center, and an independent staging cup.
 
 Launch the isolated simulation with both Gazebo and RViz visible:
 
@@ -97,6 +99,33 @@ ROS_DOMAIN_ID=92 scripts/verify_pgi_140_80_gazebo_control.py
 The verifier refuses ROS domain 0 and requires Gazebo `/clock` plus both PGI
 joint states before it sends any jaw goal. Stop the launch with `Ctrl-C`.
 
-The next pending stage is MoveIt integration for the gripper, camera adapter,
-finger touch links, and grasp center. Logical cup attachment, physical contact,
-and simulated feeding remain later stages.
+Launch the complete Stage-3 view with Gazebo and MoveIt RViz:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /home/dase-hw101/ros2_ws/install/setup.bash
+ros2 launch /home/dase-hw101/ur_drinking_project/launch/pgi_140_80_gazebo_moveit.launch.py
+```
+
+MoveIt is deliberately plan-only: trajectory execution and controller
+switching are disabled. The controller mapping is loaded for validation, but
+no arm or jaw trajectory is sent by this launch. Verify the current model,
+collision matrix, IK, and plan-only paths with:
+
+```bash
+cd /home/dase-hw101/ur_drinking_project
+ROS_DOMAIN_ID=92 scripts/verify_pgi_140_80_moveit.py --require-cup
+```
+
+The default `pgi_staging_cup` reuses the saved cup data: 50 mm radius,
+205 mm body height, 0.15 kg mass, and a centered 4 mm radius / 70 mm exposed
+straw. Its default base pose is `(0.481542, 0.208414, 0.0)` metres: the saved
+X/Y location is retained, while the old floating calibration height is removed
+so the cup bottom sits on the ground. The pose can be changed consistently in
+Gazebo and MoveIt with `cup_x`, `cup_y`, and `cup_z`. Use
+`spawn_cup:=false` to omit it.
+
+The cup is static and independent in Stage 3. It is a collision obstacle, not
+an attached object, and it does not yet follow `pgi_grasp_center`. Logical
+attach/detach ownership is the next pending stage; physical contact, friction,
+release/drop testing, and simulated feeding remain later stages.

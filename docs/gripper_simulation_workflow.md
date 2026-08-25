@@ -14,7 +14,7 @@ RS485 communication.
 | 2 | Obtain and verify exact official PGI-140-80, J1 fingertip, and F1 flange CAD | Current scope — official sources identified; exact download/checksum and redistribution permission unresolved |
 | 3 | Build a parameterized URDF/Xacro model and verify it in RViz | Current scope — provisional kinematic model implemented; exact mesh replacement remains gated by Step 2 |
 | 4 | Add `gz_ros2_control` and a standard `GripperCommand` simulation interface | Complete in isolated Gazebo simulation; native contact coupling remains a later physics task |
-| 5 | Add the gripper, camera adapter, fingers, and grasp center to MoveIt | Pending |
+| 5 | Add the gripper, camera adapter, fingers, and grasp center to MoveIt | Complete — isolated, plan-only MoveIt model and staging cup verified |
 | 6 | Validate logical cup grasping using attach/detach before contact physics | Pending |
 | 7 | Add physical contact, friction, cup mass, grasp/release, and drop testing | Pending |
 | 8 | Integrate the simulated gripper with reusable high-level tools | Pending |
@@ -38,8 +38,9 @@ tool0
 ```
 
 The camera remains rigidly attached to the interposer, never to a finger.
-`pgi_grasp_center` is a logical frame. A cup and its straw tip are future
-attached-object frames and are deliberately absent from the gripper body.
+`pgi_grasp_center` is a logical frame. The Stage-3 cup is an independent world
+object; its future attached-object and straw-tip frames remain deliberately
+absent from the gripper body.
 
 ## Step 1 — preserve the baseline
 
@@ -177,7 +178,7 @@ same stage names.
 | --- | --- | --- |
 | 1 | Spawn and validate the UR10e, PGI gripper, camera placeholder, inertias, and collision primitives in Gazebo | Complete |
 | 2 | Add `gz_ros2_control` and a standard `GripperCommand` jaw interface | Complete |
-| 3 | Add the gripper, camera adapter, fingers, touch links, and grasp center to MoveIt | Pending |
+| 3 | Add the gripper, camera adapter, fingers, touch links, grasp center, and independent cup obstacle to MoveIt | Complete — plan-only |
 | 4 | Validate logical cup attach/detach and ownership before contact physics | Pending |
 | 5 | Add contact, friction, cup mass, grasp/release, and drop tests | Pending |
 | 6 | Integrate the complete simulated feeding workflow through reusable high-level tools | Pending |
@@ -238,13 +239,61 @@ be resolved and tested in Stage 5. The existing detailed UR mesh collision
 warnings under DART also remain outside this jaw-control milestone. PGI uses
 simple collision primitives for this phase.
 
+### Gazebo stage 3 implementation
+
+`launch/pgi_140_80_moveit.launch.py` uses the same opt-in Xacro as Gazebo and
+adds project-local SRDF semantics for `ur_manipulator`, `pgi_gripper`, and the
+combined `ur10e_pgi` group. `pgi_140_80` is the MoveIt end effector; the left
+jaw is the command joint and the right jaw is passive because it mimics the
+left. Internal gripper, fixed camera-adapter, and adjacent-link collision pairs
+are disabled explicitly rather than by a broad wildcard.
+
+Stage 3 sets `allow_trajectory_execution=false` and
+`moveit_manage_controllers=false`. It loads the arm and standard
+`GripperCommand` mappings for consistency checks but never activates the arm
+controller, switches controllers, or executes a trajectory. The provisional
+jaw acceleration limit of `0.10 m/s^2` exists only so MoveIt can time-parameterize
+plan-only results; it is not an official PGI hardware rating.
+
+`models/pgi_staging_cup/model.sdf` reuses the saved 0.15 kg cup model, 50 mm
+radius, 205 mm body height, and centered 4 mm radius / 70 mm exposed straw. The
+combined launch supplies the same parameterized base pose to Gazebo and to the
+MoveIt planning scene. It retains the previously saved X/Y location but
+replaces the old floating calibration height with a ground-level cup base:
+
+```text
+cup_x=0.481542  cup_y=0.208414  cup_z=0.0
+```
+
+Both cup and straw use simple cylinder collision geometry. The cup remains a
+static, independent world object and is explicitly verified as not attached;
+this does not implement Stage 4 ownership or Stage 5 contact physics.
+
+Launch the visible combined stage:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /home/dase-hw101/ros2_ws/install/setup.bash
+ros2 launch /home/dase-hw101/ur_drinking_project/launch/pgi_140_80_gazebo_moveit.launch.py
+```
+
+Then run the simulation-only plan checks:
+
+```bash
+cd /home/dase-hw101/ur_drinking_project
+ROS_DOMAIN_ID=92 scripts/verify_pgi_140_80_moveit.py --require-cup
+```
+
+The verifier refuses domain 0, requires advancing Gazebo time and complete
+joint states, confirms the cup dimensions and unattached status, validates the
+collision matrix and current state, solves IK for `pgi_grasp_center`, and plans
+small arm and jaw changes without calling any execution action.
+
 ## Later workflow, intentionally not implemented
 
-Step 5 adds MoveIt groups, end-effector semantics, touch links, camera adapter
-collision geometry, and the grasp-center frame. Step 6 validates cup ownership
-with logical attach/detach before any contact model. Step 7 tunes contact,
-friction, mass, release, and drop behavior. Step 8 exposes reusable high-level
-simulated tools. Step 9 implements a separate real Modbus RTU/RS485 backend.
-Step 10 is a mandatory physical-integration review of payload, center of
-gravity, TCP, hand-eye transform, and all collision geometry before any real
-execution can be considered.
+Step 6 validates cup ownership with logical attach/detach before any contact
+model. Step 7 tunes contact, friction, mass, release, and drop behavior. Step 8
+exposes reusable high-level simulated tools. Step 9 implements a separate real
+Modbus RTU/RS485 backend. Step 10 is a mandatory physical-integration review of
+payload, center of gravity, TCP, hand-eye transform, and all collision geometry
+before any real execution can be considered.

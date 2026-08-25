@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="pgi_staging_cup">
+    <!-- The world pose is supplied by the Stage-3 launch so Gazebo and
+         MoveIt use one parameterized source of truth. -->
+    <static>true</static>
+    <link name="cup_link">
+      <!-- Reused from models/cup/model.sdf: 0.15 kg cup and its saved
+           cylinder-derived inertia. Static staging does not validate these
+           values as a contact-physics model. -->
+      <inertial>
+        <mass>0.15</mass>
+        <inertia>
+          <ixx>0.00061906</ixx>
+          <iyy>0.00061906</iyy>
+          <izz>0.00018750</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+
+      <!-- Saved cup envelope: radius 50 mm, height 205 mm. -->
+      <collision name="cup_cylinder_collision">
+        <pose>0 0 0.1025 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.05</radius>
+            <length>0.205</length>
+          </cylinder>
+        </geometry>
+      </collision>
+
+      <visual name="cup_mesh_visual">
+        <geometry>
+          <mesh>
+            <uri>model://cup/meshes/cup.dae</uri>
+            <scale>1 1 1</scale>
+          </mesh>
+        </geometry>
+      </visual>
+
+      <!-- Saved exposed straw: radius 4 mm, height 70 mm, centered at
+           z=240 mm. Stage 3 adds a conservative collision cylinder so
+           MoveIt and Gazebo represent the same obstacle geometry. -->
+      <collision name="center_straw_collision">
+        <pose>0 0 0.240 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.004</radius>
+            <length>0.070</length>
+          </cylinder>
+        </geometry>
+      </collision>
+      <visual name="center_straw_visual">
+        <pose>0 0 0.240 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.004</radius>
+            <length>0.070</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.95 0.95 0.90 1.0</ambient>
+          <diffuse>0.95 0.95 0.90 1.0</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>
