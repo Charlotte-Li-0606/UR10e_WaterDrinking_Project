@@ -39,6 +39,12 @@ The left-jaw slider controls `pgi_left_finger_joint` over `0.000-0.040 m`.
 `pgi_right_finger_joint` mirrors it on the opposite axis, producing the
 documented 80 mm total stroke.
 
+The dedicated RViz configuration opens a close tool view. The provisional
+D435i is the black rectangular body beside the gripper; the colored axes named
+`D435i camera frame` mark `d435i_link`. The separate `PGI grasp center` axes
+mark the future cup attachment frame. Use the mouse wheel to zoom out from the
+tool-focused view when the complete UR10e needs to be inspected.
+
 The `camera_mount_xyz` and `camera_mount_rpy` arguments are provisional and
 exist only in the opt-in simulation. The interposer, J1 envelope, F1 solid
 envelope, optical-frame baselines, and box-derived body inertia also remain

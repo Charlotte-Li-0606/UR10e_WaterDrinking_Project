@@ -14,15 +14,14 @@ from launch.substitutions import (
     Command,
     FindExecutable,
     LaunchConfiguration,
-    PathJoinSubstitution,
 )
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
-from launch_ros.substitutions import FindPackageShare
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DESCRIPTION_FILE = PROJECT_ROOT / "urdf" / "ur_gz_feeding_markers.urdf.xacro"
+RVIZ_CONFIG_FILE = PROJECT_ROOT / "config" / "pgi_140_80.rviz"
 
 
 def generate_launch_description():
@@ -106,12 +105,7 @@ def generate_launch_description():
                 executable="rviz2",
                 name="pgi_description_rviz",
                 output="screen",
-                arguments=[
-                    "-d",
-                    PathJoinSubstitution(
-                        [FindPackageShare("ur_description"), "rviz", "view_robot.rviz"]
-                    ),
-                ],
+                arguments=["-d", str(RVIZ_CONFIG_FILE)],
                 condition=IfCondition(launch_rviz),
             ),
         ]
