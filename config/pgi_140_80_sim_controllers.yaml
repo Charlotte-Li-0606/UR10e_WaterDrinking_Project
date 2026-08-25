@@ -1,0 +1,55 @@
+# Controllers used only by the opt-in PGI Gazebo launch.
+#
+# The arm controller is loaded inactive during Steps 1-2. This keeps the UR10e
+# at its versioned initial pose while the gripper is tested independently.
+# Gazebo's stable default position gain of 0.1 is retained. Gazebo multiplies
+# this gain by the 500 Hz update rate, while the URDF 0.0364 m/s jaw limit caps
+# the physical travel near the documented 1.1 s full-stroke time. Re-evaluate
+# the dynamics when contact physics begins; this file does not alter the
+# established config/ur10e_sim_controllers.yaml.
+controller_manager:
+  ros__parameters:
+    update_rate: 500
+    # Enforce the ros2_control command-interface range of 0.000-0.040 m even
+    # though the DART-only physical joint has a 0.5 mm numerical guard band.
+    enforce_command_limits: true
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    joint_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    pgi_gripper_controller:
+      type: position_controllers/GripperActionController
+
+# These parameters belong to the GazeboSimSystem node, not controller_manager.
+# Keeping their scope explicit prevents a silent fallback to the 0.1 default.
+gz_ros_control:
+  ros__parameters:
+    position_proportional_gain: 0.1
+    hold_joints: true
+
+joint_trajectory_controller:
+  ros__parameters:
+    joints:
+      - shoulder_pan_joint
+      - shoulder_lift_joint
+      - elbow_joint
+      - wrist_1_joint
+      - wrist_2_joint
+      - wrist_3_joint
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    state_publish_rate: 100.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: false
+
+pgi_gripper_controller:
+  ros__parameters:
+    # GripperCommand.position is the displacement of one jaw: 0.000 m is
+    # closed and 0.040 m is fully open. The mimic jaw follows symmetrically.
+    joint: pgi_left_finger_joint
+    action_monitor_rate: 20.0
+    goal_tolerance: 0.0005
+    max_effort: 140.0
+    allow_stalling: false
+    stall_velocity_threshold: 0.0005
+    stall_timeout: 2.0

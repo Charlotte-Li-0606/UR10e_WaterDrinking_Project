@@ -1,18 +1,19 @@
 # PGI-140-80 gripper simulation workflow
 
 This is the retained project plan for the exact configured gripper
-`PGI-140-80-W-S-M1-L5-J1-F1-01`. Only Steps 1-3 are in the current scope.
-Nothing in this phase authorizes physical robot motion, Gazebo control, or
+`PGI-140-80-W-S-M1-L5-J1-F1-01`. The original description scope was Steps
+1-3. The current simulation increment also completes Gazebo model validation
+and simulated jaw control. Nothing here authorizes physical robot motion or
 RS485 communication.
 
 ## Status
 
 | Step | Work item | Status |
 | --- | --- | --- |
-| 1 | Preserve and version the successful feeding baseline | Current scope — complete locally; GitHub publication awaits SSH authentication |
+| 1 | Preserve and version the successful feeding baseline | Complete — baseline branch and annotated tag published |
 | 2 | Obtain and verify exact official PGI-140-80, J1 fingertip, and F1 flange CAD | Current scope — official sources identified; exact download/checksum and redistribution permission unresolved |
 | 3 | Build a parameterized URDF/Xacro model and verify it in RViz | Current scope — provisional kinematic model implemented; exact mesh replacement remains gated by Step 2 |
-| 4 | Add `gz_ros2_control` and a standard `GripperCommand` simulation interface | Pending |
+| 4 | Add `gz_ros2_control` and a standard `GripperCommand` simulation interface | Complete in isolated Gazebo simulation; native contact coupling remains a later physics task |
 | 5 | Add the gripper, camera adapter, fingers, and grasp center to MoveIt | Pending |
 | 6 | Validate logical cup grasping using attach/detach before contact physics | Pending |
 | 7 | Add physical contact, friction, cup mass, grasp/release, and drop testing | Pending |
@@ -145,7 +146,8 @@ calibration, and collision validation. They must never overwrite
 8. Display the UR10e + PGI model in RViz using only robot/joint state
    publishers.
 9. Confirm the camera branch is fixed to the interposer.
-10. Do not start Gazebo control, MoveIt execution, `ur_robot_driver`, or RS485.
+10. Keep the RViz-only launch independent from Gazebo control, MoveIt
+    execution, `ur_robot_driver`, and RS485.
 
 Run the non-motion checks with:
 
@@ -165,14 +167,84 @@ ros2 launch /home/dase-hw101/ur_drinking_project/launch/display_pgi_140_80.launc
 Move the independent left-jaw slider from `0.000` to `0.040`; the right jaw
 must move symmetrically through its mimic relation.
 
+## Current six-stage Gazebo workflow
+
+This shorter sequence is the working implementation order used after the
+description/RViz milestone. It is stored here so later conversations use the
+same stage names.
+
+| Gazebo stage | Work item | Status |
+| --- | --- | --- |
+| 1 | Spawn and validate the UR10e, PGI gripper, camera placeholder, inertias, and collision primitives in Gazebo | Complete |
+| 2 | Add `gz_ros2_control` and a standard `GripperCommand` jaw interface | Complete |
+| 3 | Add the gripper, camera adapter, fingers, touch links, and grasp center to MoveIt | Pending |
+| 4 | Validate logical cup attach/detach and ownership before contact physics | Pending |
+| 5 | Add contact, friction, cup mass, grasp/release, and drop tests | Pending |
+| 6 | Integrate the complete simulated feeding workflow through reusable high-level tools | Pending |
+
+### Gazebo stages 1-2 implementation
+
+`launch/pgi_140_80_gazebo.launch.py` reuses the existing UR Gazebo description
+and keeps the PGI model opt-in. It starts an isolated ROS domain and Gazebo
+partition, but it does not start MoveIt, perception, a real robot driver, or
+RS485. The UR joint trajectory controller is loaded inactive, while
+`pgi_gripper_controller` is active.
+
+The controller exposes:
+
+```text
+/pgi_gripper_controller/gripper_cmd
+  control_msgs/action/GripperCommand
+```
+
+The commanded position is the left-jaw displacement. `0.000 m` is closed and
+`0.040 m` is fully open. The right jaw has state interfaces but no independent
+command interface; it mimics the left jaw on its opposite physical axis. The
+joint speed is limited to `0.0364 m/s`, approximating the documented 1.1 s
+full-stroke time.
+
+The DART-only physical hard stop is `0.0405 m`, providing a 0.5 mm numerical
+guard band so a position-controlled jaw does not latch against the exact upper
+stop. Controller-manager command-limit enforcement and the ros2_control
+interface keep the public range at `0.000-0.040 m`. The guard band is not
+commandable travel and does not change the nominal 80 mm total stroke.
+
+Launch the visible simulation:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /home/dase-hw101/ros2_ws/install/setup.bash
+ros2 launch /home/dase-hw101/ur_drinking_project/launch/pgi_140_80_gazebo.launch.py
+```
+
+Then verify close/open motion from a second terminal:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /home/dase-hw101/ros2_ws/install/setup.bash
+cd /home/dase-hw101/ur_drinking_project
+ROS_DOMAIN_ID=92 scripts/verify_pgi_140_80_gazebo_control.py
+```
+
+The test refuses domain 0, requires Gazebo clock data, sends goals only to the
+PGI simulated action, measures total stroke and jaw symmetry, and finishes in
+the open position.
+
+Gazebo's current DART backend reports that it does not create a native mimic
+physics constraint. `gz_ros2_control` nevertheless mirrors the simulated jaw
+state accurately enough for the kinematic control test. This does not validate
+finger contact forces or object grasping; native coupled contact behavior must
+be resolved and tested in Stage 5. The existing detailed UR mesh collision
+warnings under DART also remain outside this jaw-control milestone. PGI uses
+simple collision primitives for this phase.
+
 ## Later workflow, intentionally not implemented
 
-Step 4 adds simulated control only after exact kinematics and geometry pass
-review. Step 5 adds MoveIt groups, end-effector semantics, touch links, camera
-adapter collision geometry, and the grasp-center frame. Step 6 validates cup
-ownership with logical attach/detach before any contact model. Step 7 tunes
-contact, friction, mass, release, and drop behavior. Step 8 exposes reusable
-high-level simulated tools. Step 9 implements a separate real Modbus RTU/RS485
-backend. Step 10 is a mandatory physical-integration review of payload, center
-of gravity, TCP, hand-eye transform, and all collision geometry before any real
+Step 5 adds MoveIt groups, end-effector semantics, touch links, camera adapter
+collision geometry, and the grasp-center frame. Step 6 validates cup ownership
+with logical attach/detach before any contact model. Step 7 tunes contact,
+friction, mass, release, and drop behavior. Step 8 exposes reusable high-level
+simulated tools. Step 9 implements a separate real Modbus RTU/RS485 backend.
+Step 10 is a mandatory physical-integration review of payload, center of
+gravity, TCP, hand-eye transform, and all collision geometry before any real
 execution can be considered.

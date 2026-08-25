@@ -56,6 +56,47 @@ instructions are in
 complete ten-step plan is in
 [`docs/gripper_simulation_workflow.md`](docs/gripper_simulation_workflow.md).
 
-The next pending implementation step is `gz_ros2_control` with a standard
-`GripperCommand` simulation interface. It is intentionally not part of this
-branch's current implementation.
+## PGI Gazebo model and simulated control
+
+The first two Gazebo stages are implemented on the feature branch:
+
+1. spawn the UR10e, PGI gripper, and provisional D435i assembly in Gazebo;
+2. control the symmetric jaws through `gz_ros2_control` and the standard
+   `control_msgs/action/GripperCommand` interface.
+
+Launch the isolated simulation with both Gazebo and RViz visible:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /home/dase-hw101/ros2_ws/install/setup.bash
+ros2 launch /home/dase-hw101/ur_drinking_project/launch/pgi_140_80_gazebo.launch.py
+```
+
+The launch defaults to ROS domain `92` and Gazebo partition
+`pgi_140_80_domain_92`. It does not start MoveIt, perception,
+`ur_robot_driver`, or RS485. The arm trajectory controller is loaded inactive;
+only the simulated jaw controller is active.
+
+The standard action is:
+
+```text
+/pgi_gripper_controller/gripper_cmd
+```
+
+Its `position` is one jaw's displacement: `0.000 m` is closed and `0.040 m` is
+fully open. The right jaw follows symmetrically, so the combined stroke is
+80 mm. Run the guarded simulation-only close/open check in another terminal:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /home/dase-hw101/ros2_ws/install/setup.bash
+cd /home/dase-hw101/ur_drinking_project
+ROS_DOMAIN_ID=92 scripts/verify_pgi_140_80_gazebo_control.py
+```
+
+The verifier refuses ROS domain 0 and requires Gazebo `/clock` plus both PGI
+joint states before it sends any jaw goal. Stop the launch with `Ctrl-C`.
+
+The next pending stage is MoveIt integration for the gripper, camera adapter,
+finger touch links, and grasp center. Logical cup attachment, physical contact,
+and simulated feeding remain later stages.

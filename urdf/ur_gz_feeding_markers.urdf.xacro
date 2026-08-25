@@ -35,6 +35,7 @@
   <!-- PGI simulation is opt-in. These arguments never alter the validated
        real D435i calibration or the default feeding model. -->
   <xacro:arg name="use_pgi_gripper" default="false" />
+  <xacro:arg name="use_pgi_sim_control" default="false" />
   <xacro:arg name="camera_mount_xyz" default="0 -0.065 0.020" />
   <xacro:arg name="camera_mount_rpy" default="0 0 0" />
 
@@ -90,6 +91,7 @@
       prefix="$(arg tf_prefix)"
       camera_mount_xyz="$(arg camera_mount_xyz)"
       camera_mount_rpy="$(arg camera_mount_rpy)"
+      use_gz_ros2_control="$(arg use_pgi_sim_control)"
     />
   </xacro:if>
 

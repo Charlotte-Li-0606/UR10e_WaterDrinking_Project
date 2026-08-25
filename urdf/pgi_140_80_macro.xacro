@@ -15,11 +15,42 @@
     are therefore deliberately labelled provisional. They must not be used as
     manufacturing geometry or as a real-robot payload/TCP calibration.
   -->
-  <xacro:macro name="pgi_140_80" params="parent prefix camera_mount_xyz camera_mount_rpy">
+  <!-- Uniform-box inertia helper for explicitly provisional Gazebo masses.
+       These values make the temporary primitives numerically well-formed;
+       they are not manufacturer or payload-calibration data. -->
+  <xacro:macro name="pgi_provisional_box_inertial"
+               params="mass size_x size_y size_z origin_xyz">
+    <inertial>
+      <origin xyz="${origin_xyz}" rpy="0 0 0"/>
+      <mass value="${mass}"/>
+      <inertia
+        ixx="${mass * (size_y * size_y + size_z * size_z) / 12.0}"
+        ixy="0" ixz="0"
+        iyy="${mass * (size_x * size_x + size_z * size_z) / 12.0}"
+        iyz="0"
+        izz="${mass * (size_x * size_x + size_y * size_y) / 12.0}"/>
+    </inertial>
+  </xacro:macro>
+
+  <xacro:macro name="pgi_140_80"
+               params="parent prefix camera_mount_xyz camera_mount_rpy use_gz_ros2_control:=false">
+    <!-- The nominal and commandable travel remains 0.040 m per jaw. DART can
+         latch a position-controlled prismatic joint after it is held exactly
+         against a hard stop, so the Gazebo-only hard stop has a 0.5 mm
+         numerical guard band. ros2_control command-limit enforcement keeps
+         this guard band unreachable through GripperCommand. -->
+    <xacro:property name="pgi_physics_upper_limit" value="0.040"/>
+    <xacro:if value="${use_gz_ros2_control}">
+      <xacro:property name="pgi_physics_upper_limit" value="0.0405"/>
+    </xacro:if>
     <!-- Placeholder camera interposer. Its final material, mass, and geometry
-         depend on the project adapter design and are intentionally not given
-         an inertial block. The joint origin is the UR tool0/F1 interface. -->
+         depend on the project adapter design. The 0.10 kg uniform-box inertia
+         is a provisional Gazebo stability value, not a verified adapter mass.
+         The joint origin is the UR tool0/F1 interface. -->
     <link name="${prefix}pgi_camera_interposer">
+      <xacro:pgi_provisional_box_inertial
+        mass="${0.10}" size_x="${0.085}" size_y="${0.085}"
+        size_z="${0.010}" origin_xyz="0 0 0.005"/>
       <visual name="provisional_interposer_visual">
         <origin xyz="0 0 0.005" rpy="0 0 0"/>
         <geometry><box size="0.085 0.085 0.010"/></geometry>
@@ -41,6 +72,11 @@
          assumptions; the verified interface is ISO 9409-1-50-4-M6 on a
          50 mm pitch circle. Bolt and pilot holes are omitted from collision. -->
     <link name="${prefix}pgi_mount">
+      <!-- 0.08 kg is provisional. The box inertia encloses the temporary F1
+           cylinder and must be replaced with CAD-derived data. -->
+      <xacro:pgi_provisional_box_inertial
+        mass="${0.08}" size_x="${0.063}" size_y="${0.063}"
+        size_z="${0.0065}" origin_xyz="0 0 0.00325"/>
       <visual name="provisional_f1_visual">
         <origin xyz="0 0 0.00325" rpy="0 0 0"/>
         <geometry><cylinder radius="0.0315" length="0.0065"/></geometry>
@@ -87,6 +123,11 @@
          PGI/PGIA J1 CAD download has not been retrieved. At q=0 the inner
          faces meet at body X=0. Positive q opens each jaw by 40 mm. -->
     <link name="${prefix}pgi_left_finger">
+      <!-- Exact J1 mass is unavailable; 0.05 kg is a provisional value used
+           only to keep the moving Gazebo link dynamically valid. -->
+      <xacro:pgi_provisional_box_inertial
+        mass="${0.05}" size_x="${0.015}" size_y="${0.020}"
+        size_z="${0.050}" origin_xyz="0.0075 0 0.025"/>
       <visual name="provisional_j1_left_visual">
         <origin xyz="0.0075 0 0.025" rpy="0 0 0"/>
         <geometry><box size="0.015 0.020 0.050"/></geometry>
@@ -102,10 +143,15 @@
       <parent link="${prefix}pgi_body"/>
       <child link="${prefix}pgi_left_finger"/>
       <axis xyz="1 0 0"/>
-      <limit lower="0.0" upper="0.040" effort="140.0" velocity="0.0364"/>
+      <limit lower="0.0" upper="${pgi_physics_upper_limit}" effort="140.0" velocity="0.0364"/>
+      <!-- Provisional viscous damping for stable position control in Gazebo. -->
+      <dynamics damping="2.0" friction="0.0"/>
     </joint>
 
     <link name="${prefix}pgi_right_finger">
+      <xacro:pgi_provisional_box_inertial
+        mass="${0.05}" size_x="${0.015}" size_y="${0.020}"
+        size_z="${0.050}" origin_xyz="-0.0075 0 0.025"/>
       <visual name="provisional_j1_right_visual">
         <origin xyz="-0.0075 0 0.025" rpy="0 0 0"/>
         <geometry><box size="0.015 0.020 0.050"/></geometry>
@@ -121,7 +167,8 @@
       <parent link="${prefix}pgi_body"/>
       <child link="${prefix}pgi_right_finger"/>
       <axis xyz="-1 0 0"/>
-      <limit lower="0.0" upper="0.040" effort="140.0" velocity="0.0364"/>
+      <limit lower="0.0" upper="${pgi_physics_upper_limit}" effort="140.0" velocity="0.0364"/>
+      <dynamics damping="2.0" friction="0.0"/>
       <mimic joint="${prefix}pgi_left_finger_joint" multiplier="1.0" offset="0.0"/>
     </joint>
 
@@ -136,8 +183,12 @@
 
     <!-- The camera transform is an opt-in simulation parameter and does not
          modify config/ur10e_real/d435i_mount_calibration.json. The mount and
-         camera boxes are placeholders with no asserted mass properties. -->
+         camera boxes are placeholders. Their masses below are explicitly
+         provisional Gazebo values, not asserted camera/adapter properties. -->
     <link name="${prefix}d435i_mount">
+      <xacro:pgi_provisional_box_inertial
+        mass="${0.05}" size_x="${0.095}" size_y="${0.030}"
+        size_z="${0.015}" origin_xyz="0 0 0.0075"/>
       <visual name="provisional_d435i_mount_visual">
         <origin xyz="0 0 0.0075" rpy="0 0 0"/>
         <geometry><box size="0.095 0.030 0.015"/></geometry>
@@ -155,6 +206,9 @@
     </joint>
 
     <link name="${prefix}d435i_link">
+      <xacro:pgi_provisional_box_inertial
+        mass="${0.10}" size_x="${0.090}" size_y="${0.025}"
+        size_z="${0.025}" origin_xyz="0 0 0.0125"/>
       <visual name="provisional_d435i_body_visual">
         <origin xyz="0 0 0.0125" rpy="0 0 0"/>
         <geometry><box size="0.090 0.025 0.025"/></geometry>
@@ -185,5 +239,56 @@
       <parent link="${prefix}d435i_link"/>
       <child link="${prefix}d435i_depth_optical_frame"/>
     </joint>
+
+    <!-- Keep the fixed attachment links as distinct Gazebo entities so their
+         names and frames remain inspectable. Massless logical/optical frames
+         are still published by robot_state_publisher. -->
+    <gazebo reference="${prefix}tool0-pgi_camera_interposer">
+      <preserveFixedJoint>true</preserveFixedJoint>
+    </gazebo>
+    <gazebo reference="${prefix}pgi_camera_interposer-pgi_mount">
+      <preserveFixedJoint>true</preserveFixedJoint>
+    </gazebo>
+    <gazebo reference="${prefix}pgi_mount-pgi_body">
+      <preserveFixedJoint>true</preserveFixedJoint>
+    </gazebo>
+    <gazebo reference="${prefix}pgi_camera_interposer-d435i_mount">
+      <preserveFixedJoint>true</preserveFixedJoint>
+    </gazebo>
+    <gazebo reference="${prefix}d435i_mount-d435i_link">
+      <preserveFixedJoint>true</preserveFixedJoint>
+    </gazebo>
+    <!-- Logical grasp/optical frames intentionally have no mass. They remain
+         ROS TF frames, but are allowed to lump into their fixed parents during
+         URDF-to-SDF conversion instead of inventing fake inertial data. -->
+
+    <!-- Gazebo control is a separate opt-in from visualizing the PGI model.
+         Only the left/master jaw exposes a command interface. The right jaw
+         is a passive mimic and exposes state only, as required by ros2_control. -->
+    <xacro:if value="${use_gz_ros2_control}">
+      <ros2_control name="${prefix}pgi_140_80_sim_system" type="system">
+        <hardware>
+          <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+        </hardware>
+        <joint name="${prefix}pgi_left_finger_joint">
+          <command_interface name="position">
+            <param name="min">0.0</param>
+            <param name="max">0.040</param>
+          </command_interface>
+          <state_interface name="position">
+            <param name="initial_value">0.040</param>
+          </state_interface>
+          <state_interface name="velocity"/>
+          <state_interface name="effort"/>
+        </joint>
+        <joint name="${prefix}pgi_right_finger_joint">
+          <state_interface name="position">
+            <param name="initial_value">0.040</param>
+          </state_interface>
+          <state_interface name="velocity"/>
+          <state_interface name="effort"/>
+        </joint>
+      </ros2_control>
+    </xacro:if>
   </xacro:macro>
 </robot>

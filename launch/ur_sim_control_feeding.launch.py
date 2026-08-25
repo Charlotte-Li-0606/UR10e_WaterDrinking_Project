@@ -43,10 +43,12 @@ from launch.conditions import IfCondition, UnlessCondition
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import (
+    AndSubstitution,
     Command,
     FindExecutable,
     EnvironmentVariable,
     LaunchConfiguration,
+    NotSubstitution,
     PathJoinSubstitution,
     IfElseSubstitution,
 )
@@ -74,6 +76,11 @@ def launch_setup(context, *args, **kwargs):
     robot_base_x = LaunchConfiguration("robot_base_x")
     robot_base_y = LaunchConfiguration("robot_base_y")
     robot_base_z = LaunchConfiguration("robot_base_z")
+    use_pgi_gripper = LaunchConfiguration("use_pgi_gripper")
+    activate_pgi_controller = LaunchConfiguration("activate_pgi_controller")
+    pgi_gripper_controller = LaunchConfiguration("pgi_gripper_controller")
+    camera_mount_xyz = LaunchConfiguration("camera_mount_xyz")
+    camera_mount_rpy = LaunchConfiguration("camera_mount_rpy")
 
     robot_description_content = Command(
         [
@@ -110,6 +117,19 @@ def launch_setup(context, *args, **kwargs):
             " ",
             "robot_base_z:=",
             robot_base_z,
+            " ",
+            "use_pgi_gripper:=",
+            use_pgi_gripper,
+            " ",
+            "use_pgi_sim_control:=",
+            use_pgi_gripper,
+            " ",
+            "camera_mount_xyz:='",
+            camera_mount_xyz,
+            "' ",
+            "camera_mount_rpy:='",
+            camera_mount_rpy,
+            "'",
         ]
     )
     robot_description = {"robot_description": ParameterValue(robot_description_content, value_type=str)}
@@ -155,8 +175,26 @@ def launch_setup(context, *args, **kwargs):
     initial_joint_controller_spawner_stopped = Node(
         package="controller_manager",
         executable="spawner",
-        arguments=[initial_joint_controller, "-c", "/controller_manager", "--stopped"],
+        arguments=[initial_joint_controller, "-c", "/controller_manager", "--inactive"],
         condition=UnlessCondition(activate_joint_controller),
+    )
+
+    # The gripper has independent controller ownership. It exists only when
+    # the opt-in PGI description is selected, so the established simulation
+    # and all real-robot launch paths remain unchanged by default.
+    pgi_controller_spawner_started = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=[pgi_gripper_controller, "-c", "/controller_manager"],
+        condition=IfCondition(AndSubstitution(use_pgi_gripper, activate_pgi_controller)),
+    )
+    pgi_controller_spawner_stopped = Node(
+        package="controller_manager",
+        executable="spawner",
+        arguments=[pgi_gripper_controller, "-c", "/controller_manager", "--inactive"],
+        condition=IfCondition(
+            AndSubstitution(use_pgi_gripper, NotSubstitution(activate_pgi_controller))
+        ),
     )
 
     # GZ nodes
@@ -199,6 +237,8 @@ def launch_setup(context, *args, **kwargs):
                 joint_state_broadcaster_spawner,
                 initial_joint_controller_spawner_stopped,
                 initial_joint_controller_spawner_started,
+                pgi_controller_spawner_stopped,
+                pgi_controller_spawner_started,
             ],
         )
     )
@@ -354,6 +394,38 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "robot_base_z", default_value="0.60", description="UR10e base_link Z in Gazebo world (m)."
+            ),
+        ]
+    )
+    declared_arguments.extend(
+        [
+            DeclareLaunchArgument(
+                "use_pgi_gripper",
+                default_value="false",
+                description=(
+                    "Opt into the provisional PGI model and its Gazebo ros2_control "
+                    "interfaces. False preserves the established simulation."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "activate_pgi_controller",
+                default_value="true",
+                description="Start the PGI GripperCommand controller when the model is enabled.",
+            ),
+            DeclareLaunchArgument(
+                "pgi_gripper_controller",
+                default_value="pgi_gripper_controller",
+                description="Controller-manager name of the PGI GripperCommand controller.",
+            ),
+            DeclareLaunchArgument(
+                "camera_mount_xyz",
+                default_value="0 -0.065 0.020",
+                description="Provisional simulation-only D435i mount translation in metres.",
+            ),
+            DeclareLaunchArgument(
+                "camera_mount_rpy",
+                default_value="0 0 0",
+                description="Provisional simulation-only D435i mount rotation in radians.",
             ),
         ]
     )
