@@ -45,3 +45,21 @@ videos/
 # Timestamped diagnostics exported by local visualization runs
 frames_*.gv
 frames_*.pdf
+
+# Generated execution reports, recordings, and bag sidecars
+reports/feed_water_real_*.json
+reports/execution_rosbags/
+recordings/
+
+# Downloaded vendor CAD and conversion intermediates
+# Keep redistributable, project-created meshes under assets/meshes/ instead.
+assets/vendor/
+assets/cad_conversion_intermediates/
+downloads/
+*.step
+*.stp
+*.iges
+*.igs
+*.FCStd
+*.FCStd1
+*.blend1
