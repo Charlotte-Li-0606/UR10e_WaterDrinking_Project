@@ -15,6 +15,7 @@ from launch.actions import (
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -58,6 +59,18 @@ def generate_launch_description():
         }.items(),
     )
 
+    camera_bridge = Node(
+        package="ros_gz_bridge",
+        executable="parameter_bridge",
+        name="pgi_d435i_bridge",
+        output="screen",
+        arguments=[
+            "/pgi_d435i/image@sensor_msgs/msg/Image[gz.msgs.Image",
+            "/pgi_d435i/depth_image@sensor_msgs/msg/Image[gz.msgs.Image",
+            "/pgi_d435i/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
+        ],
+    )
+
     return LaunchDescription(
         [
             DeclareLaunchArgument(
@@ -73,21 +86,22 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "world_file",
-                default_value="empty.sdf",
+                default_value=str(PROJECT_ROOT / "worlds" / "pgi_140_80_camera.sdf"),
                 description="Gazebo world path or a world from the Gazebo collection.",
             ),
             DeclareLaunchArgument(
                 "camera_mount_xyz",
-                default_value="0 -0.065 0.020",
+                default_value="0 0.085 0.030",
                 description="Provisional interposer-to-camera translation in metres.",
             ),
             DeclareLaunchArgument(
                 "camera_mount_rpy",
-                default_value="0 0 0",
+                default_value="0 -1.57079632679 0",
                 description="Provisional interposer-to-camera rotation in radians.",
             ),
             SetEnvironmentVariable("ROS_DOMAIN_ID", ros_domain_id),
             SetEnvironmentVariable("GZ_PARTITION", ["pgi_140_80_domain_", ros_domain_id]),
             base_launch,
+            camera_bridge,
         ]
     )

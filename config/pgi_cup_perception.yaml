@@ -1,0 +1,34 @@
+pgi_cup_perception:
+  ros__parameters:
+    # Gazebo uses these registered RGB-D topics. For a real D435i, override
+    # them with color plus aligned-depth topics; output topics remain stable.
+    rgb_topic: /pgi_d435i/image
+    depth_topic: /pgi_d435i/depth_image
+    camera_info_topic: /pgi_d435i/camera_info
+    observation_topic: /pgi/perception/cup_observation
+    grasp_pose_topic: /pgi/perception/cup_grasp_pose
+    status_topic: /pgi/perception/cup_status
+    debug_image_topic: /pgi/perception/cup_debug_image
+    target_frame: base_link
+
+    max_rate_hz: 10.0
+    sync_queue_size: 20
+    sync_slop_sec: 0.08
+    depth_scale_16uc1: 0.001
+    min_depth_m: 0.05
+    max_depth_m: 3.0
+    smoothing_alpha: 0.45
+
+    # Basic blue-cup detector in OpenCV HSV units (H: 0..179).
+    hue_min: 90
+    hue_max: 135
+    saturation_min: 80
+    value_min: 45
+    min_mask_pixels: 120
+    morphology_kernel_px: 5
+
+    # Current scene assumption used to convert the observed cup centre-line
+    # into the documented lower grasp band. This remains plan-only evidence.
+    assume_upright_on_ground: true
+    ground_z_m: 0.0
+    grasp_center_z_from_base_m: 0.040

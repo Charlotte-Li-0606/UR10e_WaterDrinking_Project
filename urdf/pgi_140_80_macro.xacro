@@ -131,7 +131,9 @@
       <visual name="provisional_j1_left_visual">
         <origin xyz="0.0075 0 0.025" rpy="0 0 0"/>
         <geometry><box size="0.015 0.020 0.050"/></geometry>
-        <material name="pgi_finger_blue"><color rgba="0.10 0.32 0.62 1"/></material>
+        <!-- Neutral provisional fingertip color prevents the basic blue-cup
+             observer from mistaking robot self-geometry for the target. -->
+        <material name="pgi_finger_dark"><color rgba="0.18 0.20 0.23 1"/></material>
       </visual>
       <collision name="simplified_j1_left_collision">
         <origin xyz="0.0075 0 0.025" rpy="0 0 0"/>
@@ -155,7 +157,7 @@
       <visual name="provisional_j1_right_visual">
         <origin xyz="-0.0075 0 0.025" rpy="0 0 0"/>
         <geometry><box size="0.015 0.020 0.050"/></geometry>
-        <material name="pgi_finger_blue_right"><color rgba="0.10 0.32 0.62 1"/></material>
+        <material name="pgi_finger_dark_right"><color rgba="0.18 0.20 0.23 1"/></material>
       </visual>
       <collision name="simplified_j1_right_collision">
         <origin xyz="-0.0075 0 0.025" rpy="0 0 0"/>
@@ -187,16 +189,16 @@
          provisional Gazebo values, not asserted camera/adapter properties. -->
     <link name="${prefix}d435i_mount">
       <xacro:pgi_provisional_box_inertial
-        mass="${0.05}" size_x="${0.095}" size_y="${0.030}"
+        mass="${0.05}" size_x="${0.030}" size_y="${0.095}"
         size_z="${0.015}" origin_xyz="0 0 0.0075"/>
       <visual name="provisional_d435i_mount_visual">
         <origin xyz="0 0 0.0075" rpy="0 0 0"/>
-        <geometry><box size="0.095 0.030 0.015"/></geometry>
+        <geometry><box size="0.030 0.095 0.015"/></geometry>
         <material name="d435i_mount_gray"><color rgba="0.35 0.37 0.40 1"/></material>
       </visual>
       <collision name="provisional_d435i_mount_collision">
         <origin xyz="0 0 0.0075" rpy="0 0 0"/>
-        <geometry><box size="0.095 0.030 0.015"/></geometry>
+        <geometry><box size="0.030 0.095 0.015"/></geometry>
       </collision>
     </link>
     <joint name="${prefix}pgi_camera_interposer-d435i_mount" type="fixed">
@@ -207,16 +209,16 @@
 
     <link name="${prefix}d435i_link">
       <xacro:pgi_provisional_box_inertial
-        mass="${0.10}" size_x="${0.090}" size_y="${0.025}"
+        mass="${0.10}" size_x="${0.025}" size_y="${0.090}"
         size_z="${0.025}" origin_xyz="0 0 0.0125"/>
       <visual name="provisional_d435i_body_visual">
         <origin xyz="0 0 0.0125" rpy="0 0 0"/>
-        <geometry><box size="0.090 0.025 0.025"/></geometry>
+        <geometry><box size="0.025 0.090 0.025"/></geometry>
         <material name="d435i_body_black"><color rgba="0.05 0.05 0.06 1"/></material>
       </visual>
       <collision name="provisional_d435i_body_collision">
         <origin xyz="0 0 0.0125" rpy="0 0 0"/>
-        <geometry><box size="0.090 0.025 0.025"/></geometry>
+        <geometry><box size="0.025 0.090 0.025"/></geometry>
       </collision>
     </link>
     <joint name="${prefix}d435i_mount-d435i_link" type="fixed">
@@ -239,6 +241,37 @@
       <parent link="${prefix}d435i_link"/>
       <child link="${prefix}d435i_depth_optical_frame"/>
     </joint>
+
+    <!-- Ideal registered RGB-D source for the simulation-only PGI camera.
+         The topic/message contract mirrors the earlier wrist RGB-D
+         simulation so perception can later switch to aligned real D435i
+         topics without changing its output contract or the planning layer. -->
+    <gazebo reference="${prefix}d435i_link">
+      <sensor name="pgi_d435i" type="rgbd_camera">
+        <!-- Place the rendered sensor at the same provisional baseline as
+             d435i_depth_optical_frame. Gazebo supplies the optical-axis
+             convention internally, so only the link-frame translation is
+             applied here. -->
+        <pose>-0.015 0 0.0125 0 0 0</pose>
+        <always_on>1</always_on>
+        <update_rate>15</update_rate>
+        <visualize>false</visualize>
+        <topic>/pgi_d435i</topic>
+        <camera>
+          <horizontal_fov>1.600</horizontal_fov>
+          <image>
+            <width>640</width>
+            <height>480</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>0.05</near>
+            <far>3.0</far>
+          </clip>
+          <optical_frame_id>${prefix}d435i_depth_optical_frame</optical_frame_id>
+        </camera>
+      </sensor>
+    </gazebo>
 
     <!-- Keep the fixed attachment links as distinct Gazebo entities so their
          names and frames remain inspectable. Massless logical/optical frames

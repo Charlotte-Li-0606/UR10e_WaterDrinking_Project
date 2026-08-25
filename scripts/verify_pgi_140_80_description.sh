@@ -18,11 +18,11 @@ xacro "${PROJECT_ROOT}/urdf/pgi_140_80_macro.xacro" \
 xacro "${DESCRIPTION}" name:=ur ur_type:=ur10e use_pgi_gripper:=false \
   > "${VERIFY_TMP}/ur10e_default.urdf"
 xacro "${DESCRIPTION}" name:=ur ur_type:=ur10e use_pgi_gripper:=true \
-  camera_mount_xyz:="0 -0.065 0.020" camera_mount_rpy:="0 0 0" \
+  camera_mount_xyz:="0 0.085 0.030" camera_mount_rpy:="0 -1.57079632679 0" \
   use_pgi_sim_control:=false \
   > "${VERIFY_TMP}/ur10e_pgi_visual.urdf"
 xacro "${DESCRIPTION}" name:=ur ur_type:=ur10e use_pgi_gripper:=true \
-  camera_mount_xyz:="0 -0.065 0.020" camera_mount_rpy:="0 0 0" \
+  camera_mount_xyz:="0 0.085 0.030" camera_mount_rpy:="0 -1.57079632679 0" \
   use_pgi_sim_control:=true \
   simulation_controllers:="${PROJECT_ROOT}/config/pgi_140_80_sim_controllers.yaml" \
   > "${VERIFY_TMP}/ur10e_pgi_sim.urdf"
@@ -179,6 +179,24 @@ for joint_name, (parent, child) in expected_parents.items():
     assert joint.find("parent").attrib["link"] == parent
     assert joint.find("child").attrib["link"] == child
 
+camera_mount_joint = pgi_joints["pgi_camera_interposer-d435i_mount"]
+assert camera_mount_joint.find("origin").attrib == {
+    "xyz": "0 0.085 0.030",
+    "rpy": "0 -1.57079632679 0",
+}
+
+pgi_camera_gazebo = next(
+    element
+    for element in pgi_sim_root.findall("gazebo")
+    if element.attrib.get("reference") == "d435i_link"
+)
+pgi_camera_sensor = pgi_camera_gazebo.find("sensor")
+assert pgi_camera_sensor is not None
+assert pgi_camera_sensor.attrib == {"name": "pgi_d435i", "type": "rgbd_camera"}
+assert pgi_camera_sensor.findtext("pose") == "-0.015 0 0.0125 0 0 0"
+assert pgi_camera_sensor.findtext("topic") == "/pgi_d435i"
+assert pgi_camera_sensor.findtext("camera/optical_frame_id") == "d435i_depth_optical_frame"
+
 for link_name in (
     "pgi_camera_interposer",
     "pgi_mount",
@@ -224,6 +242,9 @@ assert {
     "d435i_color_optical_frame",
     "d435i_depth_optical_frame",
 } <= sdf_frames
+sdf_camera_link = next(link for link in sdf_model.findall("link") if link.attrib["name"] == "d435i_link")
+sdf_sensor = sdf_camera_link.find("sensor")
+assert sdf_sensor is not None and sdf_sensor.attrib["type"] == "rgbd_camera"
 
 assert "feeding_cup_link" in default_links
 assert "wrist_rgbd_camera_link" in default_links
@@ -236,4 +257,5 @@ print("PGI stroke: 0.040 m/jaw, 0.080 m total; symmetric mimic verified")
 print("PGI transform ownership, provisional inertias, and visual/collision geometry verified")
 print("PGI Gazebo hard-stop guard and 0.040 m command limit verified")
 print("PGI Gazebo SDF conversion and ros2_control master/mimic interfaces verified")
+print("PGI registered RGB-D sensor and downward optical-frame contract verified")
 PY

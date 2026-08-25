@@ -40,13 +40,16 @@ The left-jaw slider controls `pgi_left_finger_joint` over `0.000-0.040 m`.
 documented 80 mm total stroke.
 
 The dedicated RViz configuration opens a close tool view. The provisional
-D435i is the black rectangular body beside the gripper; the colored axes named
-`D435i camera frame` mark `d435i_link`. The separate `PGI grasp center` axes
+D435i is the black rectangular body on the gripper's `+Y` front side; the
+colored axes named `D435i depth optical frame` mark
+`d435i_depth_optical_frame`. The separate `PGI grasp center` axes
 mark the future cup attachment frame. Use the mouse wheel to zoom out from the
 tool-focused view when the complete UR10e needs to be inspected.
 
-The `camera_mount_xyz` and `camera_mount_rpy` arguments are provisional and
-exist only in the opt-in simulation. The interposer, J1 envelope, F1 solid
+The default provisional transform is `xyz="0 0.085 0.030"` and
+`rpy="0 -1.57079632679 0"`, which puts the camera on the front side with its
+optical +Z axis looking down. The `camera_mount_xyz` and `camera_mount_rpy`
+arguments exist only in the opt-in simulation. The interposer, J1 envelope, F1 solid
 envelope, optical-frame baselines, and box-derived body inertia also remain
 provisional. They do not change the validated real D435i calibration.
 
@@ -64,7 +67,9 @@ The first three Gazebo stages are implemented on the feature branch:
 2. control the symmetric jaws through `gz_ros2_control` and the standard
    `control_msgs/action/GripperCommand` interface;
 3. load simulation-only MoveIt semantics for the arm, gripper, camera adapter,
-   touch links, grasp center, and an independent staging cup.
+   touch links, grasp center, and an independent staging cup. The current
+   Stage-3 increment also exposes registered RGB-D topics and a basic
+   observation-only cup pose detector; it does not implement grasp ownership.
 
 Launch the isolated simulation with both Gazebo and RViz visible:
 
@@ -107,6 +112,34 @@ source /home/dase-hw101/ros2_ws/install/setup.bash
 ros2 launch /home/dase-hw101/ur_drinking_project/launch/pgi_140_80_gazebo_moveit.launch.py
 ```
 
+The combined launch opens Gazebo, MoveIt RViz, and an `rqt_image_view` window
+for the detection overlay. Use `launch_camera_view:=false` to omit only the
+image window, or `launch_cup_perception:=false` to omit the basic detector. The
+registered simulation camera contract is:
+
+```text
+/pgi_d435i/image
+/pgi_d435i/depth_image
+/pgi_d435i/camera_info
+```
+
+The observation-only outputs are:
+
+```text
+/pgi/perception/cup_observation
+/pgi/perception/cup_grasp_pose
+/pgi/perception/cup_status
+/pgi/perception/cup_debug_image
+```
+
+The detector synchronizes RGB, depth, and camera intrinsics, segments the blue
+cup, back-projects its depth pixels, and transforms the result into
+`base_link`. Topic names and thresholds are configurable in
+`config/pgi_cup_perception.yaml`. This common ROS contract narrows the
+simulation-to-real gap: a future aligned D435i source can be remapped to the
+same three inputs. The current HSV segmentation and provisional camera pose
+are not production perception or a real hand-eye calibration.
+
 MoveIt is deliberately plan-only: trajectory execution and controller
 switching are disabled. The controller mapping is loaded for validation, but
 no arm or jaw trajectory is sent by this launch. Verify the current model,
@@ -117,13 +150,21 @@ cd /home/dase-hw101/ur_drinking_project
 ROS_DOMAIN_ID=92 scripts/verify_pgi_140_80_moveit.py --require-cup
 ```
 
-The default `pgi_staging_cup` reuses the saved cup data: 50 mm radius,
-205 mm body height, 0.15 kg mass, and a centered 4 mm radius / 70 mm exposed
-straw. Its default base pose is `(0.481542, 0.208414, 0.0)` metres: the saved
+The default `pgi_staging_cup` is 205 mm high and tapers from a 50 mm bottom
+diameter to a 120 mm top diameter. Eight stacked bands provide matching visual
+and conservative collision geometry. The saved provisional mass is 0.15 kg,
+and the centered exposed straw is 4 mm radius / 70 mm long. Its default base
+pose is `(0.481542, 0.208414, 0.0)` metres: the saved
 X/Y location is retained, while the old floating calibration height is removed
 so the cup bottom sits on the ground. The pose can be changed consistently in
 Gazebo and MoveIt with `cup_x`, `cup_y`, and `cup_z`. Use
 `spawn_cup:=false` to omit it.
+
+The recommended external grasp center is 40 mm above the cup base. With the
+provisional 50 mm-long J1 fingers, the covered height is 15-65 mm and the cup
+diameter over that band is approximately 55-72.2 mm, below the verified 80 mm
+maximum opening. This is a geometric candidate only; force, friction, and
+grasp stability remain unvalidated.
 
 The cup is static and independent in Stage 3. It is a collision obstacle, not
 an attached object, and it does not yet follow `pgi_grasp_center`. Logical

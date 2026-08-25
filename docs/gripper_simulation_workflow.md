@@ -14,7 +14,7 @@ RS485 communication.
 | 2 | Obtain and verify exact official PGI-140-80, J1 fingertip, and F1 flange CAD | Current scope — official sources identified; exact download/checksum and redistribution permission unresolved |
 | 3 | Build a parameterized URDF/Xacro model and verify it in RViz | Current scope — provisional kinematic model implemented; exact mesh replacement remains gated by Step 2 |
 | 4 | Add `gz_ros2_control` and a standard `GripperCommand` simulation interface | Complete in isolated Gazebo simulation; native contact coupling remains a later physics task |
-| 5 | Add the gripper, camera adapter, fingers, and grasp center to MoveIt | Complete — isolated, plan-only MoveIt model and staging cup verified |
+| 5 | Add the gripper, camera adapter, fingers, and grasp center to MoveIt | Complete — isolated, plan-only MoveIt model, RGB-D observer, and staging cup verified |
 | 6 | Validate logical cup grasping using attach/detach before contact physics | Pending |
 | 7 | Add physical contact, friction, cup mass, grasp/release, and drop testing | Pending |
 | 8 | Integrate the simulated gripper with reusable high-level tools | Pending |
@@ -133,6 +133,14 @@ They describe the provisional `pgi_camera_interposer -> d435i_mount`
 transform. Final values require adapter design, CAD inspection, hand-eye
 calibration, and collision validation. They must never overwrite
 `config/ur10e_real/d435i_mount_calibration.json`.
+
+The simulation default is `xyz="0 0.085 0.030"` and
+`rpy="0 -1.57079632679 0"`. In the provisional PGI convention this places the
+D435i on the gripper's `+Y` front side and points optical +Z down. The rendered
+RGB-D sensor origin is aligned with the provisional depth optical baseline so
+the image back-projection and published TF use the same origin. These values
+are simulation-only assumptions, not a replacement for real adapter CAD or
+hand-eye calibration.
 
 ### Verification gates
 
@@ -255,9 +263,16 @@ controller, switches controllers, or executes a trajectory. The provisional
 jaw acceleration limit of `0.10 m/s^2` exists only so MoveIt can time-parameterize
 plan-only results; it is not an official PGI hardware rating.
 
-`models/pgi_staging_cup/model.sdf` reuses the saved 0.15 kg cup model, 50 mm
-radius, 205 mm body height, and centered 4 mm radius / 70 mm exposed straw. The
-combined launch supplies the same parameterized base pose to Gazebo and to the
+`models/pgi_staging_cup/model.sdf` uses the saved provisional 0.15 kg mass and
+205 mm body height, but incorporates the measured taper: 50 mm bottom diameter
+to 120 mm top diameter. Eight stacked cylinder bands are shared by the visual
+and conservative collision approximation. The centered exposed straw remains
+4 mm radius / 70 mm long. A project-created
+`models/pgi_staging_cup/meshes/tapered_cup.dae` preserves the smooth reference
+envelope. The runtime model uses primitive bands because Ogre2 did not
+reliably import the intended blue material from that COLLADA file; explicit
+SDF primitive material gives the detector deterministic input. The combined
+launch supplies the same parameterized base pose to Gazebo and to the
 MoveIt planning scene. It retains the previously saved X/Y location but
 replaces the old floating calibration height with a ground-level cup base:
 
@@ -265,9 +280,26 @@ replaces the old floating calibration height with a ground-level cup base:
 cup_x=0.481542  cup_y=0.208414  cup_z=0.0
 ```
 
-Both cup and straw use simple cylinder collision geometry. The cup remains a
-static, independent world object and is explicitly verified as not attached;
-this does not implement Stage 4 ownership or Stage 5 contact physics.
+The recommended external grasp center is 40 mm above the base. The provisional
+50 mm J1 finger span covers heights 15-65 mm, where the linear taper is about
+55-72.2 mm in diameter and therefore fits inside the 80 mm opening. The cup
+remains a static, independent world object and is explicitly verified as not
+attached; this does not implement Stage 4 ownership or Stage 5 contact physics.
+
+The same combined launch now starts an ideal registered Gazebo RGB-D source,
+bridges RGB, depth, and `CameraInfo` to ROS, and runs
+`scripts/pgi_cup_perception.py`. The basic observer synchronizes those inputs,
+segments the blue cup, back-projects median cup depth, transforms the result at
+the image timestamp, and publishes observation and grounded grasp poses in
+`base_link`. It uses a separate TF executor callback group so timestamped TF
+updates continue while image processing waits briefly for a transform.
+
+This narrows the later simulation-to-real integration gap because aligned real
+D435i topics can be remapped to the same input contract without changing the
+published pose contract. It does not make simulation calibration valid on the
+real adapter. HSV segmentation, the upright-ground assumption, the front
+camera transform, and the grasp height are provisional; no planning or
+execution command is issued by the observer.
 
 Launch the visible combined stage:
 
@@ -276,6 +308,11 @@ source /opt/ros/jazzy/setup.bash
 source /home/dase-hw101/ros2_ws/install/setup.bash
 ros2 launch /home/dase-hw101/ur_drinking_project/launch/pgi_140_80_gazebo_moveit.launch.py
 ```
+
+The launch opens Gazebo, the proven UR MoveIt RViz layout, and
+`rqt_image_view` on `/pgi/perception/cup_debug_image`. Set
+`launch_camera_view:=false` to omit that image window or
+`launch_cup_perception:=false` to omit the observer.
 
 Then run the simulation-only plan checks:
 

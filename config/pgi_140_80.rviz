@@ -5,7 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /RobotModel1
-        - /D435i camera frame1
+        - /D435i depth optical frame1
       Splitter Ratio: 0.5
     Tree Height: 720
   - Class: rviz_common/Views
@@ -90,9 +90,9 @@ Visualization Manager:
     - Class: rviz_default_plugins/Axes
       Enabled: true
       Length: 0.12
-      Name: D435i camera frame
+      Name: D435i depth optical frame
       Radius: 0.008
-      Reference Frame: d435i_link
+      Reference Frame: d435i_depth_optical_frame
       Value: true
     - Class: rviz_default_plugins/Axes
       Enabled: true

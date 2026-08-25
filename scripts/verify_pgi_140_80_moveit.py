@@ -53,7 +53,19 @@ RRTCONNECT = "RRTConnect"
 JAW_LIMIT = 0.040
 NUMERICAL_LIMIT_EPSILON = 1e-9
 CUP_ID = "pgi_staging_cup"
-CUP_DIMENSIONS = [0.205, 0.050]
+CUP_BAND_DIMENSIONS = [
+    [0.025625, radius]
+    for radius in (
+        0.029375,
+        0.033750,
+        0.038125,
+        0.042500,
+        0.046875,
+        0.051250,
+        0.055625,
+        0.060000,
+    )
+]
 STRAW_DIMENSIONS = [0.070, 0.004]
 
 
@@ -241,17 +253,22 @@ class MoveItVerifier(Node):
         )
         cup_dimensions_match = bool(
             cup is not None
-            and len(cup.primitives) == 2
+            and len(cup.primitives) == len(CUP_BAND_DIMENSIONS) + 1
             and all(
-                abs(actual - expected) <= 1e-9
-                for actual, expected in zip(
-                    cup.primitives[0].dimensions, CUP_DIMENSIONS
+                all(
+                    abs(actual - expected) <= 1e-9
+                    for actual, expected in zip(
+                        primitive.dimensions, expected_dimensions
+                    )
+                )
+                for primitive, expected_dimensions in zip(
+                    cup.primitives[:-1], CUP_BAND_DIMENSIONS
                 )
             )
             and all(
                 abs(actual - expected) <= 1e-9
                 for actual, expected in zip(
-                    cup.primitives[1].dimensions, STRAW_DIMENSIONS
+                    cup.primitives[-1].dimensions, STRAW_DIMENSIONS
                 )
             )
         )

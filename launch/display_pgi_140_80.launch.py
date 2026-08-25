@@ -62,12 +62,12 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "camera_mount_xyz",
-                default_value="0 -0.065 0.020",
+                default_value="0 0.085 0.030",
                 description="Provisional interposer-to-D435i mount translation in metres.",
             ),
             DeclareLaunchArgument(
                 "camera_mount_rpy",
-                default_value="0 0 0",
+                default_value="0 -1.57079632679 0",
                 description="Provisional interposer-to-D435i mount roll/pitch/yaw in radians.",
             ),
             DeclareLaunchArgument(

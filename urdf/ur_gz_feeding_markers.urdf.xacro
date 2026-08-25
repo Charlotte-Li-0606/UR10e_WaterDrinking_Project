@@ -36,8 +36,11 @@
        real D435i calibration or the default feeding model. -->
   <xacro:arg name="use_pgi_gripper" default="false" />
   <xacro:arg name="use_pgi_sim_control" default="false" />
-  <xacro:arg name="camera_mount_xyz" default="0 -0.065 0.020" />
-  <xacro:arg name="camera_mount_rpy" default="0 0 0" />
+  <xacro:arg name="camera_mount_xyz" default="0 0.085 0.030" />
+  <!-- The provisional side-front mount rotates the camera optical +Z onto
+       tool0 +Z. With the flange-down constraint, it looks toward the ground
+       and grasp region without tilting the flange. -->
+  <xacro:arg name="camera_mount_rpy" default="0 -1.57079632679 0" />
 
   <!-- Initial camera-ready pose: tool0 +Z points along world -Z (down). -->
   <xacro:property name="feeding_initial_positions" value="${dict(shoulder_pan_joint=-0.151217, shoulder_lift_joint=-1.610439, elbow_joint=0.775573, wrist_1_joint=-0.735939, wrist_2_joint=-1.570760, wrist_3_joint=2.821707)}"/>

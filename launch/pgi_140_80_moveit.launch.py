@@ -140,6 +140,9 @@ def _launch_setup(context):
         parameters=[moveit_parameters, runtime_parameters],
     )
 
+    # Reuse the proven single-model MoveIt layout. Camera imagery is shown by
+    # the combined launch in rqt_image_view, avoiding a duplicate RViz robot
+    # model and the workstation's OGRE buffer exhaustion.
     rviz_config_file = PathJoinSubstitution(
         [FindPackageShare("ur_moveit_config"), "config", "moveit.rviz"]
     )
@@ -151,6 +154,12 @@ def _launch_setup(context):
         condition=IfCondition(launch_rviz),
         arguments=["-d", rviz_config_file],
         parameters=[moveit_parameters, runtime_parameters],
+        additional_env={
+            # Keep Gazebo on hardware GL while avoiding OGRE buffer exhaustion
+            # when both visible applications share this workstation GPU.
+            "LIBGL_ALWAYS_SOFTWARE": "1",
+            "QT_XCB_GL_INTEGRATION": "none",
+        },
     )
 
     return [
@@ -182,12 +191,12 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "camera_mount_xyz",
-                default_value="0 -0.065 0.020",
+                default_value="0 0.085 0.030",
                 description="Provisional interposer-to-camera translation in metres.",
             ),
             DeclareLaunchArgument(
                 "camera_mount_rpy",
-                default_value="0 0 0",
+                default_value="0 -1.57079632679 0",
                 description="Provisional interposer-to-camera rotation in radians.",
             ),
             SetEnvironmentVariable("ROS_DOMAIN_ID", ros_domain_id),

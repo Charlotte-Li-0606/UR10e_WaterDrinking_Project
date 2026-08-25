@@ -5,9 +5,9 @@
          MoveIt use one parameterized source of truth. -->
     <static>true</static>
     <link name="cup_link">
-      <!-- Reused from models/cup/model.sdf: 0.15 kg cup and its saved
-           cylinder-derived inertia. Static staging does not validate these
-           values as a contact-physics model. -->
+      <!-- Reused 0.15 kg cup mass. The saved cylinder-derived inertia remains
+           provisional after tapering and is ignored while this model is
+           static; Stage 5 must replace it before contact physics. -->
       <inertial>
         <mass>0.15</mass>
         <inertia>
@@ -20,25 +20,30 @@
         </inertia>
       </inertial>
 
-      <!-- Saved cup envelope: radius 50 mm, height 205 mm. -->
-      <collision name="cup_cylinder_collision">
-        <pose>0 0 0.1025 0 0 0</pose>
-        <geometry>
-          <cylinder>
-            <radius>0.05</radius>
-            <length>0.205</length>
-          </cylinder>
-        </geometry>
-      </collision>
+      <!-- Conservative eight-band approximation of the measured taper:
+           50 mm bottom diameter to 120 mm top diameter over 205 mm. Each
+           band uses the radius at its upper edge, so collision geometry does
+           not underestimate the visual surface within that band. -->
+      <collision name="cup_band_1_collision"><pose>0 0 0.0128125 0 0 0</pose><geometry><cylinder><radius>0.029375</radius><length>0.025625</length></cylinder></geometry></collision>
+      <collision name="cup_band_2_collision"><pose>0 0 0.0384375 0 0 0</pose><geometry><cylinder><radius>0.033750</radius><length>0.025625</length></cylinder></geometry></collision>
+      <collision name="cup_band_3_collision"><pose>0 0 0.0640625 0 0 0</pose><geometry><cylinder><radius>0.038125</radius><length>0.025625</length></cylinder></geometry></collision>
+      <collision name="cup_band_4_collision"><pose>0 0 0.0896875 0 0 0</pose><geometry><cylinder><radius>0.042500</radius><length>0.025625</length></cylinder></geometry></collision>
+      <collision name="cup_band_5_collision"><pose>0 0 0.1153125 0 0 0</pose><geometry><cylinder><radius>0.046875</radius><length>0.025625</length></cylinder></geometry></collision>
+      <collision name="cup_band_6_collision"><pose>0 0 0.1409375 0 0 0</pose><geometry><cylinder><radius>0.051250</radius><length>0.025625</length></cylinder></geometry></collision>
+      <collision name="cup_band_7_collision"><pose>0 0 0.1665625 0 0 0</pose><geometry><cylinder><radius>0.055625</radius><length>0.025625</length></cylinder></geometry></collision>
+      <collision name="cup_band_8_collision"><pose>0 0 0.1921875 0 0 0</pose><geometry><cylinder><radius>0.060000</radius><length>0.025625</length></cylinder></geometry></collision>
 
-      <visual name="cup_mesh_visual">
-        <geometry>
-          <mesh>
-            <uri>model://cup/meshes/cup.dae</uri>
-            <scale>1 1 1</scale>
-          </mesh>
-        </geometry>
-      </visual>
+      <!-- Use the same eight bands for rendering and collision. This avoids
+           renderer-dependent COLLADA material import and makes the blue cup
+           reliably observable by the basic RGB-D detector. -->
+      <visual name="cup_band_1_visual"><pose>0 0 0.0128125 0 0 0</pose><geometry><cylinder><radius>0.029375</radius><length>0.025625</length></cylinder></geometry><material><ambient>0.05 0.35 0.85 1</ambient><diffuse>0.05 0.35 0.85 1</diffuse></material></visual>
+      <visual name="cup_band_2_visual"><pose>0 0 0.0384375 0 0 0</pose><geometry><cylinder><radius>0.033750</radius><length>0.025625</length></cylinder></geometry><material><ambient>0.05 0.35 0.85 1</ambient><diffuse>0.05 0.35 0.85 1</diffuse></material></visual>
+      <visual name="cup_band_3_visual"><pose>0 0 0.0640625 0 0 0</pose><geometry><cylinder><radius>0.038125</radius><length>0.025625</length></cylinder></geometry><material><ambient>0.05 0.35 0.85 1</ambient><diffuse>0.05 0.35 0.85 1</diffuse></material></visual>
+      <visual name="cup_band_4_visual"><pose>0 0 0.0896875 0 0 0</pose><geometry><cylinder><radius>0.042500</radius><length>0.025625</length></cylinder></geometry><material><ambient>0.05 0.35 0.85 1</ambient><diffuse>0.05 0.35 0.85 1</diffuse></material></visual>
+      <visual name="cup_band_5_visual"><pose>0 0 0.1153125 0 0 0</pose><geometry><cylinder><radius>0.046875</radius><length>0.025625</length></cylinder></geometry><material><ambient>0.05 0.35 0.85 1</ambient><diffuse>0.05 0.35 0.85 1</diffuse></material></visual>
+      <visual name="cup_band_6_visual"><pose>0 0 0.1409375 0 0 0</pose><geometry><cylinder><radius>0.051250</radius><length>0.025625</length></cylinder></geometry><material><ambient>0.05 0.35 0.85 1</ambient><diffuse>0.05 0.35 0.85 1</diffuse></material></visual>
+      <visual name="cup_band_7_visual"><pose>0 0 0.1665625 0 0 0</pose><geometry><cylinder><radius>0.055625</radius><length>0.025625</length></cylinder></geometry><material><ambient>0.05 0.35 0.85 1</ambient><diffuse>0.05 0.35 0.85 1</diffuse></material></visual>
+      <visual name="cup_band_8_visual"><pose>0 0 0.1921875 0 0 0</pose><geometry><cylinder><radius>0.060000</radius><length>0.025625</length></cylinder></geometry><material><ambient>0.05 0.35 0.85 1</ambient><diffuse>0.05 0.35 0.85 1</diffuse></material></visual>
 
       <!-- Saved exposed straw: radius 4 mm, height 70 mm, centered at
            z=240 mm. Stage 3 adds a conservative collision cylinder so
@@ -66,5 +71,11 @@
         </material>
       </visual>
     </link>
+    <!-- Recommended external-grasp centre. With 50 mm-long J1 fingers, a
+         centre at z=40 mm covers z=15..65 mm. The measured taper is about
+         55..72 mm diameter there, below the verified 80 mm maximum opening. -->
+    <frame name="grasp_band" attached_to="cup_link">
+      <pose>0 0 0.040 0 0 0</pose>
+    </frame>
   </model>
 </sdf>

@@ -18,8 +18,22 @@ from shape_msgs.msg import SolidPrimitive
 
 CUP_ID = "pgi_staging_cup"
 CUP_HEIGHT = 0.205
-CUP_RADIUS = 0.050
-CUP_CENTER_Z = 0.1025
+CUP_BOTTOM_DIAMETER = 0.050
+CUP_TOP_DIAMETER = 0.120
+CUP_GRASP_CENTER_Z = 0.040
+CUP_GRASP_FINGER_SPAN_Z = (0.015, 0.065)
+# (centre_z, height, conservative radius). Each radius is the measured linear
+# taper at the band's upper edge, avoiding an undersized collision envelope.
+CUP_COLLISION_BANDS = (
+    (0.0128125, 0.025625, 0.029375),
+    (0.0384375, 0.025625, 0.033750),
+    (0.0640625, 0.025625, 0.038125),
+    (0.0896875, 0.025625, 0.042500),
+    (0.1153125, 0.025625, 0.046875),
+    (0.1409375, 0.025625, 0.051250),
+    (0.1665625, 0.025625, 0.055625),
+    (0.1921875, 0.025625, 0.060000),
+)
 STRAW_HEIGHT = 0.070
 STRAW_RADIUS = 0.004
 STRAW_CENTER_Z = 0.240
@@ -85,13 +99,13 @@ class CupScenePublisher(Node):
         collision.id = CUP_ID
         collision.operation = CollisionObject.ADD
         collision.primitives = [
-            cylinder(CUP_HEIGHT, CUP_RADIUS),
-            cylinder(STRAW_HEIGHT, STRAW_RADIUS),
-        ]
+            cylinder(height, radius)
+            for _centre, height, radius in CUP_COLLISION_BANDS
+        ] + [cylinder(STRAW_HEIGHT, STRAW_RADIUS)]
         collision.primitive_poses = [
-            upright_pose(x, y, z + CUP_CENTER_Z),
-            upright_pose(x, y, z + STRAW_CENTER_Z),
-        ]
+            upright_pose(x, y, z + centre)
+            for centre, _height, _radius in CUP_COLLISION_BANDS
+        ] + [upright_pose(x, y, z + STRAW_CENTER_Z)]
 
         request = ApplyPlanningScene.Request()
         request.scene.is_diff = True
@@ -116,14 +130,29 @@ class CupScenePublisher(Node):
         )
         objects = self.call(self.get_client, verify).scene.world.collision_objects
         cup = next((item for item in objects if item.id == CUP_ID), None)
-        if cup is None or len(cup.primitives) != 2 or len(cup.primitive_poses) != 2:
+        expected_count = len(CUP_COLLISION_BANDS) + 1
+        if (
+            cup is None
+            or len(cup.primitives) != expected_count
+            or len(cup.primitive_poses) != expected_count
+        ):
             raise RuntimeError("Cup was not retained in the MoveIt planning scene")
 
         return {
             "id": CUP_ID,
             "frame": frame_id,
             "base_pose_xyz_m": [x, y, z],
-            "cup": {"height_m": CUP_HEIGHT, "radius_m": CUP_RADIUS},
+            "cup": {
+                "height_m": CUP_HEIGHT,
+                "bottom_diameter_m": CUP_BOTTOM_DIAMETER,
+                "top_diameter_m": CUP_TOP_DIAMETER,
+                "collision_band_count": len(CUP_COLLISION_BANDS),
+            },
+            "recommended_grasp": {
+                "center_z_from_cup_base_m": CUP_GRASP_CENTER_Z,
+                "finger_span_z_from_cup_base_m": list(CUP_GRASP_FINGER_SPAN_Z),
+                "measured_diameter_range_over_fingers_m": [0.055, 0.0722],
+            },
             "straw": {
                 "height_m": STRAW_HEIGHT,
                 "radius_m": STRAW_RADIUS,
