@@ -1,0 +1,189 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro">
+  <!--
+    Kinematic RViz model for the exact configured variant
+    PGI-140-80-W-S-M1-L5-J1-F1-01.
+
+    Verified manufacturer data (DH Robotics catalog EN.2403, pp. 56-57):
+      * body envelope: 95 x 61.7 x 86 mm;
+      * body mass: 1 kg, excluding fingers;
+      * total stroke: 80 mm;
+      * F1: ISO 9409-1-50-4-M6, 50 mm PCD, four 6.5 mm through holes.
+
+    The official PGI/F1/J1 CAD archive has not yet been obtained because the
+    current vendor download is form/JavaScript gated. Primitive visuals below
+    are therefore deliberately labelled provisional. They must not be used as
+    manufacturing geometry or as a real-robot payload/TCP calibration.
+  -->
+  <xacro:macro name="pgi_140_80" params="parent prefix camera_mount_xyz camera_mount_rpy">
+    <!-- Placeholder camera interposer. Its final material, mass, and geometry
+         depend on the project adapter design and are intentionally not given
+         an inertial block. The joint origin is the UR tool0/F1 interface. -->
+    <link name="${prefix}pgi_camera_interposer">
+      <visual name="provisional_interposer_visual">
+        <origin xyz="0 0 0.005" rpy="0 0 0"/>
+        <geometry><box size="0.085 0.085 0.010"/></geometry>
+        <material name="pgi_interposer_gray"><color rgba="0.30 0.32 0.35 1"/></material>
+      </visual>
+      <collision name="provisional_interposer_collision">
+        <origin xyz="0 0 0.005" rpy="0 0 0"/>
+        <geometry><box size="0.085 0.085 0.010"/></geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}tool0-pgi_camera_interposer" type="fixed">
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <parent link="${parent}"/>
+      <child link="${prefix}pgi_camera_interposer"/>
+    </joint>
+
+    <!-- Provisional solid representation of the verified F1 standard flange.
+         The 63 mm outer diameter and 6.5 mm thickness are visualization
+         assumptions; the verified interface is ISO 9409-1-50-4-M6 on a
+         50 mm pitch circle. Bolt and pilot holes are omitted from collision. -->
+    <link name="${prefix}pgi_mount">
+      <visual name="provisional_f1_visual">
+        <origin xyz="0 0 0.00325" rpy="0 0 0"/>
+        <geometry><cylinder radius="0.0315" length="0.0065"/></geometry>
+        <material name="pgi_mount_silver"><color rgba="0.65 0.68 0.72 1"/></material>
+      </visual>
+      <collision name="provisional_f1_collision">
+        <origin xyz="0 0 0.00325" rpy="0 0 0"/>
+        <geometry><cylinder radius="0.0315" length="0.0065"/></geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}pgi_camera_interposer-pgi_mount" type="fixed">
+      <origin xyz="0 0 0.010" rpy="0 0 0"/>
+      <parent link="${prefix}pgi_camera_interposer"/>
+      <child link="${prefix}pgi_mount"/>
+    </joint>
+
+    <link name="${prefix}pgi_body">
+      <!-- The 1 kg value is documented. The inertia is a clearly provisional
+           uniform-box estimate from the documented 95 x 61.7 x 86 mm body
+           envelope; replace it with CAD-derived inertia before dynamics. -->
+      <inertial>
+        <origin xyz="0 0 0.043" rpy="0 0 0"/>
+        <mass value="1.0"/>
+        <inertia ixx="0.0009336" ixy="0" ixz="0"
+                 iyy="0.0013684" iyz="0" izz="0.0010693"/>
+      </inertial>
+      <visual name="provisional_body_visual">
+        <origin xyz="0 0 0.043" rpy="0 0 0"/>
+        <geometry><box size="0.095 0.0617 0.086"/></geometry>
+        <material name="pgi_body_black"><color rgba="0.08 0.09 0.11 1"/></material>
+      </visual>
+      <collision name="simplified_body_collision">
+        <origin xyz="0 0 0.043" rpy="0 0 0"/>
+        <geometry><box size="0.095 0.0617 0.086"/></geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}pgi_mount-pgi_body" type="fixed">
+      <origin xyz="0 0 0.0065" rpy="0 0 0"/>
+      <parent link="${prefix}pgi_mount"/>
+      <child link="${prefix}pgi_body"/>
+    </joint>
+
+    <!-- J1 fingertip envelope is provisional because the exact shared
+         PGI/PGIA J1 CAD download has not been retrieved. At q=0 the inner
+         faces meet at body X=0. Positive q opens each jaw by 40 mm. -->
+    <link name="${prefix}pgi_left_finger">
+      <visual name="provisional_j1_left_visual">
+        <origin xyz="0.0075 0 0.025" rpy="0 0 0"/>
+        <geometry><box size="0.015 0.020 0.050"/></geometry>
+        <material name="pgi_finger_blue"><color rgba="0.10 0.32 0.62 1"/></material>
+      </visual>
+      <collision name="simplified_j1_left_collision">
+        <origin xyz="0.0075 0 0.025" rpy="0 0 0"/>
+        <geometry><box size="0.015 0.020 0.050"/></geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}pgi_left_finger_joint" type="prismatic">
+      <origin xyz="0 0 0.086" rpy="0 0 0"/>
+      <parent link="${prefix}pgi_body"/>
+      <child link="${prefix}pgi_left_finger"/>
+      <axis xyz="1 0 0"/>
+      <limit lower="0.0" upper="0.040" effort="140.0" velocity="0.0364"/>
+    </joint>
+
+    <link name="${prefix}pgi_right_finger">
+      <visual name="provisional_j1_right_visual">
+        <origin xyz="-0.0075 0 0.025" rpy="0 0 0"/>
+        <geometry><box size="0.015 0.020 0.050"/></geometry>
+        <material name="pgi_finger_blue_right"><color rgba="0.10 0.32 0.62 1"/></material>
+      </visual>
+      <collision name="simplified_j1_right_collision">
+        <origin xyz="-0.0075 0 0.025" rpy="0 0 0"/>
+        <geometry><box size="0.015 0.020 0.050"/></geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}pgi_right_finger_joint" type="prismatic">
+      <origin xyz="0 0 0.086" rpy="0 0 0"/>
+      <parent link="${prefix}pgi_body"/>
+      <child link="${prefix}pgi_right_finger"/>
+      <axis xyz="-1 0 0"/>
+      <limit lower="0.0" upper="0.040" effort="140.0" velocity="0.0364"/>
+      <mimic joint="${prefix}pgi_left_finger_joint" multiplier="1.0" offset="0.0"/>
+    </joint>
+
+    <!-- Logical grasp frame only. Cup and straw frames belong to the later
+         attach/detach workflow and must not be hard-coded into this body. -->
+    <link name="${prefix}pgi_grasp_center"/>
+    <joint name="${prefix}pgi_body-pgi_grasp_center" type="fixed">
+      <origin xyz="0 0 0.111" rpy="0 0 0"/>
+      <parent link="${prefix}pgi_body"/>
+      <child link="${prefix}pgi_grasp_center"/>
+    </joint>
+
+    <!-- The camera transform is an opt-in simulation parameter and does not
+         modify config/ur10e_real/d435i_mount_calibration.json. The mount and
+         camera boxes are placeholders with no asserted mass properties. -->
+    <link name="${prefix}d435i_mount">
+      <visual name="provisional_d435i_mount_visual">
+        <origin xyz="0 0 0.0075" rpy="0 0 0"/>
+        <geometry><box size="0.095 0.030 0.015"/></geometry>
+        <material name="d435i_mount_gray"><color rgba="0.35 0.37 0.40 1"/></material>
+      </visual>
+      <collision name="provisional_d435i_mount_collision">
+        <origin xyz="0 0 0.0075" rpy="0 0 0"/>
+        <geometry><box size="0.095 0.030 0.015"/></geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}pgi_camera_interposer-d435i_mount" type="fixed">
+      <origin xyz="${camera_mount_xyz}" rpy="${camera_mount_rpy}"/>
+      <parent link="${prefix}pgi_camera_interposer"/>
+      <child link="${prefix}d435i_mount"/>
+    </joint>
+
+    <link name="${prefix}d435i_link">
+      <visual name="provisional_d435i_body_visual">
+        <origin xyz="0 0 0.0125" rpy="0 0 0"/>
+        <geometry><box size="0.090 0.025 0.025"/></geometry>
+        <material name="d435i_body_black"><color rgba="0.05 0.05 0.06 1"/></material>
+      </visual>
+      <collision name="provisional_d435i_body_collision">
+        <origin xyz="0 0 0.0125" rpy="0 0 0"/>
+        <geometry><box size="0.090 0.025 0.025"/></geometry>
+      </collision>
+    </link>
+    <joint name="${prefix}d435i_mount-d435i_link" type="fixed">
+      <origin xyz="0 0 0.015" rpy="0 0 0"/>
+      <parent link="${prefix}d435i_mount"/>
+      <child link="${prefix}d435i_link"/>
+    </joint>
+
+    <!-- Standard ROS optical axis rotation. Baselines between optical frames
+         are provisional until the final D435i housing pose is measured. -->
+    <link name="${prefix}d435i_color_optical_frame"/>
+    <joint name="${prefix}d435i_color_optical_joint" type="fixed">
+      <origin xyz="0.015 0 0.0125" rpy="-1.57079632679 0 -1.57079632679"/>
+      <parent link="${prefix}d435i_link"/>
+      <child link="${prefix}d435i_color_optical_frame"/>
+    </joint>
+    <link name="${prefix}d435i_depth_optical_frame"/>
+    <joint name="${prefix}d435i_depth_optical_joint" type="fixed">
+      <origin xyz="-0.015 0 0.0125" rpy="-1.57079632679 0 -1.57079632679"/>
+      <parent link="${prefix}d435i_link"/>
+      <child link="${prefix}d435i_depth_optical_frame"/>
+    </joint>
+  </xacro:macro>
+</robot>

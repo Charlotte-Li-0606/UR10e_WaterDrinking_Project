@@ -4,6 +4,7 @@
   <xacro:arg name="name" default="ur"/>
   <!-- import main macro -->
   <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro"/>
+  <xacro:include filename="pgi_140_80_macro.xacro"/>
 
   <xacro:include filename="$(find ur_simulation_gz)/urdf/ur_gz.ros2_control.xacro" />
 
@@ -30,6 +31,12 @@
   <xacro:arg name="robot_base_x" default="0.0" />
   <xacro:arg name="robot_base_y" default="0.55" />
   <xacro:arg name="robot_base_z" default="0.60" />
+
+  <!-- PGI simulation is opt-in. These arguments never alter the validated
+       real D435i calibration or the default feeding model. -->
+  <xacro:arg name="use_pgi_gripper" default="false" />
+  <xacro:arg name="camera_mount_xyz" default="0 -0.065 0.020" />
+  <xacro:arg name="camera_mount_rpy" default="0 0 0" />
 
   <!-- Initial camera-ready pose: tool0 +Z points along world -Z (down). -->
   <xacro:property name="feeding_initial_positions" value="${dict(shoulder_pan_joint=-0.151217, shoulder_lift_joint=-1.610439, elbow_joint=0.775573, wrist_1_joint=-0.735939, wrist_2_joint=-1.570760, wrist_3_joint=2.821707)}"/>
@@ -77,9 +84,19 @@
     >
     <origin xyz="$(arg robot_base_x) $(arg robot_base_y) $(arg robot_base_z)" rpy="0 0 0" />
   </xacro:ur_robot>
+  <xacro:if value="$(arg use_pgi_gripper)">
+    <xacro:pgi_140_80
+      parent="$(arg tf_prefix)tool0"
+      prefix="$(arg tf_prefix)"
+      camera_mount_xyz="$(arg camera_mount_xyz)"
+      camera_mount_rpy="$(arg camera_mount_rpy)"
+    />
+  </xacro:if>
 
-
-
+  <!-- Keep the established cup/camera model byte-for-byte equivalent when
+       the PGI option is disabled, and omit those incompatible tool fixtures
+       from the dedicated PGI visualization. -->
+  <xacro:unless value="$(arg use_pgi_gripper)">
   <!-- Feeding demo flange attachments. There is no gripper in this setup. -->
   <!-- Logical straw-tip frame only: the previous green sphere marker is
        intentionally omitted so it cannot clutter the camera or scene. -->
@@ -205,6 +222,7 @@
   <gazebo reference="$(arg tf_prefix)wrist_rgbd_camera_optical_joint">
     <preserveFixedJoint>true</preserveFixedJoint>
   </gazebo>
+  </xacro:unless>
 
   <gazebo reference="world">
   </gazebo>
