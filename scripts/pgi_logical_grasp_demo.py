@@ -17,6 +17,7 @@ from copy import deepcopy
 import json
 import math
 import os
+from pathlib import Path
 import sys
 import time
 
@@ -1455,6 +1456,18 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Required with --execute-sim; confirms this is the isolated simulation.",
     )
+    parser.add_argument(
+        "--report-json",
+        help=(
+            "Also write the final structured result to this file. This is used "
+            "by the Stage-6 high-level simulation adapter."
+        ),
+    )
+    parser.add_argument(
+        "--suppress-console-report",
+        action="store_true",
+        help="Keep the detailed report in --report-json without printing it.",
+    )
     return parser.parse_args(remove_ros_args(args=sys.argv)[1:])
 
 
@@ -1464,6 +1477,16 @@ def json_safe_report(preflight: dict) -> dict:
         "selected_strategy": preflight["selected_strategy"],
         "plans": preflight["plans"],
     }
+
+
+def write_report_json(path: str | None, report: dict) -> None:
+    """Write one machine-readable result for the high-level adapter."""
+    if path is None:
+        return
+    Path(path).write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
 
 
 def main() -> int:
@@ -1525,7 +1548,9 @@ def main() -> int:
                 "controller_switched": False,
             }
             node.publish_status("plan_only_complete", success=True)
-        print(json.dumps(report, indent=2))
+        write_report_json(args.report_json, report)
+        if not args.suppress_console_report:
+            print(json.dumps(report, indent=2))
         return 0
     except Exception as error:
         # Do not auto-detach on a mid-air failure. Keeping the simulated cup
@@ -1537,7 +1562,9 @@ def main() -> int:
             "cup_may_remain_attached": attached_during_failure,
             "real_robot_command_sent": False,
         }
-        print(json.dumps(failure, indent=2), file=sys.stderr)
+        write_report_json(args.report_json, failure)
+        if not args.suppress_console_report:
+            print(json.dumps(failure, indent=2), file=sys.stderr)
         return 1
     finally:
         node.destroy_node()

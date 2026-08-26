@@ -2,7 +2,8 @@
 
 `feeding_tools.py` is a conservative, structured wrapper for a future agent.
 It does not connect an LLM and does not expose joint, controller, arbitrary
-pose, or gripper commands.
+pose, or gripper commands. The physical feeding surface remains separate from
+the PGI Gazebo-only tools described below.
 
 `FeedingSkillLibrary` provides:
 
@@ -66,7 +67,25 @@ integration only. It is disabled by default and the smoke-test CLI never turns
 it on. It is not part of the agent-approved tool surface. The first-version
 safe tool surface is pre-mouth only.
 
-There is no gripper in this project.
+## PGI Stage-6 simulation tools
+
+`pgi_simulation_tools.py` is a separate simulation-only validation boundary.
+It exposes only `plan_cup_grasp_cycle` and `execute_cup_grasp_cycle`, accepts no
+runtime motion parameters, and delegates to the fixed Stage-5 runner through
+`pgi_simulation_safe_tool_runner.py`. It is never dispatched by the real
+feeding backend.
+
+The canonical entrypoint is:
+
+```bash
+ROS_DOMAIN_ID=106 scripts/codex_pgi_simulation.sh \
+  --tool plan_cup_grasp_cycle
+```
+
+Gazebo execution additionally requires `--tool execute_cup_grasp_cycle`,
+`--execute-sim`, and `--confirm-simulation`. Domain 0 and inherited real
+execution gates are refused or removed before the delegated process starts.
+This cycle detects and handles a cup; it does not model mouth feeding.
 
 ## Smoke tests
 

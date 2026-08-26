@@ -61,7 +61,7 @@ complete ten-step plan is in
 
 ## PGI Gazebo, simulated control, and MoveIt
 
-The first five Gazebo stages are implemented on the feature branch:
+All six Gazebo stages are implemented on the feature branch:
 
 1. spawn the UR10e, PGI gripper, and provisional D435i assembly in Gazebo;
 2. control the symmetric jaws through `gz_ros2_control` and the standard
@@ -74,7 +74,9 @@ The first five Gazebo stages are implemented on the feature branch:
    and return to the camera-ready pose;
 5. repeat the side grasp with a dynamic 0.15 kg cup and native DART contact,
    verify a 120 mm lift/hold, place the cup on the ground, release it, and
-   return without setting or kinematically following the cup pose.
+   return without setting or kinematically following the cup pose;
+6. expose the complete current cup-handling cycle through a simulation-only,
+   parameter-free high-level tool boundary with plan and execute operations.
 
 Launch the isolated simulation with both Gazebo and RViz visible:
 
@@ -259,8 +261,7 @@ Free-release trials are retained as negative results: opening at 20 mm and 5
 mm above the ground tipped the tall tapered cup by 80.33 and 80.32 degrees.
 The stable default therefore places the cup base on the ground before opening.
 This is a simulation-model conclusion, not a real gripper payload or drop
-qualification. The next pending workflow stage is reusable high-level
-simulation-tool integration.
+qualification.
 
 Stage 5 additionally enables `relax_transit_flange_orientation` with a bounded
 30-degree local-Z spin at the high transfer pose. Only the cup-clear
@@ -271,3 +272,53 @@ lift, place, and release orientations remain locked. A measured simulation run
 produced 29.9995 degrees of wrist-3 excursion and 30.0000 degrees of flange
 rotation while preserving the native-contact grasp. Stage 4 keeps the option
 disabled, and the real feeding workflow's tool-axis constraint is unchanged.
+
+### Stage 6: reusable high-level simulation tools
+
+Keep the Stage-5 launch above running with `demo_mode:=none`. Then validate the
+new high-level tool surface without initializing ROS:
+
+```bash
+scripts/codex_pgi_simulation.sh \
+  --tool plan_cup_grasp_cycle --validate-only
+scripts/codex_pgi_simulation.sh \
+  --tool execute_cup_grasp_cycle --validate-only
+```
+
+Run camera-target checks and the complete MoveIt preflight without sending a
+trajectory:
+
+```bash
+ROS_DOMAIN_ID=106 scripts/codex_pgi_simulation.sh \
+  --tool plan_cup_grasp_cycle
+```
+
+Run one complete Gazebo-only cup cycle:
+
+```bash
+ROS_DOMAIN_ID=106 scripts/codex_pgi_simulation.sh \
+  --tool execute_cup_grasp_cycle \
+  --execute-sim --confirm-simulation
+```
+
+The adapter has a project lock, refuses ROS domain 0 and real-execution
+environment gates, and accepts no runtime joint, pose, cup, force, controller,
+or gripper arguments. It starts neither Gazebo nor MoveIt: the separately
+launched isolated simulation must already be healthy. It delegates planning
+and execution to the validated Stage-5 runner and returns one structured
+Stage-6 result.
+
+The tool name deliberately says `cup_grasp_cycle`, not `feed_water`. This
+stage closes the current camera-to-cup, native grasp, lift/hold, place/release,
+and return loop. A human, mouth target, grasped-cup straw transform, and
+simulated drinking interaction are not modeled and are not claimed complete.
+The next project roadmap item is a separate real RS485 backend; it must not be
+connected until the physical integration gates in Steps 9-10 are satisfied.
+
+A fresh-launch Stage-6 run measured a 119.12 mm lift, 0.0024 mm hold drift,
+5.45-degree maximum carried tilt, and ended with the cup detached and arm
+controller inactive. An earlier long-lived physics session produced a guarded
+80.31-degree slip during lift; the tool stopped safely. Restart the isolated
+Gazebo launch after any contact failure because the tool intentionally does
+not teleport the cup back to its initial pose. Repeated trials remain pending
+before the provisional contact model can be called statistically reliable.

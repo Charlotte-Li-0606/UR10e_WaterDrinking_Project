@@ -31,6 +31,7 @@ from pgi_logical_grasp_demo import (
     json_safe_report,
     parse_args,
     pose_matrix,
+    write_report_json,
 )
 
 
@@ -56,6 +57,7 @@ class PhysicalGraspDemo(LogicalGraspDemo):
             self.declare_parameter(name, value)
         self.physical_moveit_attached = False
         self.saved_allowed_collision_matrix = None
+        self.partial_execution_report: dict[str, object] = {}
 
     @staticmethod
     def set_acm_pair(matrix, first: str, second: str, allowed: bool) -> None:
@@ -228,6 +230,7 @@ class PhysicalGraspDemo(LogicalGraspDemo):
         self, preflight: dict, cup_object, initial_model_pose
     ) -> dict:
         reports: dict[str, object] = {}
+        self.partial_execution_report = reports
         controller_active = False
         try:
             self.switch_arm(True)
@@ -460,8 +463,11 @@ def main() -> int:
         node.publish_status("preflight_started", execution=args.execute_sim)
         preflight = node.preflight(frozen_target, cup_object)
         report = {
+            "success": True,
             "mode": "execute_sim" if args.execute_sim else "plan_only",
             "stage": 5,
+            "simulation_only": True,
+            "real_robot_command_sent": False,
             "guards": guards,
             "camera_model_xy_error_m": target_model_error,
             "physics_assumptions": {
@@ -484,21 +490,23 @@ def main() -> int:
                 "controller_switched": False,
             }
             node.publish_status("plan_only_complete", success=True)
-        print(json.dumps(report, indent=2))
+        write_report_json(args.report_json, report)
+        if not args.suppress_console_report:
+            print(json.dumps(report, indent=2))
         return 0
     except Exception as error:
-        print(
-            json.dumps(
-                {
-                    "success": False,
-                    "error": str(error),
-                    "moveit_cup_may_remain_attached": node.physical_moveit_attached,
-                    "real_robot_command_sent": False,
-                },
-                indent=2,
-            ),
-            file=sys.stderr,
-        )
+        failure = {
+            "success": False,
+            "error": str(error),
+            "moveit_cup_may_remain_attached": node.physical_moveit_attached,
+            "simulation_only": True,
+            "real_robot_command_sent": False,
+        }
+        if node.partial_execution_report:
+            failure["execution_partial"] = node.partial_execution_report
+        write_report_json(args.report_json, failure)
+        if not args.suppress_console_report:
+            print(json.dumps(failure, indent=2), file=sys.stderr)
         return 1
     finally:
         node.destroy_node()

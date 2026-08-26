@@ -17,7 +17,7 @@ authorizes physical robot motion or RS485 communication.
 | 5 | Add the gripper, camera adapter, fingers, and grasp center to MoveIt | Complete — isolated, plan-only MoveIt model, RGB-D observer, and staging cup verified |
 | 6 | Validate logical cup grasping using attach/detach before contact physics | Complete — camera-derived side grasp, MoveIt route, ownership, lift/place, detach, and return verified |
 | 7 | Add physical contact, friction, cup mass, grasp/release, and drop testing | Complete in provisional DART model — 120 mm native lift and ground-supported release pass; 20/5 mm free-drop trials tip the cup and remain recorded negative results |
-| 8 | Integrate the simulated gripper with reusable high-level tools | Pending |
+| 8 | Integrate the simulated gripper with reusable high-level tools | Complete for the current camera-to-cup grasp/lift/place cycle; simulated mouth feeding is not modeled |
 | 9 | Replace the simulation backend with the real RS485 backend | Pending |
 | 10 | Recalculate payload, center of gravity, TCP, camera transform, and collision geometry before real execution | Pending |
 
@@ -189,7 +189,7 @@ same stage names.
 | 3 | Add the gripper, camera adapter, fingers, touch links, grasp center, and independent cup obstacle to MoveIt | Complete — plan-only |
 | 4 | Validate logical cup attach/detach and ownership before contact physics | Complete |
 | 5 | Add contact, friction, cup mass, grasp/release, and drop tests | Complete in provisional DART model — stable ground-supported release selected after 20/5 mm drop trials tipped the cup |
-| 6 | Integrate the complete simulated feeding workflow through reusable high-level tools | Pending |
+| 6 | Integrate the complete simulated feeding workflow through reusable high-level tools | Complete for the current camera-to-cup grasp/lift/place cycle; the boundary intentionally uses the narrower `cup_grasp_cycle` name |
 
 ### Gazebo stages 1-2 implementation
 
@@ -434,10 +434,66 @@ Simulation execution additionally requires `--execute-sim` and
 Gazebo time, leaves MoveGroup plan-only, and deactivates the isolated arm
 controller at completion or failure.
 
+### Gazebo stage 6 implementation
+
+Stage 6 does not duplicate any planning or contact code. The pure validation
+module `robot_layer/arm_ur10e/agent_tools/pgi_simulation_tools.py` exposes only:
+
+```text
+plan_cup_grasp_cycle
+execute_cup_grasp_cycle
+```
+
+Both tools accept an empty argument object only. Joint values, poses, cup
+positions, force, speed, controller, gripper, attach/detach, and wrist-3
+commands cannot cross this boundary. The runner delegates to the fixed
+Stage-5 physical workflow and its versioned parameter file.
+
+`scripts/codex_pgi_simulation.sh` is the canonical entrypoint. It defaults to
+isolated ROS domain 106, refuses domain 0, removes inherited real-execution
+environment gates, and never launches `ur_robot_driver`, RS485, Gazebo, or
+MoveIt. A single-workflow lock prevents two planning/execution clients from
+changing the same simulation scene concurrently. Execution additionally
+requires both `--execute-sim` and `--confirm-simulation`.
+
+Examples:
+
+```bash
+# Pure request validation; no ROS initialization.
+scripts/codex_pgi_simulation.sh \
+  --tool execute_cup_grasp_cycle --validate-only
+
+# Complete perception and MoveIt preflight; no trajectory is sent.
+ROS_DOMAIN_ID=106 scripts/codex_pgi_simulation.sh \
+  --tool plan_cup_grasp_cycle
+
+# One complete native-contact Gazebo cycle.
+ROS_DOMAIN_ID=106 scripts/codex_pgi_simulation.sh \
+  --tool execute_cup_grasp_cycle \
+  --execute-sim --confirm-simulation
+```
+
+The returned JSON distinguishes Stage 6 from the delegated Stage-5 report and
+always states `simulation_only` and `real_robot_command_sent`. The label is
+deliberately `cup_grasp_cycle`: no human, mouth target, straw-on-grasped-cup
+transform, or drinking interaction exists in the current Gazebo world.
+
+The recorded Stage-6 execution from a fresh launch passed with 3.27 mm camera
+target/model XY error, 119.12 mm measured lift, 0.0024 mm hold drift, 5.45
+degrees maximum observed carried tilt, and 1.63 degrees tilt after release.
+The cup was detached and the arm controller was inactive at completion.
+
+One earlier run against a long-lived, previously exercised physics session
+slipped during lift and reached 80.31 degrees. The 15-degree guard stopped the
+workflow, restored MoveIt ownership, and deactivated the arm controller. A
+fresh simulation launch then passed. After any physical-contact failure,
+restart the isolated Gazebo launch before rerunning; the Stage-6 tool does not
+silently teleport or reset the dynamic cup. More repeated trials are still
+needed before claiming statistical grasp reliability.
+
 ## Later workflow, intentionally not implemented
 
-Step 8 exposes reusable high-level simulated tools. Step 9 implements a
-separate real Modbus RTU/RS485 backend. Step 10 is a mandatory
+Step 9 implements a separate real Modbus RTU/RS485 backend. Step 10 is a mandatory
 physical-integration review of payload, center of gravity, TCP, hand-eye
 transform, and all collision geometry before any real execution can be
 considered.
