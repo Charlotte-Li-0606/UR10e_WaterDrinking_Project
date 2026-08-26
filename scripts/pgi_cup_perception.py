@@ -95,10 +95,16 @@ class CupPerception(Node):
             depth=10,
             reliability=ReliabilityPolicy.RELIABLE,
         )
+        latest_image_qos = QoSProfile(
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=ReliabilityPolicy.BEST_EFFORT,
+        )
         # Image processing may wait briefly for a timestamped transform. Keep
         # sensor callbacks in a group separate from the TF listener so a
         # second executor thread can continue filling the TF buffer.
         image_callback_group = MutuallyExclusiveCallbackGroup()
+        debug_callback_group = MutuallyExclusiveCallbackGroup()
         self._observation_publisher = self.create_publisher(
             PoseStamped,
             str(self.get_parameter("observation_topic").value),
@@ -115,7 +121,17 @@ class CupPerception(Node):
         self._debug_publisher = self.create_publisher(
             Image,
             str(self.get_parameter("debug_image_topic").value),
-            reliable_qos,
+            latest_image_qos,
+        )
+        # Keep the operator image independent from RGB-D synchronization.
+        # Depth and CameraInfo can arrive at different rates under simulator
+        # load, but every new RGB frame must still update RQT.
+        self._debug_rgb_sub = self.create_subscription(
+            Image,
+            str(self.get_parameter("rgb_topic").value),
+            self._on_rgb_debug,
+            latest_image_qos,
+            callback_group=debug_callback_group,
         )
         self._rgb_sub = message_filters.Subscriber(
             self,
@@ -205,20 +221,58 @@ class CupPerception(Node):
         return (labels == component).astype(np.uint8), area
 
     def _publish_debug(
-        self, source: Image, rgb: np.ndarray, mask: np.ndarray, u: float, v: float
+        self,
+        source: Image,
+        rgb: np.ndarray,
+        *,
+        status: str,
+        mask: np.ndarray | None = None,
+        u: float | None = None,
+        v: float | None = None,
+        detected: bool = False,
     ) -> None:
+        """Publish the newest camera frame even when detection is unavailable.
+
+        RQT intentionally displays this topic rather than the raw image so the
+        operator can see detector state.  This method is called directly from
+        every RGB frame and does not wait for depth, CameraInfo, or TF.
+        """
         debug = rgb.copy()
-        contours, _ = cv2.findContours(
-            (mask * 255).astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        cv2.drawContours(debug, contours, -1, (255, 255, 0), 2)
-        cv2.drawMarker(
+        if mask is not None:
+            contours, _ = cv2.findContours(
+                (mask * 255).astype(np.uint8),
+                cv2.RETR_EXTERNAL,
+                cv2.CHAIN_APPROX_SIMPLE,
+            )
+            cv2.drawContours(debug, contours, -1, (255, 255, 0), 2)
+        if u is not None and v is not None:
+            cv2.drawMarker(
+                debug,
+                (int(round(u)), int(round(v))),
+                (255, 60, 60),
+                markerType=cv2.MARKER_CROSS,
+                markerSize=18,
+                thickness=2,
+            )
+        stamp = source.header.stamp
+        label = f"LIVE {stamp.sec}.{stamp.nanosec:09d} | {status}"
+        text_color = (80, 255, 80) if detected else (255, 220, 40)
+        cv2.rectangle(
             debug,
-            (int(round(u)), int(round(v))),
-            (255, 60, 60),
-            markerType=cv2.MARKER_CROSS,
-            markerSize=18,
-            thickness=2,
+            (0, 0),
+            (debug.shape[1], 30),
+            (20, 20, 20),
+            thickness=-1,
+        )
+        cv2.putText(
+            debug,
+            label,
+            (8, 21),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.48,
+            text_color,
+            1,
+            cv2.LINE_AA,
         )
         message = Image()
         message.header = source.header
@@ -228,6 +282,30 @@ class CupPerception(Node):
         message.step = message.width * 3
         message.data = debug.tobytes()
         self._debug_publisher.publish(message)
+
+    def _on_rgb_debug(self, rgb_message: Image) -> None:
+        """Publish a live 2-D detector view for every usable RGB frame."""
+        rgb = self._rgb_array(rgb_message)
+        if rgb is None:
+            return
+        component = self._largest_blue_component(rgb)
+        if component is None:
+            self._publish_debug(rgb_message, rgb, status="NO CUP")
+            return
+        rgb_mask, _area = component
+        rows, columns = np.nonzero(rgb_mask)
+        if columns.size == 0:
+            self._publish_debug(rgb_message, rgb, status="NO CUP")
+            return
+        self._publish_debug(
+            rgb_message,
+            rgb,
+            status="CUP VISIBLE",
+            mask=rgb_mask,
+            u=float(np.median(columns)),
+            v=float(np.median(rows)),
+            detected=True,
+        )
 
     def _on_images(self, rgb_message: Image, depth_message: Image, info: CameraInfo) -> None:
         now = time.monotonic()
@@ -331,9 +409,6 @@ class CupPerception(Node):
         )
         grasp.pose.orientation.w = 1.0
         self._grasp_publisher.publish(grasp)
-        u_rgb = u_depth * rgb.shape[1] / depth.shape[1]
-        v_rgb = v_depth * rgb.shape[0] / depth.shape[0]
-        self._publish_debug(rgb_message, rgb, rgb_mask, u_rgb, v_rgb)
         self._status(
             True,
             "basic_cup_pose_published",
