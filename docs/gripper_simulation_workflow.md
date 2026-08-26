@@ -390,6 +390,17 @@ collision checked. The attached collision object is planning-scene ownership
 only: the runner never calls `set_pose`, never follows the cup kinematically,
 and verifies motion from `/model/pgi_staging_cup/pose`.
 
+The Stage-5 configuration now opts into the simulation-only
+`relax_transit_flange_orientation` experiment. The cup-clear
+`transfer <-> side-ready` legs use collision-checked Pilz PTP instead of a
+fixed-orientation Cartesian segment. A bounded 30-degree local-Z spin at the
+high transfer pose demonstrates that MoveIt may select `wrist_3_joint`; no
+individual wrist joint is commanded directly. The spin is removed before
+side-ready. The approach, grasp, attached lift/place, and release continue to
+use the exact validated gripper orientation. The Stage-4 logical configuration
+keeps this option disabled, and none of these parameters apply to the real
+feeding workflow or relax its tool-axis requirement.
+
 Progressive tests produced these results:
 
 - 30 mm proof lift: 28.99 mm measured rise, 6.00 degree maximum carried tilt,
@@ -400,6 +411,11 @@ Progressive tests produced these results:
 - 20 mm and 5 mm free-release trials: the tall tapered empty cup tipped by
   80.33 and 80.32 degrees. These are retained negative drop-test results. The
   stable default first places the cup on the ground and then opens the jaws.
+- 30-degree free-space flange-spin trial: MoveIt planned and executed
+  29.9995 degrees of `wrist_3_joint` excursion and 30.0000 degrees of measured
+  flange rotation. Native contact still lifted the cup 118.94 mm, held it with
+  0.0025 mm drift, placed and released it, and returned with the arm controller
+  inactive.
 
 Launch and plan without execution:
 

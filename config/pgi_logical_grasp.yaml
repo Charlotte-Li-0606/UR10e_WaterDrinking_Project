@@ -23,6 +23,10 @@ pgi_logical_grasp_demo:
     side_ready_backoff_m: 0.120
     side_ready_height_m: 0.300
     cartesian_transfer_height_m: 0.450
+    # Preserve the validated Stage-4 baseline. The physical Stage-5 variant
+    # separately opts into collision-checked free-space flange relaxation.
+    relax_transit_flange_orientation: false
+    transit_flange_spin_deg: 0.0
     # Versioned IK branch that was validated for the low side approach. Pilz
     # PTP targets the high transfer state derived from this branch; it never
     # commands these joints directly or bypasses MoveIt collision checking.

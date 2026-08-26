@@ -22,6 +22,15 @@ pgi_physical_grasp_demo:
     side_ready_backoff_m: 0.120
     side_ready_height_m: 0.300
     cartesian_transfer_height_m: 0.450
+    # Simulation-only experiment: transfer <-> side-ready uses Pilz PTP joint
+    # motion with collision checking instead of a fixed-orientation Cartesian
+    # segment. Side-ready, approach, grasp, lift, place, and release retain the
+    # exact validated gripper orientation. This never changes the real workflow.
+    relax_transit_flange_orientation: true
+    # Demonstrate that the free-space flange is not orientation-locked. This
+    # is a task-space local-Z spin; MoveIt chooses all joint motion and may use
+    # wrist_3_joint. The spin is removed before the side-ready/grasp region.
+    transit_flange_spin_deg: 30.0
     side_ready_joints_rad:
       - -1.2903761544653078
       - -0.8867852166149196

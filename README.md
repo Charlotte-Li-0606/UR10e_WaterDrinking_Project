@@ -261,3 +261,13 @@ The stable default therefore places the cup base on the ground before opening.
 This is a simulation-model conclusion, not a real gripper payload or drop
 qualification. The next pending workflow stage is reusable high-level
 simulation-tool integration.
+
+Stage 5 additionally enables `relax_transit_flange_orientation` with a bounded
+30-degree local-Z spin at the high transfer pose. Only the cup-clear
+transfer-to-side-ready and reverse legs use collision-checked Pilz PTP without
+a Cartesian flange-orientation lock. MoveIt chooses the joint motion; the code
+never commands `wrist_3_joint` directly. The exact side-ready, approach, grasp,
+lift, place, and release orientations remain locked. A measured simulation run
+produced 29.9995 degrees of wrist-3 excursion and 30.0000 degrees of flange
+rotation while preserving the native-contact grasp. Stage 4 keeps the option
+disabled, and the real feeding workflow's tool-axis constraint is unchanged.

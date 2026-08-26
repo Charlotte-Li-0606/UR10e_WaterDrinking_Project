@@ -163,6 +163,15 @@ class LogicalGraspDemo(Node):
             "side_ready_backoff_m": 0.120,
             "side_ready_height_m": 0.300,
             "cartesian_transfer_height_m": 0.450,
+            # Simulation-only option. When enabled, the cup-clear transfer
+            # legs use collision-checked Pilz joint PTP motion, so no Cartesian
+            # waypoint locks the flange orientation during free-space travel.
+            # Exact grasp orientation remains mandatory from side-ready onward.
+            "relax_transit_flange_orientation": False,
+            # Optional bounded spin about the gripper's local +Z at the high
+            # transfer point. MoveIt chooses the joint motion; wrist_3 is never
+            # commanded directly. A local-Z spin preserves the approach axis.
+            "transit_flange_spin_deg": 0.0,
             "side_ready_joints_rad": [
                 -1.2903761544653078,
                 -0.8867852166149196,
@@ -869,6 +878,39 @@ class LogicalGraspDemo(Node):
         poses = self.candidate_poses(cup_target)
         live = self.live_state()
         top = self.evaluate_top_grasp(live, cup_target)
+        relax_transit_flange = bool(
+            self.get_parameter("relax_transit_flange_orientation").value
+        )
+        transit_flange_spin_deg = float(
+            self.get_parameter("transit_flange_spin_deg").value
+        )
+        if not math.isfinite(transit_flange_spin_deg):
+            raise RuntimeError("transit_flange_spin_deg must be finite")
+        if abs(transit_flange_spin_deg) > 45.0:
+            raise RuntimeError(
+                "transit_flange_spin_deg exceeds the simulation-only 45 deg bound"
+            )
+        if not relax_transit_flange and abs(transit_flange_spin_deg) > 1e-9:
+            raise RuntimeError(
+                "transit_flange_spin_deg requires relax_transit_flange_orientation"
+            )
+
+        if abs(transit_flange_spin_deg) > 1e-9:
+            transfer_orientation = poses["transfer"].pose.orientation
+            transfer_rotation = Rotation.from_quat(
+                [
+                    transfer_orientation.x,
+                    transfer_orientation.y,
+                    transfer_orientation.z,
+                    transfer_orientation.w,
+                ]
+            ) * Rotation.from_euler("z", transit_flange_spin_deg, degrees=True)
+            (
+                transfer_orientation.x,
+                transfer_orientation.y,
+                transfer_orientation.z,
+                transfer_orientation.w,
+            ) = transfer_rotation.as_quat()
 
         actual_start_matrix = self.lookup_matrix(
             self.planning_frame, self.grasp_link
@@ -901,10 +943,17 @@ class LogicalGraspDemo(Node):
             live, transfer_plan.trajectory
         )
 
-        self.publish_status("planning_transfer_to_side_ready")
-        ready_plan = self.plan_cartesian(
-            transfer_state, [poses["side_ready"]]
-        )
+        if relax_transit_flange:
+            self.publish_status(
+                "planning_transfer_to_side_ready_ptp",
+                transit_flange_orientation_relaxed=True,
+            )
+            ready_plan = self.plan_pilz_ptp(transfer_state, side_branch)
+        else:
+            self.publish_status("planning_transfer_to_side_ready")
+            ready_plan = self.plan_cartesian(
+                transfer_state, [poses["side_ready"]]
+            )
         ready_state = self.state_after_trajectory(
             transfer_state, ready_plan.trajectory
         )
@@ -972,9 +1021,14 @@ class LogicalGraspDemo(Node):
         ready_return_state = self.state_after_trajectory(
             unstage_state, ready_return_plan.trajectory
         )
-        transfer_return_plan = self.plan_cartesian(
-            ready_return_state, [poses["transfer"]]
-        )
+        if relax_transit_flange:
+            transfer_return_plan = self.plan_pilz_ptp(
+                ready_return_state, transfer_branch
+            )
+        else:
+            transfer_return_plan = self.plan_cartesian(
+                ready_return_state, [poses["transfer"]]
+            )
         transfer_return_state = self.state_after_trajectory(
             ready_return_state, transfer_return_plan.trajectory
         )
@@ -984,12 +1038,25 @@ class LogicalGraspDemo(Node):
             points = response.trajectory.joint_trajectory.points
             final = points[-1].time_from_start
             duration = final.sec + final.nanosec / 1e9
-            return {
+            summary = {
                 "backend": backend,
                 "planning_time_s": response.planning_time,
                 "trajectory_points": len(points),
                 "trajectory_duration_s": duration,
             }
+            names = list(response.trajectory.joint_trajectory.joint_names)
+            if "wrist_3_joint" in names and points:
+                index = names.index("wrist_3_joint")
+                start_position = points[0].positions[index]
+                wrist_delta = points[-1].positions[index] - start_position
+                wrist_excursion = max(
+                    abs(point.positions[index] - start_position) for point in points
+                )
+                summary["wrist_3_delta_deg"] = math.degrees(wrist_delta)
+                summary["wrist_3_max_excursion_deg"] = math.degrees(
+                    wrist_excursion
+                )
+            return summary
 
         return {
             "top_grasp": top,
@@ -1000,6 +1067,9 @@ class LogicalGraspDemo(Node):
                 ),
                 "approach_azimuth_deg": poses["approach_azimuth_deg"],
                 "approach_axis_base": poses["axis"].tolist(),
+                "transit_flange_orientation_relaxed": relax_transit_flange,
+                "transit_flange_spin_deg": transit_flange_spin_deg,
+                "grasp_orientation_locked": True,
                 "camera_ready_xyz": actual_start_matrix[:3, 3].tolist(),
                 "side_ready_xyz": [
                     poses["side_ready"].pose.position.x,
@@ -1045,7 +1115,10 @@ class LogicalGraspDemo(Node):
                     transfer_plan, "pilz_ptp"
                 ),
                 "transfer_to_side_ready": plan_summary(
-                    ready_plan, "cartesian"
+                    ready_plan,
+                    "pilz_ptp_flange_relaxed"
+                    if relax_transit_flange
+                    else "cartesian",
                 ),
                 "side_ready_to_staging": plan_summary(
                     staging_plan, "cartesian"
@@ -1060,7 +1133,10 @@ class LogicalGraspDemo(Node):
                     ready_return_plan, "cartesian"
                 ),
                 "side_ready_to_transfer": plan_summary(
-                    transfer_return_plan, "cartesian"
+                    transfer_return_plan,
+                    "pilz_ptp_flange_relaxed"
+                    if relax_transit_flange
+                    else "cartesian",
                 ),
                 "transfer_to_camera_ready": plan_summary(
                     return_plan, "pilz_ptp"
