@@ -77,6 +77,7 @@ def launch_setup(context, *args, **kwargs):
     robot_base_y = LaunchConfiguration("robot_base_y")
     robot_base_z = LaunchConfiguration("robot_base_z")
     use_pgi_gripper = LaunchConfiguration("use_pgi_gripper")
+    pgi_logical_grasp_start = LaunchConfiguration("pgi_logical_grasp_start")
     activate_pgi_controller = LaunchConfiguration("activate_pgi_controller")
     pgi_gripper_controller = LaunchConfiguration("pgi_gripper_controller")
     camera_mount_xyz = LaunchConfiguration("camera_mount_xyz")
@@ -123,6 +124,9 @@ def launch_setup(context, *args, **kwargs):
             " ",
             "use_pgi_sim_control:=",
             use_pgi_gripper,
+            " ",
+            "pgi_logical_grasp_start:=",
+            pgi_logical_grasp_start,
             " ",
             "camera_mount_xyz:='",
             camera_mount_xyz,
@@ -411,6 +415,14 @@ def generate_launch_description():
                 "activate_pgi_controller",
                 default_value="true",
                 description="Start the PGI GripperCommand controller when the model is enabled.",
+            ),
+            DeclareLaunchArgument(
+                "pgi_logical_grasp_start",
+                default_value="false",
+                description=(
+                    "Use the simulation-only Cartesian side-ready initial pose. "
+                    "False preserves the established camera-ready pose."
+                ),
             ),
             DeclareLaunchArgument(
                 "pgi_gripper_controller",

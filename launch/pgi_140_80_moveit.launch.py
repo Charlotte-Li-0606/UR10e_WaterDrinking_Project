@@ -97,7 +97,9 @@ def _launch_setup(context):
             str(MOVEIT_CONTROLLERS_FILE), moveit_manage_controllers=False
         )
         .planning_pipelines(
-            default_planning_pipeline="ompl", pipelines=["ompl"], load_all=False
+            default_planning_pipeline="ompl",
+            pipelines=["ompl", "pilz_industrial_motion_planner"],
+            load_all=False,
         )
         .to_moveit_configs()
     )

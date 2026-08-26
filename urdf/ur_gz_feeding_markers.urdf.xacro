@@ -36,6 +36,7 @@
        real D435i calibration or the default feeding model. -->
   <xacro:arg name="use_pgi_gripper" default="false" />
   <xacro:arg name="use_pgi_sim_control" default="false" />
+  <xacro:arg name="pgi_logical_grasp_start" default="false" />
   <xacro:arg name="camera_mount_xyz" default="0 0.085 0.030" />
   <!-- The provisional side-front mount rotates the camera optical +Z onto
        tool0 +Z. With the flange-down constraint, it looks toward the ground
@@ -44,6 +45,13 @@
 
   <!-- Initial camera-ready pose: tool0 +Z points along world -Z (down). -->
   <xacro:property name="feeding_initial_positions" value="${dict(shoulder_pan_joint=-0.151217, shoulder_lift_joint=-1.610439, elbow_joint=0.775573, wrist_1_joint=-0.735939, wrist_2_joint=-1.570760, wrist_3_joint=2.821707)}"/>
+  <!-- Opt-in Stage-4 Cartesian start.  This collision-free side-ready pose
+       is used only by pgi_140_80_logical_grasp.launch.py.  It keeps the
+       camera roughly 0.28 m from the cup and stays on the IK branch that can
+       reach the low side grasp without OMPL. -->
+  <xacro:if value="$(arg pgi_logical_grasp_start)">
+    <xacro:property name="feeding_initial_positions" scope="global" value="${dict(shoulder_pan_joint=-1.2903761544653078, shoulder_lift_joint=-0.8867852166149196, elbow_joint=-2.6924239017277234, wrist_1_joint=-3.8426568578501117, wrist_2_joint=-0.2890242292195187, wrist_3_joint=1.122349596657656)}"/>
+  </xacro:if>
 
   <!-- create link fixed to the "world" -->
   <link name="world" />

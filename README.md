@@ -61,15 +61,17 @@ complete ten-step plan is in
 
 ## PGI Gazebo, simulated control, and MoveIt
 
-The first three Gazebo stages are implemented on the feature branch:
+The first four Gazebo stages are implemented on the feature branch:
 
 1. spawn the UR10e, PGI gripper, and provisional D435i assembly in Gazebo;
 2. control the symmetric jaws through `gz_ros2_control` and the standard
    `control_msgs/action/GripperCommand` interface;
 3. load simulation-only MoveIt semantics for the arm, gripper, camera adapter,
-   touch links, grasp center, and an independent staging cup. The current
-   Stage-3 increment also exposes registered RGB-D topics and a basic
-   observation-only cup pose detector; it does not implement grasp ownership.
+   touch links, grasp center, and an independent staging cup, plus registered
+   RGB-D topics and an observation-only cup detector;
+4. plan and execute a guarded logical side grasp using MoveIt, switch the cup
+   between world and attached-object ownership, lift it, place it back, detach,
+   and return to the camera-ready pose.
 
 Launch the isolated simulation with both Gazebo and RViz visible:
 
@@ -166,7 +168,42 @@ diameter over that band is approximately 55-72.2 mm, below the verified 80 mm
 maximum opening. This is a geometric candidate only; force, friction, and
 grasp stability remain unvalidated.
 
-The cup is static and independent in Stage 3. It is a collision obstacle, not
-an attached object, and it does not yet follow `pgi_grasp_center`. Logical
-attach/detach ownership is the next pending stage; physical contact, friction,
-release/drop testing, and simulated feeding remain later stages.
+The cup remains static in Gazebo during Stage 4. The logical runner changes its
+MoveIt ownership to an attached object and updates its Gazebo pose
+kinematically while it is held; it does not claim force closure or friction.
+
+Launch the visible, inert-by-default Stage-4 scene on an isolated nonzero ROS
+domain:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /home/dase-hw101/ros2_ws/install/setup.bash
+cd /home/dase-hw101/ur_drinking_project
+ros2 launch launch/pgi_140_80_logical_grasp.launch.py \
+  ros_domain_id:=106 demo_mode:=none
+```
+
+Run a plan-only validation from another terminal:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /home/dase-hw101/ros2_ws/install/setup.bash
+cd /home/dase-hw101/ur_drinking_project
+ROS_DOMAIN_ID=106 /usr/bin/python3 scripts/pgi_logical_grasp_demo.py \
+  --ros-args --params-file config/pgi_logical_grasp.yaml
+```
+
+Simulation execution requires both explicit flags and refuses ROS domain 0:
+
+```bash
+ROS_DOMAIN_ID=106 /usr/bin/python3 scripts/pgi_logical_grasp_demo.py \
+  --execute-sim --confirm-simulation \
+  --ros-args --params-file config/pgi_logical_grasp.yaml
+```
+
+The initial high branch change and final return use collision-checked MoveIt
+Pilz PTP trajectories. Transfer, staging, oblique 15-degree side approach,
+120 mm lift/place, retreat, and unstage use MoveIt Cartesian paths. The
+top-down candidate is rejected because the 120 mm rim exceeds the 80 mm jaw
+opening and its checked pose collides with the tool/camera. Stage 5 physical
+contact, friction, release, and drop testing remains pending.

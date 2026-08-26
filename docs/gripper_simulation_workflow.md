@@ -15,7 +15,7 @@ RS485 communication.
 | 3 | Build a parameterized URDF/Xacro model and verify it in RViz | Current scope — provisional kinematic model implemented; exact mesh replacement remains gated by Step 2 |
 | 4 | Add `gz_ros2_control` and a standard `GripperCommand` simulation interface | Complete in isolated Gazebo simulation; native contact coupling remains a later physics task |
 | 5 | Add the gripper, camera adapter, fingers, and grasp center to MoveIt | Complete — isolated, plan-only MoveIt model, RGB-D observer, and staging cup verified |
-| 6 | Validate logical cup grasping using attach/detach before contact physics | Pending |
+| 6 | Validate logical cup grasping using attach/detach before contact physics | Complete — camera-derived side grasp, MoveIt route, ownership, lift/place, detach, and return verified |
 | 7 | Add physical contact, friction, cup mass, grasp/release, and drop testing | Pending |
 | 8 | Integrate the simulated gripper with reusable high-level tools | Pending |
 | 9 | Replace the simulation backend with the real RS485 backend | Pending |
@@ -187,7 +187,7 @@ same stage names.
 | 1 | Spawn and validate the UR10e, PGI gripper, camera placeholder, inertias, and collision primitives in Gazebo | Complete |
 | 2 | Add `gz_ros2_control` and a standard `GripperCommand` jaw interface | Complete |
 | 3 | Add the gripper, camera adapter, fingers, touch links, grasp center, and independent cup obstacle to MoveIt | Complete — plan-only |
-| 4 | Validate logical cup attach/detach and ownership before contact physics | Pending |
+| 4 | Validate logical cup attach/detach and ownership before contact physics | Complete |
 | 5 | Add contact, friction, cup mass, grasp/release, and drop tests | Pending |
 | 6 | Integrate the complete simulated feeding workflow through reusable high-level tools | Pending |
 
@@ -326,11 +326,46 @@ joint states, confirms the cup dimensions and unattached status, validates the
 collision matrix and current state, solves IK for `pgi_grasp_center`, and plans
 small arm and jaw changes without calling any execution action.
 
+### Gazebo stage 4 implementation
+
+`launch/pgi_140_80_logical_grasp.launch.py` composes the existing Gazebo,
+MoveIt, RViz, RGB-D observer, and RQT components without changing their normal
+defaults. It starts from the established camera-ready pose and remains inert
+unless a separate plan or explicit simulation execution is requested.
+
+`scripts/pgi_logical_grasp_demo.py` refuses ROS domain 0, confirms advancing
+simulation time, validates the controller states and world/base alignment,
+freezes a fresh camera target, and checks that it agrees with the Gazebo model
+pose. It evaluates and rejects the top-down grasp: the 120 mm rim cannot pass
+through the 80 mm opening and the checked state collides with the cup/tool
+assembly.
+
+The selected route is a 15-degree downward oblique radial side grasp. MoveIt
+Pilz PTP changes from camera-ready to the high transfer state on the validated
+low-side IK branch. MoveIt Cartesian paths then cover transfer, side-ready,
+staging, pre-grasp, grasp, 120 mm lift/place, retreat, and unstage. The reverse
+Pilz PTP returns to camera-ready. OMPL is not used by this logical workflow.
+Every trajectory is planned before the simulation arm controller is activated.
+
+At the logical hold, the MoveIt cup collision object changes from world
+ownership to an `AttachedCollisionObject` on `pgi_grasp_center`; the configured
+touch links are limited to the gripper. Gazebo's static cup pose follows the
+same relative transform through its isolated set-pose service. After place,
+the object is restored to world ownership, the gripper opens, and the complete
+retreat is executed. A successful run ends with the cup detached, on the
+ground, the camera detecting it again, and the arm controller inactive.
+
+This deliberately does not use contact force or friction to hold the cup. The
+logical jaw position stops before the measured static-cup contact point. The
+wall-clock timeout scales from trajectory simulation time only to tolerate a
+Gazebo real-time factor below 1.0; it does not alter path speed or collision
+checking.
+
 ## Later workflow, intentionally not implemented
 
-Step 6 validates cup ownership with logical attach/detach before any contact
-model. Step 7 tunes contact, friction, mass, release, and drop behavior. Step 8
-exposes reusable high-level simulated tools. Step 9 implements a separate real
-Modbus RTU/RS485 backend. Step 10 is a mandatory physical-integration review of
-payload, center of gravity, TCP, hand-eye transform, and all collision geometry
-before any real execution can be considered.
+Step 7 tunes dynamic cup contact, friction, mass, release, and drop behavior.
+Step 8 exposes reusable high-level simulated tools. Step 9 implements a
+separate real Modbus RTU/RS485 backend. Step 10 is a mandatory
+physical-integration review of payload, center of gravity, TCP, hand-eye
+transform, and all collision geometry before any real execution can be
+considered.

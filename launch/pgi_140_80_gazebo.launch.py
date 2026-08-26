@@ -27,6 +27,8 @@ def generate_launch_description():
     world_file = LaunchConfiguration("world_file")
     camera_mount_xyz = LaunchConfiguration("camera_mount_xyz")
     camera_mount_rpy = LaunchConfiguration("camera_mount_rpy")
+    activate_arm_controller = LaunchConfiguration("activate_arm_controller")
+    pgi_logical_grasp_start = LaunchConfiguration("pgi_logical_grasp_start")
     ros_domain_id = LaunchConfiguration("ros_domain_id")
 
     base_launch = IncludeLaunchDescription(
@@ -43,9 +45,10 @@ def generate_launch_description():
             ),
             "use_pgi_gripper": "true",
             "activate_pgi_controller": "true",
-            # MoveIt is a later step. Load the arm controller inactive so no
-            # arm trajectory interface owns or moves the simulated arm.
-            "activate_joint_controller": "false",
+            # The default remains inactive. The Stage-4 logical-grasp runner
+            # may activate it explicitly after all simulation guards pass.
+            "activate_joint_controller": activate_arm_controller,
+            "pgi_logical_grasp_start": pgi_logical_grasp_start,
             "initial_joint_controller": "joint_trajectory_controller",
             "launch_rviz": launch_rviz,
             "rviz_config_file": str(PROJECT_ROOT / "config" / "pgi_140_80.rviz"),
@@ -68,6 +71,8 @@ def generate_launch_description():
             "/pgi_d435i/image@sensor_msgs/msg/Image[gz.msgs.Image",
             "/pgi_d435i/depth_image@sensor_msgs/msg/Image[gz.msgs.Image",
             "/pgi_d435i/camera_info@sensor_msgs/msg/CameraInfo[gz.msgs.CameraInfo",
+            "/model/pgi_staging_cup/pose@geometry_msgs/msg/Pose[gz.msgs.Pose",
+            "/world/pgi_140_80_camera/set_pose@ros_gz_interfaces/srv/SetEntityPose",
         ],
     )
 
@@ -83,6 +88,19 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "launch_rviz", default_value="true", description="Open the PGI RViz view."
+            ),
+            DeclareLaunchArgument(
+                "activate_arm_controller",
+                default_value="false",
+                description=(
+                    "Simulation-only arm controller opt-in. Leave false for the "
+                    "normal plan-only PGI launch."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "pgi_logical_grasp_start",
+                default_value="false",
+                description="Use the opt-in Cartesian side-ready joint state.",
             ),
             DeclareLaunchArgument(
                 "world_file",

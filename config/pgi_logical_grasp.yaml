@@ -1,0 +1,68 @@
+pgi_logical_grasp_demo:
+  ros__parameters:
+    # Inputs remain observation-only. The target is frozen before any
+    # simulation motion so loss of camera view during the side approach does
+    # not move the goal unexpectedly.
+    cup_grasp_pose_topic: /pgi/perception/cup_grasp_pose
+    cup_model_pose_topic: /model/pgi_staging_cup/pose
+    planning_frame: base_link
+    grasp_link: pgi_grasp_center
+    cup_id: pgi_staging_cup
+    cup_model_name: pgi_staging_cup
+    gazebo_set_pose_service: /world/pgi_140_80_camera/set_pose
+
+    # The 120 mm rim cannot pass through the 80 mm jaw opening. A horizontal
+    # approach at 40 mm height hits the ground. The verified compromise is a
+    # radial side approach tilted 15 degrees down toward the lower grasp band.
+    approach_down_angle_deg: 15.0
+    pregrasp_backoff_m: 0.070
+    grasp_backoff_m: 0.040
+    # After the cup is observed from the established camera-ready pose, the
+    # frozen target is approached through a high Cartesian transfer pose and
+    # a side-ready pose about 120 mm radially behind the cup.
+    side_ready_backoff_m: 0.120
+    side_ready_height_m: 0.300
+    cartesian_transfer_height_m: 0.450
+    # Versioned IK branch that was validated for the low side approach. Pilz
+    # PTP targets the high transfer state derived from this branch; it never
+    # commands these joints directly or bypasses MoveIt collision checking.
+    side_ready_joints_rad:
+      - -1.2903761544653078
+      - -0.8867852166149196
+      - -2.6924239017277234
+      - -3.8426568578501117
+      - -0.2890242292195187
+      - 1.122349596657656
+    # Every transfer, approach, lift, place, retreat, and return segment is
+    # Cartesian. OMPL is not called by this workflow.
+    staging_lift_m: 0.080
+    lift_height_m: 0.120
+
+    jaw_open_m: 0.040
+    # This is a logical hold position, not a force/contact validation.  The
+    # oblique fingertip envelope spans the wider third conservative cup band;
+    # a measured dry run contacted the static cup at about 0.0391 m per jaw.
+    # Stop 0.2 mm per jaw before that contact, then switch logical ownership.
+    # Native contact, friction, and force closure remain a later workflow step.
+    jaw_logical_hold_m: 0.0393
+    jaw_max_effort_n: 20.0
+
+    arm_velocity_scaling: 0.10
+    arm_acceleration_scaling: 0.10
+    cartesian_max_step_m: 0.005
+    cartesian_revolute_jump_rad: 0.35
+    target_max_age_s: 2.0
+    target_model_xy_tolerance_m: 0.030
+    joint_final_tolerance_rad: 0.015
+    cup_follow_rate_hz: 20.0
+    hold_duration_s: 2.0
+    # Wall-clock allowance only. This does not alter trajectory speed; it
+    # tolerates Gazebo real-time factors below 1.0 while GUI/RGB-D/RQT run.
+    execution_timeout_scale: 3.0
+    execution_timeout_margin_s: 10.0
+
+    touch_links:
+      - pgi_left_finger
+      - pgi_right_finger
+      - pgi_body
+      - pgi_grasp_center

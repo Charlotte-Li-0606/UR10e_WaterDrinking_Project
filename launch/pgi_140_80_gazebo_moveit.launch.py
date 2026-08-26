@@ -54,6 +54,8 @@ def generate_launch_description():
     world_file = LaunchConfiguration("world_file")
     camera_mount_xyz = LaunchConfiguration("camera_mount_xyz")
     camera_mount_rpy = LaunchConfiguration("camera_mount_rpy")
+    activate_arm_controller = LaunchConfiguration("activate_arm_controller")
+    pgi_logical_grasp_start = LaunchConfiguration("pgi_logical_grasp_start")
     spawn_cup = LaunchConfiguration("spawn_cup")
     launch_cup_perception = LaunchConfiguration("launch_cup_perception")
     launch_camera_view = LaunchConfiguration("launch_camera_view")
@@ -72,6 +74,8 @@ def generate_launch_description():
             "world_file": world_file,
             "camera_mount_xyz": camera_mount_xyz,
             "camera_mount_rpy": camera_mount_rpy,
+            "activate_arm_controller": activate_arm_controller,
+            "pgi_logical_grasp_start": pgi_logical_grasp_start,
         }.items(),
     )
 
@@ -128,6 +132,7 @@ def generate_launch_description():
         executable="rqt_image_view",
         name="pgi_cup_camera_view",
         output="log",
+        additional_env={"QT_QPA_PLATFORM": "xcb"},
         condition=IfCondition(launch_camera_view),
         arguments=["/pgi/perception/cup_debug_image"],
     )
@@ -155,6 +160,19 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument(
                 "camera_mount_rpy", default_value="0 -1.57079632679 0"
+            ),
+            DeclareLaunchArgument(
+                "activate_arm_controller",
+                default_value="false",
+                description=(
+                    "Load the isolated Gazebo arm controller active. The logical "
+                    "grasp runner normally switches it only after preflight."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "pgi_logical_grasp_start",
+                default_value="false",
+                description="Use the opt-in Cartesian side-ready joint state.",
             ),
             DeclareLaunchArgument(
                 "spawn_cup",
