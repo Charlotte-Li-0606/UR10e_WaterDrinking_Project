@@ -1,0 +1,72 @@
+pgi_physical_grasp_demo:
+  ros__parameters:
+    cup_grasp_pose_topic: /pgi/perception/cup_grasp_pose
+    cup_model_pose_topic: /model/pgi_staging_cup/pose
+    planning_frame: base_link
+    grasp_link: pgi_grasp_center
+    cup_id: pgi_staging_cup
+    cup_model_name: pgi_staging_cup
+    gazebo_set_pose_service: /world/pgi_140_80_camera/set_pose
+
+    # Reuse the Stage-4 camera-derived side route with contact-specific grasp,
+    # lift, and release validation.
+    approach_down_angle_deg: 15.0
+    pregrasp_backoff_m: 0.070
+    # The Stage-4 logical grasp used 40 mm, which leaves the cup supported by
+    # only the distal edge of the provisional 50 mm fingers. Native contact
+    # testing showed that this shallow overlap lets the cup tip during lift.
+    # A 32 mm offset places the cup about 8 mm deeper between the fingers. A
+    # 20 mm trial was correctly rejected because the tapered cup touched
+    # pgi_body; 32 mm retains body clearance and permits fingertip contact only.
+    grasp_backoff_m: 0.032
+    side_ready_backoff_m: 0.120
+    side_ready_height_m: 0.300
+    cartesian_transfer_height_m: 0.450
+    side_ready_joints_rad:
+      - -1.2903761544653078
+      - -0.8867852166149196
+      - -2.6924239017277234
+      - -3.8426568578501117
+      - -0.2890242292195187
+      - 1.122349596657656
+    staging_lift_m: 0.080
+    # Enabled after the guarded 30 mm native-contact proof completed: measured
+    # lift 28.99 mm, 6.00 deg tilt, and 0.0026 mm drift during the hold.
+    lift_height_m: 0.120
+    # The stable default places the cup base on the ground before opening.
+    # Recorded free-release trials from 20 mm and 5 mm tipped this tall tapered
+    # cup by 80.33 and 80.32 degrees respectively; see the workflow document.
+    release_height_m: 0.0
+
+    jaw_open_m: 0.040
+    jaw_logical_hold_m: 0.0393
+    jaw_max_effort_n: 40.0
+    physical_close_m: 0.030
+    minimum_closure_m: 0.0005
+    contact_settle_s: 1.0
+    release_settle_s: 1.5
+
+    minimum_lift_m: 0.105
+    maximum_lift_xy_drift_m: 0.030
+    maximum_hold_drift_m: 0.010
+    maximum_cup_tilt_deg: 15.0
+    maximum_release_height_m: 0.015
+    minimum_release_drop_m: 0.0
+
+    arm_velocity_scaling: 0.10
+    arm_acceleration_scaling: 0.10
+    cartesian_max_step_m: 0.005
+    cartesian_revolute_jump_rad: 0.35
+    target_max_age_s: 2.0
+    target_model_xy_tolerance_m: 0.030
+    joint_final_tolerance_rad: 0.015
+    cup_follow_rate_hz: 20.0
+    hold_duration_s: 2.0
+    execution_timeout_scale: 3.0
+    execution_timeout_margin_s: 10.0
+
+    touch_links:
+      - pgi_left_finger
+      - pgi_right_finger
+      - pgi_body
+      - pgi_grasp_center

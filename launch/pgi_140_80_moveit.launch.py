@@ -70,6 +70,7 @@ def _launch_setup(context):
         )
     camera_mount_xyz = LaunchConfiguration("camera_mount_xyz").perform(context)
     camera_mount_rpy = LaunchConfiguration("camera_mount_rpy").perform(context)
+    pgi_contact_physics = LaunchConfiguration("pgi_contact_physics").perform(context)
 
     moveit_config = (
         MoveItConfigsBuilder(robot_name="ur", package_name="ur_moveit_config")
@@ -88,6 +89,7 @@ def _launch_setup(context):
                 "robot_base_z": "0.0",
                 "use_pgi_gripper": "true",
                 "use_pgi_sim_control": "true",
+                "pgi_contact_physics": pgi_contact_physics,
                 "camera_mount_xyz": camera_mount_xyz,
                 "camera_mount_rpy": camera_mount_rpy,
             },
@@ -195,6 +197,11 @@ def generate_launch_description():
                 "camera_mount_xyz",
                 default_value="0 0.085 0.030",
                 description="Provisional interposer-to-camera translation in metres.",
+            ),
+            DeclareLaunchArgument(
+                "pgi_contact_physics",
+                default_value="false",
+                description="Keep MoveIt description identical to the Gazebo contact variant.",
             ),
             DeclareLaunchArgument(
                 "camera_mount_rpy",

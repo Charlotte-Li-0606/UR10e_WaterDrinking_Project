@@ -30,6 +30,7 @@ def _schedule_moveit(context):
             "launch_rviz",
             "camera_mount_xyz",
             "camera_mount_rpy",
+            "pgi_contact_physics",
         )
     }
     moveit = IncludeLaunchDescription(
@@ -43,6 +44,7 @@ def _schedule_moveit(context):
             "allow_trajectory_execution": "false",
             "camera_mount_xyz": captured["camera_mount_xyz"],
             "camera_mount_rpy": captured["camera_mount_rpy"],
+            "pgi_contact_physics": captured["pgi_contact_physics"],
         }.items(),
     )
     return [TimerAction(period=8.0, actions=[moveit])]
@@ -54,6 +56,8 @@ def generate_launch_description():
     world_file = LaunchConfiguration("world_file")
     camera_mount_xyz = LaunchConfiguration("camera_mount_xyz")
     camera_mount_rpy = LaunchConfiguration("camera_mount_rpy")
+    controllers_file = LaunchConfiguration("controllers_file")
+    pgi_contact_physics = LaunchConfiguration("pgi_contact_physics")
     activate_arm_controller = LaunchConfiguration("activate_arm_controller")
     pgi_logical_grasp_start = LaunchConfiguration("pgi_logical_grasp_start")
     spawn_cup = LaunchConfiguration("spawn_cup")
@@ -62,6 +66,7 @@ def generate_launch_description():
     cup_x = LaunchConfiguration("cup_x")
     cup_y = LaunchConfiguration("cup_y")
     cup_z = LaunchConfiguration("cup_z")
+    cup_model_file = LaunchConfiguration("cup_model_file")
 
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -74,6 +79,8 @@ def generate_launch_description():
             "world_file": world_file,
             "camera_mount_xyz": camera_mount_xyz,
             "camera_mount_rpy": camera_mount_rpy,
+            "controllers_file": controllers_file,
+            "pgi_contact_physics": pgi_contact_physics,
             "activate_arm_controller": activate_arm_controller,
             "pgi_logical_grasp_start": pgi_logical_grasp_start,
         }.items(),
@@ -86,7 +93,7 @@ def generate_launch_description():
         condition=IfCondition(spawn_cup),
         arguments=[
             "-file",
-            str(PROJECT_ROOT / "models" / "pgi_staging_cup" / "model.sdf"),
+            cup_model_file,
             "-name",
             "pgi_staging_cup",
             "-allow_renaming",
@@ -170,6 +177,17 @@ def generate_launch_description():
                 ),
             ),
             DeclareLaunchArgument(
+                "controllers_file",
+                default_value=str(
+                    PROJECT_ROOT / "config" / "pgi_140_80_sim_controllers.yaml"
+                ),
+            ),
+            DeclareLaunchArgument(
+                "pgi_contact_physics",
+                default_value="false",
+                description="Enable provisional Stage-5 finger contact parameters.",
+            ),
+            DeclareLaunchArgument(
                 "pgi_logical_grasp_start",
                 default_value="false",
                 description="Use the opt-in Cartesian side-ready joint state.",
@@ -178,6 +196,13 @@ def generate_launch_description():
                 "spawn_cup",
                 default_value="true",
                 description="Spawn the independent Stage-3 cup in Gazebo and MoveIt.",
+            ),
+            DeclareLaunchArgument(
+                "cup_model_file",
+                default_value=str(
+                    PROJECT_ROOT / "models" / "pgi_staging_cup" / "model.sdf"
+                ),
+                description="Gazebo cup SDF; Stage 5 supplies the dynamic variant.",
             ),
             DeclareLaunchArgument(
                 "launch_cup_perception",

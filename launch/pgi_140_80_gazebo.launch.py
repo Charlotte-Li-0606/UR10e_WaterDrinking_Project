@@ -27,6 +27,8 @@ def generate_launch_description():
     world_file = LaunchConfiguration("world_file")
     camera_mount_xyz = LaunchConfiguration("camera_mount_xyz")
     camera_mount_rpy = LaunchConfiguration("camera_mount_rpy")
+    controllers_file = LaunchConfiguration("controllers_file")
+    pgi_contact_physics = LaunchConfiguration("pgi_contact_physics")
     activate_arm_controller = LaunchConfiguration("activate_arm_controller")
     pgi_logical_grasp_start = LaunchConfiguration("pgi_logical_grasp_start")
     ros_domain_id = LaunchConfiguration("ros_domain_id")
@@ -40,11 +42,10 @@ def generate_launch_description():
             "description_file": str(
                 PROJECT_ROOT / "urdf" / "ur_gz_feeding_markers.urdf.xacro"
             ),
-            "controllers_file": str(
-                PROJECT_ROOT / "config" / "pgi_140_80_sim_controllers.yaml"
-            ),
+            "controllers_file": controllers_file,
             "use_pgi_gripper": "true",
             "activate_pgi_controller": "true",
+            "pgi_contact_physics": pgi_contact_physics,
             # The default remains inactive. The Stage-4 logical-grasp runner
             # may activate it explicitly after all simulation guards pass.
             "activate_joint_controller": activate_arm_controller,
@@ -96,6 +97,18 @@ def generate_launch_description():
                     "Simulation-only arm controller opt-in. Leave false for the "
                     "normal plan-only PGI launch."
                 ),
+            ),
+            DeclareLaunchArgument(
+                "controllers_file",
+                default_value=str(
+                    PROJECT_ROOT / "config" / "pgi_140_80_sim_controllers.yaml"
+                ),
+                description="Simulation controller YAML; Stage 5 supplies an isolated file.",
+            ),
+            DeclareLaunchArgument(
+                "pgi_contact_physics",
+                default_value="false",
+                description="Enable provisional Stage-5 PGI finger contact parameters.",
             ),
             DeclareLaunchArgument(
                 "pgi_logical_grasp_start",

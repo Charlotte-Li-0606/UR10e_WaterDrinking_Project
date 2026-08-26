@@ -33,7 +33,7 @@
   </xacro:macro>
 
   <xacro:macro name="pgi_140_80"
-               params="parent prefix camera_mount_xyz camera_mount_rpy use_gz_ros2_control:=false">
+               params="parent prefix camera_mount_xyz camera_mount_rpy use_gz_ros2_control:=false use_contact_physics:=false">
     <!-- The nominal and commandable travel remains 0.040 m per jaw. DART can
          latch a position-controlled prismatic joint after it is held exactly
          against a hard stop, so the Gazebo-only hard stop has a 0.5 mm
@@ -42,6 +42,13 @@
     <xacro:property name="pgi_physics_upper_limit" value="0.040"/>
     <xacro:if value="${use_gz_ros2_control}">
       <xacro:property name="pgi_physics_upper_limit" value="0.0405"/>
+    </xacro:if>
+    <!-- The standard logical model retains the full documented 140 N upper
+         limit.  The isolated Stage-5 contact variant starts at the documented
+         minimum selectable gripping force, 40 N per jaw. -->
+    <xacro:property name="pgi_effort_limit" value="140.0"/>
+    <xacro:if value="${use_contact_physics}">
+      <xacro:property name="pgi_effort_limit" value="40.0"/>
     </xacro:if>
     <!-- Placeholder camera interposer. Its final material, mass, and geometry
          depend on the project adapter design. The 0.10 kg uniform-box inertia
@@ -145,7 +152,7 @@
       <parent link="${prefix}pgi_body"/>
       <child link="${prefix}pgi_left_finger"/>
       <axis xyz="1 0 0"/>
-      <limit lower="0.0" upper="${pgi_physics_upper_limit}" effort="140.0" velocity="0.0364"/>
+      <limit lower="0.0" upper="${pgi_physics_upper_limit}" effort="${pgi_effort_limit}" velocity="0.0364"/>
       <!-- Provisional viscous damping for stable position control in Gazebo. -->
       <dynamics damping="2.0" friction="0.0"/>
     </joint>
@@ -169,10 +176,24 @@
       <parent link="${prefix}pgi_body"/>
       <child link="${prefix}pgi_right_finger"/>
       <axis xyz="-1 0 0"/>
-      <limit lower="0.0" upper="${pgi_physics_upper_limit}" effort="140.0" velocity="0.0364"/>
+      <limit lower="0.0" upper="${pgi_physics_upper_limit}" effort="${pgi_effort_limit}" velocity="0.0364"/>
       <dynamics damping="2.0" friction="0.0"/>
       <mimic joint="${prefix}pgi_left_finger_joint" multiplier="1.0" offset="0.0"/>
     </joint>
+
+    <!-- Stage-5-only provisional rubber/plastic contact parameters. They are
+         disabled in the saved logical baseline and require experimental
+         calibration before any result can be treated as predictive. -->
+    <xacro:if value="${use_contact_physics}">
+      <gazebo reference="${prefix}pgi_left_finger">
+        <mu1>1.5</mu1><mu2>1.5</mu2>
+        <kp>100000</kp><kd>50</kd><maxVel>0.02</maxVel><minDepth>0.0002</minDepth>
+      </gazebo>
+      <gazebo reference="${prefix}pgi_right_finger">
+        <mu1>1.5</mu1><mu2>1.5</mu2>
+        <kp>100000</kp><kd>50</kd><maxVel>0.02</maxVel><minDepth>0.0002</minDepth>
+      </gazebo>
+    </xacro:if>
 
     <!-- Logical grasp frame only. Cup and straw frames belong to the later
          attach/detach workflow and must not be hard-coded into this body. -->

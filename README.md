@@ -61,7 +61,7 @@ complete ten-step plan is in
 
 ## PGI Gazebo, simulated control, and MoveIt
 
-The first four Gazebo stages are implemented on the feature branch:
+The first five Gazebo stages are implemented on the feature branch:
 
 1. spawn the UR10e, PGI gripper, and provisional D435i assembly in Gazebo;
 2. control the symmetric jaws through `gz_ros2_control` and the standard
@@ -71,7 +71,10 @@ The first four Gazebo stages are implemented on the feature branch:
    RGB-D topics and an observation-only cup detector;
 4. plan and execute a guarded logical side grasp using MoveIt, switch the cup
    between world and attached-object ownership, lift it, place it back, detach,
-   and return to the camera-ready pose.
+   and return to the camera-ready pose;
+5. repeat the side grasp with a dynamic 0.15 kg cup and native DART contact,
+   verify a 120 mm lift/hold, place the cup on the ground, release it, and
+   return without setting or kinematically following the cup pose.
 
 Launch the isolated simulation with both Gazebo and RViz visible:
 
@@ -205,5 +208,56 @@ The initial high branch change and final return use collision-checked MoveIt
 Pilz PTP trajectories. Transfer, staging, oblique 15-degree side approach,
 120 mm lift/place, retreat, and unstage use MoveIt Cartesian paths. The
 top-down candidate is rejected because the 120 mm rim exceeds the 80 mm jaw
-opening and its checked pose collides with the tool/camera. Stage 5 physical
-contact, friction, release, and drop testing remains pending.
+opening and its checked pose collides with the tool/camera.
+
+### Stage 5 native-contact grasp
+
+Stage 5 is isolated from the saved logical baseline. It uses a separate dynamic
+cup model, world, controller parameters, launch file, and opt-in
+`pgi_contact_physics` Xacro flag. Launch the visible scene; it remains inert by
+default:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /home/dase-hw101/ros2_ws/install/setup.bash
+cd /home/dase-hw101/ur_drinking_project
+ros2 launch launch/pgi_140_80_physical_grasp.launch.py \
+  ros_domain_id:=106 demo_mode:=none
+```
+
+Plan-only validation is the default behavior of the runner:
+
+```bash
+ROS_DOMAIN_ID=106 /usr/bin/python3 scripts/pgi_physical_grasp_demo.py \
+  --ros-args --params-file config/pgi_physical_grasp.yaml
+```
+
+Explicit simulation execution requires both flags:
+
+```bash
+ROS_DOMAIN_ID=106 /usr/bin/python3 scripts/pgi_physical_grasp_demo.py \
+  --execute-sim --confirm-simulation \
+  --ros-args --params-file config/pgi_physical_grasp.yaml
+```
+
+MoveIt plans every arm segment. During the final approach only the two exact
+finger-tip/cup pairs are temporarily allowed in the collision matrix; the cup
+may not contact `pgi_body`, the camera assembly, the wrist, or other links.
+MoveIt attached-object ownership is used only for carried-object collision
+planning. The runner never calls the Gazebo set-pose service and measures the
+dynamic cup pose before contact, after lift/hold, and after release.
+
+The validated default uses a 32 mm radial backoff, 40 N maximum effort per jaw,
+a 120 mm requested lift, and ground-supported release. One recorded run lifted
+the cup 119.02 mm, held it for 2 seconds with 0.0027 mm pose drift, limited cup
+tilt to 5.99 degrees while carried, released it at 1.36 degrees, and returned
+with the arm controller inactive. Provisional friction coefficients are 1.5
+for the fingers and 1.2 for the cup; the cup inertia is a documented cylinder
+approximation, not measured physical data.
+
+Free-release trials are retained as negative results: opening at 20 mm and 5
+mm above the ground tipped the tall tapered cup by 80.33 and 80.32 degrees.
+The stable default therefore places the cup base on the ground before opening.
+This is a simulation-model conclusion, not a real gripper payload or drop
+qualification. The next pending workflow stage is reusable high-level
+simulation-tool integration.

@@ -142,8 +142,12 @@ def stamped_pose(frame_id: str, position: np.ndarray, quaternion: np.ndarray) ->
 
 
 class LogicalGraspDemo(Node):
-    def __init__(self) -> None:
-        super().__init__("pgi_logical_grasp_demo")
+    def __init__(
+        self,
+        node_name: str = "pgi_logical_grasp_demo",
+        status_topic: str = "/pgi/logical_grasp/status",
+    ) -> None:
+        super().__init__(node_name)
         defaults = {
             "cup_grasp_pose_topic": "/pgi/perception/cup_grasp_pose",
             "cup_model_pose_topic": "/model/pgi_staging_cup/pose",
@@ -168,6 +172,7 @@ class LogicalGraspDemo(Node):
                 1.122349596657656,
             ],
             "lift_height_m": 0.120,
+            "release_height_m": 0.0,
             "jaw_open_m": 0.040,
             "jaw_logical_hold_m": 0.0393,
             "jaw_max_effort_n": 20.0,
@@ -222,9 +227,7 @@ class LogicalGraspDemo(Node):
             self._cup_model_pose_callback,
             10,
         )
-        self.status_publisher = self.create_publisher(
-            String, "/pgi/logical_grasp/status", 10
-        )
+        self.status_publisher = self.create_publisher(String, status_topic, 10)
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -472,6 +475,12 @@ class LogicalGraspDemo(Node):
         )
         return {"valid": bool(response.valid), "contacts": contacts}
 
+    def begin_grasp_contact_planning(self) -> None:
+        """Hook for contact-aware simulations; Stage 4 changes no ACM state."""
+
+    def end_grasp_contact_planning(self) -> None:
+        """Undo any contact-aware planning override; Stage 4 is a no-op."""
+
     def ik_pose(
         self, pose: PoseStamped, seed: RobotState, avoid_collisions: bool
     ) -> tuple[RobotState | None, int]:
@@ -708,6 +717,9 @@ class LogicalGraspDemo(Node):
         lift = grasp + np.array(
             [0.0, 0.0, float(self.get_parameter("lift_height_m").value)]
         )
+        release = grasp + np.array(
+            [0.0, 0.0, float(self.get_parameter("release_height_m").value)]
+        )
         return {
             "cup": cup,
             "axis": local_z,
@@ -722,6 +734,7 @@ class LogicalGraspDemo(Node):
             "pregrasp": stamped_pose(self.planning_frame, pregrasp, quaternion),
             "grasp": stamped_pose(self.planning_frame, grasp, quaternion),
             "lift": stamped_pose(self.planning_frame, lift, quaternion),
+            "release": stamped_pose(self.planning_frame, release, quaternion),
             "approach_azimuth_deg": math.degrees(azimuth),
         }
 
@@ -909,7 +922,11 @@ class LogicalGraspDemo(Node):
         )
 
         self.publish_status("planning_pregrasp_to_grasp")
-        grasp_plan = self.plan_cartesian(pre_state, [poses["grasp"]])
+        self.begin_grasp_contact_planning()
+        try:
+            grasp_plan = self.plan_cartesian(pre_state, [poses["grasp"]])
+        finally:
+            self.end_grasp_contact_planning()
         grasp_state = self.state_after_trajectory(pre_state, grasp_plan.trajectory)
 
         grasp_matrix = pose_matrix(poses["grasp"].pose)
@@ -927,16 +944,23 @@ class LogicalGraspDemo(Node):
             lift_state = self.state_after_trajectory(
                 grasp_attached_state, lift_plan.trajectory
             )
-            place_plan = self.plan_cartesian(lift_state, [poses["grasp"]])
+            place_plan = self.plan_cartesian(lift_state, [poses["release"]])
+            release_state = self.state_after_trajectory(
+                lift_state, place_plan.trajectory
+            )
+            release_detached_state = deepcopy(release_state)
+            release_detached_state.attached_collision_objects = []
         finally:
             if attached:
                 self.apply_detach(cup_object)
                 self.verify_scene_ownership(False)
 
         self.publish_status("planning_retreat_and_return")
-        retreat_plan = self.plan_cartesian(grasp_state, [poses["pregrasp"]])
+        retreat_plan = self.plan_cartesian(
+            release_detached_state, [poses["pregrasp"]]
+        )
         retreat_state = self.state_after_trajectory(
-            grasp_state, retreat_plan.trajectory
+            release_detached_state, retreat_plan.trajectory
         )
         unstage_plan = self.plan_cartesian(retreat_state, [poses["staging"]])
         unstage_state = self.state_after_trajectory(
@@ -1006,6 +1030,11 @@ class LogicalGraspDemo(Node):
                     poses["lift"].pose.position.x,
                     poses["lift"].pose.position.y,
                     poses["lift"].pose.position.z,
+                ],
+                "release_xyz": [
+                    poses["release"].pose.position.x,
+                    poses["release"].pose.position.y,
+                    poses["release"].pose.position.z,
                 ],
             },
             "plans": {

@@ -2,9 +2,9 @@
 
 This is the retained project plan for the exact configured gripper
 `PGI-140-80-W-S-M1-L5-J1-F1-01`. The original description scope was Steps
-1-3. The current simulation increment also completes Gazebo model validation
-and simulated jaw control. Nothing here authorizes physical robot motion or
-RS485 communication.
+1-3. Later simulation increments now cover Gazebo model/control, MoveIt,
+logical ownership, and provisional DART contact through Step 7. Nothing here
+authorizes physical robot motion or RS485 communication.
 
 ## Status
 
@@ -13,10 +13,10 @@ RS485 communication.
 | 1 | Preserve and version the successful feeding baseline | Complete — baseline branch and annotated tag published |
 | 2 | Obtain and verify exact official PGI-140-80, J1 fingertip, and F1 flange CAD | Current scope — official sources identified; exact download/checksum and redistribution permission unresolved |
 | 3 | Build a parameterized URDF/Xacro model and verify it in RViz | Current scope — provisional kinematic model implemented; exact mesh replacement remains gated by Step 2 |
-| 4 | Add `gz_ros2_control` and a standard `GripperCommand` simulation interface | Complete in isolated Gazebo simulation; native contact coupling remains a later physics task |
+| 4 | Add `gz_ros2_control` and a standard `GripperCommand` simulation interface | Complete in isolated Gazebo simulation |
 | 5 | Add the gripper, camera adapter, fingers, and grasp center to MoveIt | Complete — isolated, plan-only MoveIt model, RGB-D observer, and staging cup verified |
 | 6 | Validate logical cup grasping using attach/detach before contact physics | Complete — camera-derived side grasp, MoveIt route, ownership, lift/place, detach, and return verified |
-| 7 | Add physical contact, friction, cup mass, grasp/release, and drop testing | Pending |
+| 7 | Add physical contact, friction, cup mass, grasp/release, and drop testing | Complete in provisional DART model — 120 mm native lift and ground-supported release pass; 20/5 mm free-drop trials tip the cup and remain recorded negative results |
 | 8 | Integrate the simulated gripper with reusable high-level tools | Pending |
 | 9 | Replace the simulation backend with the real RS485 backend | Pending |
 | 10 | Recalculate payload, center of gravity, TCP, camera transform, and collision geometry before real execution | Pending |
@@ -188,7 +188,7 @@ same stage names.
 | 2 | Add `gz_ros2_control` and a standard `GripperCommand` jaw interface | Complete |
 | 3 | Add the gripper, camera adapter, fingers, touch links, grasp center, and independent cup obstacle to MoveIt | Complete — plan-only |
 | 4 | Validate logical cup attach/detach and ownership before contact physics | Complete |
-| 5 | Add contact, friction, cup mass, grasp/release, and drop tests | Pending |
+| 5 | Add contact, friction, cup mass, grasp/release, and drop tests | Complete in provisional DART model — stable ground-supported release selected after 20/5 mm drop trials tipped the cup |
 | 6 | Integrate the complete simulated feeding workflow through reusable high-level tools | Pending |
 
 ### Gazebo stages 1-2 implementation
@@ -241,11 +241,12 @@ the open position.
 
 Gazebo's current DART backend reports that it does not create a native mimic
 physics constraint. `gz_ros2_control` nevertheless mirrors the simulated jaw
-state accurately enough for the kinematic control test. This does not validate
-finger contact forces or object grasping; native coupled contact behavior must
-be resolved and tested in Stage 5. The existing detailed UR mesh collision
-warnings under DART also remain outside this jaw-control milestone. PGI uses
-simple collision primitives for this phase.
+state accurately enough for the kinematic control test, and Stage 5 later
+demonstrates empirical contact lift with this model. That result is not proof
+that the provisional coupling or force distribution predicts the real PGI.
+The existing detailed UR mesh collision warnings under DART also remain
+outside this jaw-control milestone. PGI uses simple collision primitives for
+this phase.
 
 ### Gazebo stage 3 implementation
 
@@ -361,9 +362,64 @@ wall-clock timeout scales from trajectory simulation time only to tolerate a
 Gazebo real-time factor below 1.0; it does not alter path speed or collision
 checking.
 
+### Gazebo stage 5 implementation
+
+Stage 5 is opt-in and does not change the Stage-4 logical baseline. The
+separate files `worlds/pgi_140_80_physical_grasp.sdf`,
+`models/pgi_physical_cup/model.sdf`, and
+`config/pgi_140_80_physical_controllers.yaml` enable a dynamic cup and the
+contact-specific DART/controller parameters only for
+`launch/pgi_140_80_physical_grasp.launch.py`. The launch is inert unless an
+operator separately runs the guarded simulation runner.
+
+The dynamic cup retains the saved 0.15 kg mass and eight-band 50-to-120 mm
+taper. Its 0.129 m center of mass is the calculated solid-frustum volume
+centroid; its cylinder-envelope inertia remains provisional. Finger/cup
+friction values of 1.5/1.2 and the contact stiffness/damping are simulation
+tuning values, not measured material properties. The gripper uses the
+documented minimum selectable 40 N limit per jaw.
+
+`scripts/pgi_physical_grasp_demo.py` reuses the camera-derived Stage-4 route,
+but uses a 32 mm radial backoff so the cup sits 8 mm deeper between the fingers.
+A 20 mm trial was rejected because it caused `pgi_body` contact. For the final
+approach, the runner temporarily permits only
+`pgi_left_finger`/`pgi_staging_cup` and
+`pgi_right_finger`/`pgi_staging_cup` in MoveIt's allowed-collision matrix, then
+restores the original matrix. All arm trajectories remain MoveIt planned and
+collision checked. The attached collision object is planning-scene ownership
+only: the runner never calls `set_pose`, never follows the cup kinematically,
+and verifies motion from `/model/pgi_staging_cup/pose`.
+
+Progressive tests produced these results:
+
+- 30 mm proof lift: 28.99 mm measured rise, 6.00 degree maximum carried tilt,
+  and 0.0026 mm drift during the two-second hold; ground release passed.
+- 120 mm full lift: 119.02 mm measured rise, 5.99 degree maximum carried tilt,
+  and 0.0027 mm drift during the two-second hold; ground-supported release
+  finished at 1.36 degrees and the complete return passed.
+- 20 mm and 5 mm free-release trials: the tall tapered empty cup tipped by
+  80.33 and 80.32 degrees. These are retained negative drop-test results. The
+  stable default first places the cup on the ground and then opens the jaws.
+
+Launch and plan without execution:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /home/dase-hw101/ros2_ws/install/setup.bash
+cd /home/dase-hw101/ur_drinking_project
+ros2 launch launch/pgi_140_80_physical_grasp.launch.py \
+  ros_domain_id:=106 demo_mode:=none
+ROS_DOMAIN_ID=106 /usr/bin/python3 scripts/pgi_physical_grasp_demo.py \
+  --ros-args --params-file config/pgi_physical_grasp.yaml
+```
+
+Simulation execution additionally requires `--execute-sim` and
+`--confirm-simulation`. The runner refuses ROS domain 0, requires advancing
+Gazebo time, leaves MoveGroup plan-only, and deactivates the isolated arm
+controller at completion or failure.
+
 ## Later workflow, intentionally not implemented
 
-Step 7 tunes dynamic cup contact, friction, mass, release, and drop behavior.
 Step 8 exposes reusable high-level simulated tools. Step 9 implements a
 separate real Modbus RTU/RS485 backend. Step 10 is a mandatory
 physical-integration review of payload, center of gravity, TCP, hand-eye

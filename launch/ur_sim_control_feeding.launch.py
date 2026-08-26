@@ -77,6 +77,7 @@ def launch_setup(context, *args, **kwargs):
     robot_base_y = LaunchConfiguration("robot_base_y")
     robot_base_z = LaunchConfiguration("robot_base_z")
     use_pgi_gripper = LaunchConfiguration("use_pgi_gripper")
+    pgi_contact_physics = LaunchConfiguration("pgi_contact_physics")
     pgi_logical_grasp_start = LaunchConfiguration("pgi_logical_grasp_start")
     activate_pgi_controller = LaunchConfiguration("activate_pgi_controller")
     pgi_gripper_controller = LaunchConfiguration("pgi_gripper_controller")
@@ -124,6 +125,9 @@ def launch_setup(context, *args, **kwargs):
             " ",
             "use_pgi_sim_control:=",
             use_pgi_gripper,
+            " ",
+            "pgi_contact_physics:=",
+            pgi_contact_physics,
             " ",
             "pgi_logical_grasp_start:=",
             pgi_logical_grasp_start,
@@ -415,6 +419,14 @@ def generate_launch_description():
                 "activate_pgi_controller",
                 default_value="true",
                 description="Start the PGI GripperCommand controller when the model is enabled.",
+            ),
+            DeclareLaunchArgument(
+                "pgi_contact_physics",
+                default_value="false",
+                description=(
+                    "Enable provisional Stage-5 finger contact/friction and the "
+                    "40 N per-jaw effort limit. False preserves earlier stages."
+                ),
             ),
             DeclareLaunchArgument(
                 "pgi_logical_grasp_start",
