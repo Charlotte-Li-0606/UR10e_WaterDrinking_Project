@@ -147,6 +147,71 @@ simulation-to-real gap: a future aligned D435i source can be remapped to the
 same three inputs. The current HSV segmentation and provisional camera pose
 are not production perception or a real hand-eye calibration.
 
+### Experimental unknown-object grasp proposals
+
+For cups whose shape, image position, or orientation is not known in advance,
+the feature branch contains an opt-in connection to the official
+Grasp-Anything RGB model. Install the pinned CPU-only dependency once:
+
+```bash
+cd /home/dase-hw101/ur_drinking_project
+scripts/setup_grasp_anything_cpu.sh
+```
+
+Then launch it with the isolated Gazebo scene:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source /home/dase-hw101/ros2_ws/install/setup.bash
+cd /home/dase-hw101/ur_drinking_project
+ros2 launch launch/pgi_140_80_physical_grasp.launch.py \
+  ros_domain_id:=106 demo_mode:=none \
+  launch_cup_perception:=false launch_camera_view:=false \
+  launch_grasp_anything:=true launch_grasp_anything_view:=true
+```
+
+The opt-in outputs are deliberately separate from the established detector:
+
+```text
+/pgi/grasp_anything/candidate_pose
+/pgi/grasp_anything/candidate
+/pgi/grasp_anything/status
+/pgi/grasp_anything/debug_image
+```
+
+The neural model proposes a 2-D parallel-jaw centre and closing direction. An
+object-agnostic registered-depth mask first crops the largest visible object
+above the ground; it assumes neither cup colour nor cup dimensions. Registered
+depth then measures the physical jaw opening, fits a local surface, and turns
+the result into an observation-only pose in `base_link`. The adapter checks
+model score, object membership, depth support, surface fit, the calibrated
+camera self-mask, and the PGI 5-80 mm opening range. It never calls MoveIt or a
+controller, and the existing physical-grasp demo does not subscribe to these
+topics. A seriously occluded or mechanically infeasible candidate is refused.
+
+In the recorded upright overhead test, the candidate was on the cup but the
+depth silhouette required 120.1 mm, so the 80 mm PGI correctly refused it. In
+the recorded horizontal test, the adaptive crop moved the model candidate to
+the narrow end and produced a depth-validated 66.635 mm opening, score 0.697,
+98.8% local depth support, and a pose in `base_link`. This is perception
+evidence only. A later active-view step must expose a graspable region when the
+current view is infeasible, generate PGI TCP/pre-grasp/retreat offsets, and
+pass them through MoveIt collision and reachability checks before execution.
+
+Verify a running observation pipeline without any control command:
+
+```bash
+ROS_DOMAIN_ID=106 scripts/verify_pgi_grasp_anything_perception.py --timeout 20
+```
+
+The verifier refuses domain 0, validates the pinned model checksum, requires
+advancing Gazebo time and fresh debug images, and accepts either a structured
+candidate or a structured geometric refusal as a healthy perception result.
+
+Exact source, checksum, preprocessing deviation, self-mask assumption, and
+limitations are recorded in
+[`docs/vendor_assets/grasp_anything.md`](docs/vendor_assets/grasp_anything.md).
+
 MoveIt is deliberately plan-only: trajectory execution and controller
 switching are disabled. The controller mapping is loaded for validation, but
 no arm or jaw trajectory is sent by this launch. Verify the current model,

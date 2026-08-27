@@ -61,7 +61,14 @@ def generate_launch_description():
             "ros_domain_id": ros_domain_id,
             "gazebo_gui": LaunchConfiguration("gazebo_gui"),
             "launch_rviz": LaunchConfiguration("launch_rviz"),
+            "launch_cup_perception": LaunchConfiguration(
+                "launch_cup_perception"
+            ),
             "launch_camera_view": LaunchConfiguration("launch_camera_view"),
+            "launch_grasp_anything": LaunchConfiguration("launch_grasp_anything"),
+            "launch_grasp_anything_view": LaunchConfiguration(
+                "launch_grasp_anything_view"
+            ),
             "activate_arm_controller": "false",
             "pgi_logical_grasp_start": "false",
             "pgi_contact_physics": "true",
@@ -90,7 +97,12 @@ def generate_launch_description():
             ),
             DeclareLaunchArgument("gazebo_gui", default_value="true"),
             DeclareLaunchArgument("launch_rviz", default_value="true"),
+            DeclareLaunchArgument("launch_cup_perception", default_value="true"),
             DeclareLaunchArgument("launch_camera_view", default_value="true"),
+            DeclareLaunchArgument("launch_grasp_anything", default_value="false"),
+            DeclareLaunchArgument(
+                "launch_grasp_anything_view", default_value="false"
+            ),
             DeclareLaunchArgument("cup_x", default_value="0.481542"),
             DeclareLaunchArgument("cup_y", default_value="0.208414"),
             DeclareLaunchArgument("cup_z", default_value="0.001"),

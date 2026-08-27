@@ -1,0 +1,52 @@
+pgi_grasp_anything_perception:
+  ros__parameters:
+    rgb_topic: /pgi_d435i/image
+    depth_topic: /pgi_d435i/depth_image
+    camera_info_topic: /pgi_d435i/camera_info
+    candidate_pose_topic: /pgi/grasp_anything/candidate_pose
+    candidate_metadata_topic: /pgi/grasp_anything/candidate
+    status_topic: /pgi/grasp_anything/status
+    debug_image_topic: /pgi/grasp_anything/debug_image
+    target_frame: base_link
+    service_url: http://127.0.0.1:8765/v1/grasp
+
+    max_rate_hz: 0.5
+    service_timeout_s: 4.0
+    sync_queue_size: 20
+    sync_slop_sec: 0.08
+    depth_scale_16uc1: 0.001
+    min_depth_m: 0.05
+    max_depth_m: 3.0
+    # A 13 x 13 local patch is small enough to fit a cylindrical cup surface
+    # without treating its visible curvature as depth noise.
+    patch_radius_px: 6
+    local_depth_tolerance_m: 0.04
+    min_depth_points: 60
+    min_depth_support_ratio: 0.30
+    max_surface_residual_ratio: 0.25
+    min_opening_m: 0.005
+    max_opening_m: 0.080
+    minimum_model_score: 0.20
+
+    # The wrist camera sees a fixed part of the PGI body at the right edge.
+    # Candidates in that calibrated image strip are robot self-observations,
+    # not objects.  Set to 1.0 only when the camera mount/image is changed and
+    # a new self mask has been validated.
+    self_mask_right_fraction: 0.73
+
+    # Object-agnostic depth crop in base_link. It selects the largest visible
+    # component above the ground, without assuming cup colour or dimensions,
+    # and presents an adaptive context crop that the service scales to the
+    # model's 224 x 224 input. A closer crop is needed for the small simulated
+    # cup; all coordinates are mapped back to the original registered image.
+    object_crop_enabled: true
+    object_min_height_m: 0.008
+    object_max_height_m: 0.35
+    object_min_component_px: 100
+    object_crop_size_px: 112
+    object_crop_margin_px: 20
+    object_mask_kernel_px: 5
+
+    # The learned rectangle supplies centre and closing direction. Registered
+    # depth silhouette supplies physical object width; add 4 mm clearance.
+    opening_clearance_m: 0.004

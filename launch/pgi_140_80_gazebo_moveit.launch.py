@@ -14,7 +14,7 @@ from launch.actions import (
 )
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import AndSubstitution, LaunchConfiguration
 from launch_ros.actions import Node
 
 
@@ -63,6 +63,8 @@ def generate_launch_description():
     spawn_cup = LaunchConfiguration("spawn_cup")
     launch_cup_perception = LaunchConfiguration("launch_cup_perception")
     launch_camera_view = LaunchConfiguration("launch_camera_view")
+    launch_grasp_anything = LaunchConfiguration("launch_grasp_anything")
+    launch_grasp_anything_view = LaunchConfiguration("launch_grasp_anything_view")
     cup_x = LaunchConfiguration("cup_x")
     cup_y = LaunchConfiguration("cup_y")
     cup_z = LaunchConfiguration("cup_z")
@@ -144,6 +146,39 @@ def generate_launch_description():
         arguments=["/pgi/perception/cup_debug_image"],
     )
 
+    grasp_anything_service = ExecuteProcess(
+        cmd=[
+            str(PROJECT_ROOT / ".venv" / "grasp_anything" / "bin" / "python"),
+            str(PROJECT_ROOT / "scripts" / "grasp_anything_inference_service.py"),
+        ],
+        output="screen",
+        condition=IfCondition(launch_grasp_anything),
+    )
+
+    grasp_anything_adapter = ExecuteProcess(
+        cmd=[
+            "/usr/bin/python3",
+            str(PROJECT_ROOT / "scripts" / "pgi_grasp_anything_perception.py"),
+            "--ros-args",
+            "--params-file",
+            str(PROJECT_ROOT / "config" / "pgi_grasp_anything_perception.yaml"),
+        ],
+        output="screen",
+        condition=IfCondition(launch_grasp_anything),
+    )
+
+    grasp_anything_view = Node(
+        package="rqt_image_view",
+        executable="rqt_image_view",
+        name="pgi_grasp_anything_camera_view",
+        output="log",
+        additional_env={"QT_QPA_PLATFORM": "xcb"},
+        condition=IfCondition(
+            AndSubstitution(launch_grasp_anything, launch_grasp_anything_view)
+        ),
+        arguments=["/pgi/grasp_anything/debug_image"],
+    )
+
     return LaunchDescription(
         [
             DeclareLaunchArgument(
@@ -214,6 +249,22 @@ def generate_launch_description():
                 default_value="true",
                 description="Open rqt_image_view on the cup detector debug image.",
             ),
+            DeclareLaunchArgument(
+                "launch_grasp_anything",
+                default_value="false",
+                description=(
+                    "Run the experimental observation-only Grasp-Anything CPU "
+                    "service and registered-depth ROS adapter."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "launch_grasp_anything_view",
+                default_value="false",
+                description=(
+                    "Open rqt_image_view on the experimental Grasp-Anything "
+                    "debug topic. Enable only with launch_grasp_anything."
+                ),
+            ),
             # Reuse the saved X/Y location but place the independent cup base
             # on the Gazebo ground plane. Both simulators receive one pose.
             DeclareLaunchArgument("cup_x", default_value="0.481542"),
@@ -232,7 +283,10 @@ def generate_launch_description():
             # The publisher also waits for the service, so a slow MoveGroup
             # startup cannot silently omit the collision object.
             TimerAction(period=9.0, actions=[moveit_cup]),
+            TimerAction(period=9.0, actions=[grasp_anything_service]),
             TimerAction(period=10.0, actions=[cup_perception]),
+            TimerAction(period=11.0, actions=[grasp_anything_adapter]),
             TimerAction(period=12.0, actions=[camera_view]),
+            TimerAction(period=13.0, actions=[grasp_anything_view]),
         ]
     )
