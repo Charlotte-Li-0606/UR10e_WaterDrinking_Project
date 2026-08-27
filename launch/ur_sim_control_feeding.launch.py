@@ -424,8 +424,9 @@ def generate_launch_description():
                 "pgi_contact_physics",
                 default_value="false",
                 description=(
-                    "Enable provisional Stage-5 finger contact/friction and the "
-                    "40 N per-jaw effort limit. False preserves earlier stages."
+                    "Enable provisional Stage-5 finger contact/friction. The "
+                    "selected controller YAML sets the per-jaw command cap. "
+                    "False preserves earlier stages."
                 ),
             ),
             DeclareLaunchArgument(

@@ -1,0 +1,112 @@
+pgi_grasp_anything_moveit_demo:
+  ros__parameters:
+    cup_grasp_pose_topic: /pgi/grasp_anything/candidate_pose
+    grasp_anything_metadata_topic: /pgi/grasp_anything/candidate
+    cup_model_pose_topic: /model/pgi_staging_cup/pose
+    planning_frame: base_link
+    grasp_link: pgi_grasp_center
+    cup_id: pgi_staging_cup
+    cup_model_name: pgi_staging_cup
+    gazebo_set_pose_service: /world/pgi_140_80_camera/set_pose
+    support_surface_id: ground_plane
+    # Grasp-Anything supplies a 2-D closing line, not a unique 3-D approach.
+    # For the current ground-supported workflow, preserve the learned line but
+    # complete it as a horizontal side approach so the jaws cannot roll the
+    # object against the floor.
+    ground_supported_planar_approach: true
+    # Approach mainly from above so the PGI body stays clear of a horizontal
+    # cup; the jaws still close horizontally, perpendicular to the cup axis.
+    ground_supported_approach_down_deg: 70.0
+    # A single-view surface normal made the horizontal cup rotate during lift.
+    # Keep the learned closing direction, then use the segmented depth model's
+    # principal axis for a 70-degree downward oblique approach.
+    preserve_depth_surface_approach: false
+    ground_supported_axis_aligned_approach: true
+    # Grasp-Anything selected the narrow extreme of the horizontal tapered cup.
+    # Slide only along the observed principal axis to the closest body segment
+    # below the verified 80 mm PGI stroke. MoveIt still validates the result.
+    refine_ground_supported_candidate: true
+    maximum_refined_object_width_m: 0.076
+    maximum_candidate_axial_shift_m: 0.080
+    minimum_candidate_axial_shift_m: 0.010
+    # Keep the high, cup-clear transit on the validated radial orientation;
+    # blend to the learned closing line before the pre-grasp segment.
+    use_radial_transit_orientation: false
+
+    # The image-derived orientation replaces the fixed upright-cup radial
+    # heuristic. MoveIt solves a collision-aware high transfer IK branch for
+    # every frozen candidate; no versioned joint pose is reused here.
+    # Use the validated, cup-clear side-ready joint branch as a staging seed.
+    # The grasp and pre-grasp remain image-derived; this waypoint only gives
+    # the low Cartesian segment a stable UR10e joint branch.
+    use_configured_side_ready_branch: false
+    use_configured_side_ready_ik_seed: false
+    lock_transfer_to_configured_branch: false
+    # MoveIt may choose a new joint branch for the image-derived high staging
+    # pose. Only this free-space transition uses Pilz PTP; final approach,
+    # grasp, lift, and placement remain fixed-orientation Cartesian paths.
+    use_pilz_coarse_staging: true
+    relax_transit_flange_orientation: false
+    transit_flange_spin_deg: 0.0
+    pregrasp_backoff_m: 0.070
+    # Keep side-ready directly above pre-grasp for the axis-aligned approach;
+    # the old extra 50 mm radial retreat moved this low target toward the base.
+    side_ready_backoff_m: 0.070
+    side_ready_height_m: 0.300
+    cartesian_transfer_height_m: 0.450
+    staging_lift_m: 0.080
+    lift_height_m: 0.120
+    release_height_m: 0.0
+
+    # Grasp-Anything publishes a visible surface point. Keep the grasp centre
+    # on that surface for the top-oblique approach; the J1 fingers already
+    # span +/-25 mm and enter the object envelope without bringing the PGI
+    # body into the padded collision geometry.
+    surface_inset_m: 0.0
+    metadata_max_age_s: 3.0
+    target_max_age_s: 3.0
+
+    jaw_open_m: 0.040
+    # Keep the exact model's minimum selectable force. The axis-refined 40 N
+    # trial rotated 31.28 degrees; increasing to 80 N rotated 35.90 degrees,
+    # confirming that the remaining limitation is contact geometry, not force.
+    jaw_max_effort_n: 40.0
+    # Runtime close position is derived from depth width. This fallback value
+    # is never used unless the derived target passes all checks.
+    physical_close_m: 0.030
+    contact_overlap_m: 0.002
+    minimum_object_width_m: 0.010
+    minimum_closure_m: 0.0005
+    contact_settle_s: 1.0
+    release_settle_s: 1.5
+    # The GUI-enabled DART world can run slower than wall time while contact
+    # converges. The baseline physical runner keeps its original 12 s default.
+    physical_gripper_result_timeout_s: 30.0
+
+    minimum_lift_m: 0.105
+    maximum_lift_xy_drift_m: 0.030
+    maximum_hold_drift_m: 0.010
+    # In this runner the same value limits orientation drift relative to the
+    # frozen initial object pose, so a stable horizontal object is permitted.
+    maximum_cup_tilt_deg: 15.0
+    # Applied relative to the initial, ground-supported Gazebo model origin.
+    maximum_release_height_m: 0.015
+    minimum_release_drop_m: 0.0
+    ground_support_tolerance_m: 0.040
+    model_origin_box_tolerance_m: 0.050
+    maximum_object_extent_m: 0.500
+
+    arm_velocity_scaling: 0.10
+    arm_acceleration_scaling: 0.10
+    cartesian_max_step_m: 0.005
+    cartesian_revolute_jump_rad: 0.35
+    joint_final_tolerance_rad: 0.015
+    hold_duration_s: 2.0
+    execution_timeout_scale: 3.0
+    execution_timeout_margin_s: 10.0
+
+    touch_links:
+      - pgi_left_finger
+      - pgi_right_finger
+      - pgi_body
+      - pgi_grasp_center

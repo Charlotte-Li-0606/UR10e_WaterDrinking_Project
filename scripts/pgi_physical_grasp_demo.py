@@ -36,10 +36,14 @@ from pgi_logical_grasp_demo import (
 
 
 class PhysicalGraspDemo(LogicalGraspDemo):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        node_name: str = "pgi_physical_grasp_demo",
+        status_topic: str = "/pgi/physical_grasp/status",
+    ) -> None:
         super().__init__(
-            node_name="pgi_physical_grasp_demo",
-            status_topic="/pgi/physical_grasp/status",
+            node_name=node_name,
+            status_topic=status_topic,
         )
         defaults = {
             "physical_close_m": 0.030,
@@ -52,6 +56,7 @@ class PhysicalGraspDemo(LogicalGraspDemo):
             "maximum_cup_tilt_deg": 15.0,
             "maximum_release_height_m": 0.015,
             "minimum_release_drop_m": 0.010,
+            "physical_gripper_result_timeout_s": 12.0,
         }
         for name, value in defaults.items():
             self.declare_parameter(name, value)
@@ -178,6 +183,17 @@ class PhysicalGraspDemo(LogicalGraspDemo):
                 f"Cup tilt at {stage} is {tilt:.2f} deg, above {limit:.2f} deg"
             )
 
+    def maximum_release_model_z(self, initial_model_pose) -> float:
+        """Absolute model-origin height allowed after release.
+
+        The validated Stage-5 cup starts upright with its model origin on the
+        ground, so its existing absolute limit remains the default. A generic
+        orientation-aware subclass may express this relative to its initial,
+        ground-supported model pose without weakening the original workflow.
+        """
+        del initial_model_pose
+        return float(self.get_parameter("maximum_release_height_m").value)
+
     def execute_contact_close(self) -> dict:
         if self.joint_state is None:
             raise RuntimeError("Jaw state unavailable before physical close")
@@ -198,7 +214,11 @@ class PhysicalGraspDemo(LogicalGraspDemo):
         if not handle.accepted:
             raise RuntimeError("Simulation gripper rejected the physical close")
         wrapped = self.wait_future(
-            handle.get_result_async(), 12.0, "physical gripper result"
+            handle.get_result_async(),
+            float(
+                self.get_parameter("physical_gripper_result_timeout_s").value
+            ),
+            "physical gripper result",
         )
         result = wrapped.result
         closure = float(before - result.position)
@@ -354,9 +374,7 @@ class PhysicalGraspDemo(LogicalGraspDemo):
                 raise RuntimeError(
                     f"Cup dropped only {release_drop:.4f} m during release test"
                 )
-            maximum_height = float(
-                self.get_parameter("maximum_release_height_m").value
-            )
+            maximum_height = self.maximum_release_model_z(initial_model_pose)
             if released_pose.position.z > maximum_height:
                 raise RuntimeError(
                     f"Released cup base is still {released_pose.position.z:.4f} m high"
@@ -437,9 +455,7 @@ def main() -> int:
             raise RuntimeError("Dynamic Gazebo cup pose is unavailable")
         if model_pose is not None:
             node.require_upright(model_pose, "initial")
-            if model_pose.position.z > float(
-                node.get_parameter("maximum_release_height_m").value
-            ):
+            if model_pose.position.z > node.maximum_release_model_z(model_pose):
                 raise RuntimeError(
                     f"Dynamic cup is not on the ground: z={model_pose.position.z:.4f} m"
                 )

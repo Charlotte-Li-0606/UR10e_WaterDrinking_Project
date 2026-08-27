@@ -45,6 +45,7 @@ from moveit_msgs.srv import (
     GetCartesianPath,
     GetMotionPlan,
     GetPlanningScene,
+    GetPositionFK,
     GetPositionIK,
     GetStateValidity,
 )
@@ -173,6 +174,13 @@ class LogicalGraspDemo(Node):
             # transfer point. MoveIt chooses the joint motion; wrist_3 is never
             # commanded directly. A local-Z spin preserves the approach axis.
             "transit_flange_spin_deg": 0.0,
+            "use_configured_side_ready_branch": True,
+            "use_configured_side_ready_ik_seed": False,
+            "lock_transfer_to_configured_branch": False,
+            # Opt-in simulation strategy for image-derived poses. MoveIt first
+            # solves a collision-aware staging IK state and reaches it with
+            # Pilz PTP; the precise object approach remains Cartesian.
+            "use_pilz_coarse_staging": False,
             "side_ready_joints_rad": [
                 -1.2903761544653078,
                 -0.8867852166149196,
@@ -243,6 +251,7 @@ class LogicalGraspDemo(Node):
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.parameter_client = AsyncParameterClient(self, "/move_group")
         self.ik_client = self.create_client(GetPositionIK, "/compute_ik")
+        self.fk_client = self.create_client(GetPositionFK, "/compute_fk")
         self.cartesian_client = self.create_client(
             GetCartesianPath, "/compute_cartesian_path"
         )
@@ -345,6 +354,7 @@ class LogicalGraspDemo(Node):
     def wait_for_services(self, execute: bool) -> None:
         services = [
             (self.ik_client, "IK"),
+            (self.fk_client, "FK"),
             (self.cartesian_client, "Cartesian planning"),
             (self.motion_plan_client, "MoveIt motion planning"),
             (self.validity_client, "state validity"),
@@ -491,6 +501,12 @@ class LogicalGraspDemo(Node):
     def end_grasp_contact_planning(self) -> None:
         """Undo any contact-aware planning override; Stage 4 is a no-op."""
 
+    def begin_support_contact_planning(self) -> None:
+        """Hook for a supported object that starts in contact with a surface."""
+
+    def end_support_contact_planning(self) -> None:
+        """Undo a temporary support-surface planning override."""
+
     def ik_pose(
         self, pose: PoseStamped, seed: RobotState, avoid_collisions: bool
     ) -> tuple[RobotState | None, int]:
@@ -506,6 +522,22 @@ class LogicalGraspDemo(Node):
         if response.error_code.val != SUCCESS:
             return None, response.error_code.val
         return self.normalize_ik_solution(response.solution, seed), response.error_code.val
+
+    def fk_pose(self, state: RobotState) -> PoseStamped:
+        request = GetPositionFK.Request()
+        request.header.frame_id = self.planning_frame
+        request.fk_link_names = [self.grasp_link]
+        request.robot_state = deepcopy(state)
+        response = self.call(self.fk_client, request)
+        if (
+            response.error_code.val != SUCCESS
+            or len(response.pose_stamped) != 1
+        ):
+            raise RuntimeError(
+                f"MoveIt FK failed for {self.grasp_link}: "
+                f"code={response.error_code.val}"
+            )
+        return deepcopy(response.pose_stamped[0])
 
     def normalize_ik_solution(
         self, solution: RobotState, seed: RobotState
@@ -882,6 +914,18 @@ class LogicalGraspDemo(Node):
         relax_transit_flange = bool(
             self.get_parameter("relax_transit_flange_orientation").value
         )
+        use_configured_side_branch = bool(
+            self.get_parameter("use_configured_side_ready_branch").value
+        )
+        use_configured_ik_seed = bool(
+            self.get_parameter("use_configured_side_ready_ik_seed").value
+        )
+        lock_configured_transfer = bool(
+            self.get_parameter("lock_transfer_to_configured_branch").value
+        )
+        use_pilz_coarse_staging = bool(
+            self.get_parameter("use_pilz_coarse_staging").value
+        )
         transit_flange_spin_deg = float(
             self.get_parameter("transit_flange_spin_deg").value
         )
@@ -916,27 +960,83 @@ class LogicalGraspDemo(Node):
         actual_start_matrix = self.lookup_matrix(
             self.planning_frame, self.grasp_link
         )
-        side_branch = self.state_with_arm_positions(
-            live,
-            list(self.get_parameter("side_ready_joints_rad").value),
-        )
-        side_branch_validity = self.state_validity(side_branch)
-        if not side_branch_validity["valid"]:
-            raise RuntimeError(
-                "Configured side-ready IK branch is in collision: "
-                f"{side_branch_validity['contacts']}"
+        side_to_transfer_seed = None
+        transfer_ik_validity = None
+        side_branch = None
+        if use_configured_side_branch:
+            side_branch = self.state_with_arm_positions(
+                live,
+                list(self.get_parameter("side_ready_joints_rad").value),
             )
+            side_branch_validity = self.state_validity(side_branch)
+            if not side_branch_validity["valid"]:
+                raise RuntimeError(
+                    "Configured side-ready IK branch is in collision: "
+                    f"{side_branch_validity['contacts']}"
+                )
 
-        # Build the high transfer goal by moving upward from the already
-        # validated low-side IK branch. Pilz PTP then changes branches at this
-        # high, cup-clear pose; all task-space approach motion stays Cartesian.
-        self.publish_status("deriving_transfer_on_side_branch")
-        side_to_transfer_seed = self.plan_cartesian(
-            side_branch, [poses["transfer"]]
-        )
-        transfer_branch = self.state_after_trajectory(
-            side_branch, side_to_transfer_seed.trajectory
-        )
+            if lock_configured_transfer:
+                branch_pose = self.fk_pose(side_branch)
+                poses["side_ready"] = deepcopy(branch_pose)
+                poses["transfer"].pose.position.x = branch_pose.pose.position.x
+                poses["transfer"].pose.position.y = branch_pose.pose.position.y
+                poses["transfer"].pose.orientation = branch_pose.pose.orientation
+                self.publish_status(
+                    "transfer_locked_above_configured_branch",
+                    transfer_xy=[
+                        branch_pose.pose.position.x,
+                        branch_pose.pose.position.y,
+                    ],
+                )
+
+            # Build the high transfer goal by moving upward from the already
+            # validated low-side IK branch. Pilz PTP then changes branches at
+            # this high, cup-clear pose.
+            self.publish_status("deriving_transfer_on_side_branch")
+            side_to_transfer_seed = self.plan_cartesian(
+                side_branch, [poses["transfer"]]
+            )
+            transfer_branch = self.state_after_trajectory(
+                side_branch, side_to_transfer_seed.trajectory
+            )
+        else:
+            # An image-derived grasp orientation cannot reuse a joint branch
+            # calibrated for one fixed cup pose. Ask MoveIt for a fresh,
+            # collision-aware IK solution at the high transfer pose.
+            transfer_ik_seed = live
+            if use_configured_ik_seed:
+                transfer_ik_seed = self.state_with_arm_positions(
+                    live,
+                    list(self.get_parameter("side_ready_joints_rad").value),
+                )
+            self.publish_status(
+                "deriving_transfer_from_moveit_ik",
+                configured_side_ready_seed=use_configured_ik_seed,
+            )
+            transfer_branch, transfer_ik_code = self.ik_pose(
+                poses["transfer"], transfer_ik_seed, avoid_collisions=True
+            )
+            if transfer_branch is None:
+                diagnostic_branch, diagnostic_code = self.ik_pose(
+                    poses["transfer"], transfer_ik_seed, avoid_collisions=False
+                )
+                diagnostic_validity = (
+                    self.state_validity(diagnostic_branch)
+                    if diagnostic_branch is not None
+                    else None
+                )
+                raise RuntimeError(
+                    "MoveIt could not solve the image-derived transfer pose: "
+                    f"collision_aware_code={transfer_ik_code}, "
+                    f"unconstrained_code={diagnostic_code}, "
+                    f"unconstrained_state={diagnostic_validity}"
+                )
+            transfer_ik_validity = self.state_validity(transfer_branch)
+            if not transfer_ik_validity["valid"]:
+                raise RuntimeError(
+                    "Image-derived transfer IK is in collision: "
+                    f"{transfer_ik_validity['contacts']}"
+                )
 
         self.publish_status("planning_camera_ready_to_transfer_ptp")
         transfer_plan = self.plan_pilz_ptp(live, transfer_branch)
@@ -944,11 +1044,12 @@ class LogicalGraspDemo(Node):
             live, transfer_plan.trajectory
         )
 
-        if relax_transit_flange:
+        if relax_transit_flange and use_configured_side_branch:
             self.publish_status(
                 "planning_transfer_to_side_ready_ptp",
                 transit_flange_orientation_relaxed=True,
             )
+            assert side_branch is not None
             ready_plan = self.plan_pilz_ptp(transfer_state, side_branch)
         else:
             self.publish_status("planning_transfer_to_side_ready")
@@ -959,8 +1060,42 @@ class LogicalGraspDemo(Node):
             transfer_state, ready_plan.trajectory
         )
 
-        self.publish_status("planning_side_ready_to_staging")
-        staging_plan = self.plan_cartesian(ready_state, [poses["staging"]])
+        if use_pilz_coarse_staging:
+            self.publish_status(
+                "planning_side_ready_to_coarse_staging_ptp",
+                collision_checked=True,
+            )
+            staging_branch, staging_ik_code = self.ik_pose(
+                poses["staging"], ready_state, avoid_collisions=True
+            )
+            if staging_branch is None:
+                diagnostic_branch, diagnostic_code = self.ik_pose(
+                    poses["staging"], ready_state, avoid_collisions=False
+                )
+                diagnostic_validity = (
+                    self.state_validity(diagnostic_branch)
+                    if diagnostic_branch is not None
+                    else None
+                )
+                raise RuntimeError(
+                    "MoveIt could not solve the coarse staging pose: "
+                    f"collision_aware_code={staging_ik_code}, "
+                    f"unconstrained_code={diagnostic_code}, "
+                    f"unconstrained_state={diagnostic_validity}"
+                )
+            staging_validity = self.state_validity(staging_branch)
+            if not staging_validity["valid"]:
+                raise RuntimeError(
+                    "Coarse staging IK is in collision: "
+                    f"{staging_validity['contacts']}"
+                )
+            staging_plan = self.plan_pilz_ptp(ready_state, staging_branch)
+        else:
+            staging_validity = None
+            self.publish_status("planning_side_ready_to_staging")
+            staging_plan = self.plan_cartesian(
+                ready_state, [poses["staging"]]
+            )
         staging_state = self.state_after_trajectory(
             ready_state, staging_plan.trajectory
         )
@@ -985,19 +1120,34 @@ class LogicalGraspDemo(Node):
             attached_object = self.apply_attach(cup_object, grasp_matrix)
             attached = True
             self.verify_scene_ownership(True)
-            self.publish_status("planning_attached_lift_place")
             grasp_attached_state = deepcopy(grasp_state)
             grasp_attached_state.attached_collision_objects = [attached_object]
-            lift_plan = self.plan_cartesian(
-                grasp_attached_state, [poses["lift"]]
-            )
-            lift_state = self.state_after_trajectory(
-                grasp_attached_state, lift_plan.trajectory
-            )
-            place_plan = self.plan_cartesian(lift_state, [poses["release"]])
-            release_state = self.state_after_trajectory(
-                lift_state, place_plan.trajectory
-            )
+            self.begin_support_contact_planning()
+            try:
+                attached_start_validity = self.state_validity(
+                    grasp_attached_state
+                )
+                if not attached_start_validity["valid"]:
+                    raise RuntimeError(
+                        "Attached grasp start state is in collision: "
+                        f"{attached_start_validity['contacts']}"
+                    )
+                self.publish_status("planning_attached_lift")
+                lift_plan = self.plan_cartesian(
+                    grasp_attached_state, [poses["lift"]]
+                )
+                lift_state = self.state_after_trajectory(
+                    grasp_attached_state, lift_plan.trajectory
+                )
+                self.publish_status("planning_attached_place")
+                place_plan = self.plan_cartesian(
+                    lift_state, [poses["release"]]
+                )
+                release_state = self.state_after_trajectory(
+                    lift_state, place_plan.trajectory
+                )
+            finally:
+                self.end_support_contact_planning()
             release_detached_state = deepcopy(release_state)
             release_detached_state.attached_collision_objects = []
         finally:
@@ -1006,23 +1156,38 @@ class LogicalGraspDemo(Node):
                 self.verify_scene_ownership(False)
 
         self.publish_status("planning_retreat_and_return")
-        retreat_plan = self.plan_cartesian(
-            release_detached_state, [poses["pregrasp"]]
-        )
+        self.begin_grasp_contact_planning()
+        try:
+            self.publish_status("planning_contact_retreat")
+            retreat_plan = self.plan_cartesian(
+                release_detached_state, [poses["pregrasp"]]
+            )
+        finally:
+            self.end_grasp_contact_planning()
         retreat_state = self.state_after_trajectory(
             release_detached_state, retreat_plan.trajectory
         )
+        self.publish_status("planning_retreat_to_staging")
         unstage_plan = self.plan_cartesian(retreat_state, [poses["staging"]])
         unstage_state = self.state_after_trajectory(
             retreat_state, unstage_plan.trajectory
         )
-        ready_return_plan = self.plan_cartesian(
-            unstage_state, [poses["side_ready"]]
-        )
+        if use_pilz_coarse_staging:
+            self.publish_status(
+                "planning_coarse_staging_to_side_ready_ptp",
+                collision_checked=True,
+            )
+            ready_return_plan = self.plan_pilz_ptp(
+                unstage_state, ready_state
+            )
+        else:
+            ready_return_plan = self.plan_cartesian(
+                unstage_state, [poses["side_ready"]]
+            )
         ready_return_state = self.state_after_trajectory(
             unstage_state, ready_return_plan.trajectory
         )
-        if relax_transit_flange:
+        if relax_transit_flange and use_configured_side_branch:
             transfer_return_plan = self.plan_pilz_ptp(
                 ready_return_state, transfer_branch
             )
@@ -1059,18 +1224,41 @@ class LogicalGraspDemo(Node):
                 )
             return summary
 
+        if side_to_transfer_seed is not None:
+            transfer_seed_summary = plan_summary(
+                side_to_transfer_seed, "cartesian_validation_only"
+            )
+        else:
+            transfer_seed_summary = {
+                "backend": "moveit_ik",
+                "collision_aware": True,
+                "state_valid": bool(
+                    transfer_ik_validity and transfer_ik_validity["valid"]
+                ),
+            }
+
         return {
             "top_grasp": top,
             "selected_strategy": {
                 "name": "oblique_radial_side_grasp",
                 "approach_down_angle_deg": float(
-                    self.get_parameter("approach_down_angle_deg").value
+                    poses.get(
+                        "approach_down_angle_deg",
+                        self.get_parameter("approach_down_angle_deg").value,
+                    )
                 ),
                 "approach_azimuth_deg": poses["approach_azimuth_deg"],
                 "approach_axis_base": poses["axis"].tolist(),
                 "transit_flange_orientation_relaxed": relax_transit_flange,
                 "transit_flange_spin_deg": transit_flange_spin_deg,
                 "grasp_orientation_locked": True,
+                "configured_side_ready_branch_used": use_configured_side_branch,
+                "configured_side_ready_ik_seed_used": use_configured_ik_seed,
+                "configured_transfer_lock_used": lock_configured_transfer,
+                "pilz_coarse_staging_used": use_pilz_coarse_staging,
+                "coarse_staging_state_valid": bool(
+                    staging_validity and staging_validity["valid"]
+                ),
                 "camera_ready_xyz": actual_start_matrix[:3, 3].tolist(),
                 "side_ready_xyz": [
                     poses["side_ready"].pose.position.x,
@@ -1109,20 +1297,21 @@ class LogicalGraspDemo(Node):
                 ],
             },
             "plans": {
-                "side_branch_to_transfer_seed": plan_summary(
-                    side_to_transfer_seed, "cartesian_validation_only"
-                ),
+                "side_branch_to_transfer_seed": transfer_seed_summary,
                 "camera_ready_to_transfer": plan_summary(
                     transfer_plan, "pilz_ptp"
                 ),
                 "transfer_to_side_ready": plan_summary(
                     ready_plan,
                     "pilz_ptp_flange_relaxed"
-                    if relax_transit_flange
+                    if relax_transit_flange and use_configured_side_branch
                     else "cartesian",
                 ),
                 "side_ready_to_staging": plan_summary(
-                    staging_plan, "cartesian"
+                    staging_plan,
+                    "pilz_ptp_coarse_staging"
+                    if use_pilz_coarse_staging
+                    else "cartesian",
                 ),
                 "staging_to_pregrasp": plan_summary(pre_plan, "cartesian"),
                 "pregrasp_to_grasp": plan_summary(grasp_plan, "cartesian"),
@@ -1131,12 +1320,15 @@ class LogicalGraspDemo(Node):
                 "retreat": plan_summary(retreat_plan, "cartesian"),
                 "unstage": plan_summary(unstage_plan, "cartesian"),
                 "staging_to_side_ready": plan_summary(
-                    ready_return_plan, "cartesian"
+                    ready_return_plan,
+                    "pilz_ptp_coarse_staging_return"
+                    if use_pilz_coarse_staging
+                    else "cartesian",
                 ),
                 "side_ready_to_transfer": plan_summary(
                     transfer_return_plan,
                     "pilz_ptp_flange_relaxed"
-                    if relax_transit_flange
+                    if relax_transit_flange and use_configured_side_branch
                     else "cartesian",
                 ),
                 "transfer_to_camera_ready": plan_summary(

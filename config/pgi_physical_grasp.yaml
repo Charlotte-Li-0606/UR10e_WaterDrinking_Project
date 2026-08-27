@@ -31,6 +31,8 @@ pgi_physical_grasp_demo:
     # is a task-space local-Z spin; MoveIt chooses all joint motion and may use
     # wrist_3_joint. The spin is removed before the side-ready/grasp region.
     transit_flange_spin_deg: 30.0
+    use_configured_side_ready_branch: true
+    use_pilz_coarse_staging: false
     side_ready_joints_rad:
       - -1.2903761544653078
       - -0.8867852166149196

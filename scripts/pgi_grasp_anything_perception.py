@@ -67,9 +67,9 @@ class GraspAnythingPerception(Node):
             "depth_scale_16uc1": 0.001,
             "min_depth_m": 0.05,
             "max_depth_m": 3.0,
-            "patch_radius_px": 6,
+            "patch_radius_px": 4,
             "local_depth_tolerance_m": 0.04,
-            "min_depth_points": 60,
+            "min_depth_points": 30,
             "min_depth_support_ratio": 0.30,
             "max_surface_residual_ratio": 0.25,
             "min_opening_m": 0.005,
@@ -84,6 +84,9 @@ class GraspAnythingPerception(Node):
             "object_crop_margin_px": 20,
             "object_mask_kernel_px": 5,
             "opening_clearance_m": 0.004,
+            "collision_padding_m": 0.010,
+            "collision_box_count": 8,
+            "maximum_published_candidates": 5,
         }
         for name, value in defaults.items():
             self.declare_parameter(name, value)
@@ -127,6 +130,15 @@ class GraspAnythingPerception(Node):
         self._opening_clearance_m = float(
             self.get_parameter("opening_clearance_m").value
         )
+        self._collision_padding_m = float(
+            self.get_parameter("collision_padding_m").value
+        )
+        self._collision_box_count = int(
+            self.get_parameter("collision_box_count").value
+        )
+        self._maximum_published_candidates = int(
+            self.get_parameter("maximum_published_candidates").value
+        )
         if not self._service_url.startswith("http://127.0.0.1:"):
             raise ValueError("service_url must use the loopback IPv4 address")
         if self._object_crop_enabled and self._target_frame != "base_link":
@@ -155,6 +167,12 @@ class GraspAnythingPerception(Node):
             raise ValueError("object_mask_kernel_px must be a positive odd integer")
         if self._opening_clearance_m < 0.0:
             raise ValueError("opening_clearance_m cannot be negative")
+        if not 0.0 <= self._collision_padding_m <= 0.050:
+            raise ValueError("collision_padding_m must be in [0, 0.050]")
+        if not 2 <= self._collision_box_count <= 16:
+            raise ValueError("collision_box_count must be in [2, 16]")
+        if not 1 <= self._maximum_published_candidates <= 20:
+            raise ValueError("maximum_published_candidates must be in [1, 20]")
 
         sensor_qos = QoSProfile(
             history=HistoryPolicy.KEEP_LAST,
@@ -418,12 +436,19 @@ class GraspAnythingPerception(Node):
                 rotation_message.w,
             ]
         ).as_matrix()
-        translation_z = float(transform.transform.translation.z)
+        translation = np.array(
+            [
+                transform.transform.translation.x,
+                transform.transform.translation.y,
+                transform.transform.translation.z,
+            ],
+            dtype=float,
+        )
         base_height = (
             rotation[2, 0] * camera_x
             + rotation[2, 1] * camera_y
             + rotation[2, 2] * depth
-            + translation_z
+            + translation[2]
         )
         mask = valid
         mask &= base_height >= self._object_min_height
@@ -454,6 +479,75 @@ class GraspAnythingPerception(Node):
                 f"{self._object_min_component_px}"
             )
         component_depth = labels == component_label
+
+        component_camera = np.column_stack(
+            (
+                camera_x[component_depth],
+                camera_y[component_depth],
+                depth[component_depth],
+            )
+        )
+        component_target = component_camera @ rotation.T + translation
+        visible_minimum = component_target.min(axis=0)
+        visible_maximum = component_target.max(axis=0)
+        collision_minimum = visible_minimum - self._collision_padding_m
+        collision_maximum = visible_maximum + self._collision_padding_m
+        collision_size = collision_maximum - collision_minimum
+        collision_center = (collision_minimum + collision_maximum) / 2.0
+
+        point_centroid = component_target.mean(axis=0)
+        _u, _singular_values, principal_rows = np.linalg.svd(
+            component_target - point_centroid, full_matrices=False
+        )
+        principal_axes = principal_rows.T
+        if np.linalg.det(principal_axes) < 0.0:
+            principal_axes[:, 2] *= -1.0
+        principal_coordinates = (
+            component_target - point_centroid
+        ) @ principal_axes
+        axis_minimum = float(principal_coordinates[:, 0].min())
+        axis_maximum = float(principal_coordinates[:, 0].max())
+        bin_edges = np.linspace(
+            axis_minimum, axis_maximum, self._collision_box_count + 1
+        )
+        box_quaternion = Rotation.from_matrix(principal_axes).as_quat()
+        collision_boxes = []
+        for box_index in range(self._collision_box_count):
+            if box_index + 1 == self._collision_box_count:
+                selected_points = (
+                    (principal_coordinates[:, 0] >= bin_edges[box_index])
+                    & (principal_coordinates[:, 0] <= bin_edges[box_index + 1])
+                )
+            else:
+                selected_points = (
+                    (principal_coordinates[:, 0] >= bin_edges[box_index])
+                    & (principal_coordinates[:, 0] < bin_edges[box_index + 1])
+                )
+            if int(np.count_nonzero(selected_points)) < 10:
+                continue
+            local_points = principal_coordinates[selected_points]
+            local_minimum = local_points.min(axis=0) - self._collision_padding_m
+            local_maximum = local_points.max(axis=0) + self._collision_padding_m
+            local_center = (local_minimum + local_maximum) / 2.0
+            local_size = local_maximum - local_minimum
+            world_center = point_centroid + principal_axes @ local_center
+            collision_boxes.append(
+                {
+                    "center_xyz_m": [
+                        round(float(value), 6) for value in world_center
+                    ],
+                    "size_xyz_m": [
+                        round(float(value), 6) for value in local_size
+                    ],
+                    "orientation_xyzw": [
+                        round(float(value), 8) for value in box_quaternion
+                    ],
+                }
+            )
+        if len(collision_boxes) < 2:
+            raise GraspReconstructionError(
+                "depth object cannot define segmented collision geometry"
+            )
 
         left_depth = int(stats[component_label, cv2.CC_STAT_LEFT])
         top_depth = int(stats[component_label, cv2.CC_STAT_TOP])
@@ -487,6 +581,17 @@ class GraspAnythingPerception(Node):
                 height_depth,
             ],
             "rgb_crop": [crop_x, crop_y, crop_size, crop_size],
+            "collision_geometry": {
+                "type": "multi_box",
+                "frame_id": self._target_frame,
+                "center_xyz_m": [round(float(value), 6) for value in collision_center],
+                "size_xyz_m": [round(float(value), 6) for value in collision_size],
+                "orientation_xyzw": [0.0, 0.0, 0.0, 1.0],
+                "padding_m": self._collision_padding_m,
+                "source": "registered_depth_segmented_pca_boxes",
+                "single_view_incomplete": True,
+                "boxes": collision_boxes,
+            },
         }
         return cropped, crop_x, crop_y, component_depth, details
 
@@ -732,9 +837,9 @@ class GraspAnythingPerception(Node):
             self._status(False, "inference_image_size_mismatch")
             return
 
-        selected: tuple[
+        accepted_candidates: list[tuple[
             int, GraspProposal2D, GraspProposal2D, ReconstructedGrasp, dict
-        ] | None = None
+        ]] = []
         rejected: list[dict] = []
         first_proposal_rgb: GraspProposal2D | None = None
         for index, candidate in enumerate(result["candidates"]):
@@ -808,16 +913,19 @@ class GraspAnythingPerception(Node):
                     }
                 )
                 continue
-            selected = (
-                index,
-                proposal_rgb,
-                proposal_depth,
-                reconstructed,
-                opening_details,
+            accepted_candidates.append(
+                (
+                    index,
+                    proposal_rgb,
+                    proposal_depth,
+                    reconstructed,
+                    opening_details,
+                )
             )
-            break
+            if len(accepted_candidates) >= self._maximum_published_candidates:
+                break
 
-        if selected is None:
+        if not accepted_candidates:
             reason = "no_model_candidate" if not result["candidates"] else "all_candidates_rejected"
             self._status(
                 False,
@@ -836,20 +944,80 @@ class GraspAnythingPerception(Node):
             )
             return
 
-        rank, proposal_rgb, _proposal_depth, grasp, opening_details = selected
-        camera_pose = PoseStamped()
-        camera_pose.header.stamp = depth_message.header.stamp
-        camera_pose.header.frame_id = source_frame
-        camera_pose.pose.position.x = float(grasp.position_camera_m[0])
-        camera_pose.pose.position.y = float(grasp.position_camera_m[1])
-        camera_pose.pose.position.z = float(grasp.position_camera_m[2])
-        camera_pose.pose.orientation.x = float(grasp.quaternion_camera_xyzw[0])
-        camera_pose.pose.orientation.y = float(grasp.quaternion_camera_xyzw[1])
-        camera_pose.pose.orientation.z = float(grasp.quaternion_camera_xyzw[2])
-        camera_pose.pose.orientation.w = float(grasp.quaternion_camera_xyzw[3])
-        target_pose = do_transform_pose_stamped(camera_pose, transform)
+        depth_validated_candidates = []
+        transformed_candidates = []
+        for (
+            candidate_rank,
+            candidate_rgb,
+            _candidate_depth,
+            candidate_grasp,
+            candidate_opening_details,
+        ) in accepted_candidates:
+            camera_pose = PoseStamped()
+            camera_pose.header.stamp = depth_message.header.stamp
+            camera_pose.header.frame_id = source_frame
+            camera_pose.pose.position.x = float(
+                candidate_grasp.position_camera_m[0]
+            )
+            camera_pose.pose.position.y = float(
+                candidate_grasp.position_camera_m[1]
+            )
+            camera_pose.pose.position.z = float(
+                candidate_grasp.position_camera_m[2]
+            )
+            camera_pose.pose.orientation.x = float(
+                candidate_grasp.quaternion_camera_xyzw[0]
+            )
+            camera_pose.pose.orientation.y = float(
+                candidate_grasp.quaternion_camera_xyzw[1]
+            )
+            camera_pose.pose.orientation.z = float(
+                candidate_grasp.quaternion_camera_xyzw[2]
+            )
+            camera_pose.pose.orientation.w = float(
+                candidate_grasp.quaternion_camera_xyzw[3]
+            )
+            transformed = do_transform_pose_stamped(camera_pose, transform)
+            transformed.header.frame_id = self._target_frame
+            transformed_candidates.append(transformed)
+            depth_validated_candidates.append(
+                {
+                    "rank": candidate_rank,
+                    "score": round(candidate_grasp.score, 6),
+                    "opening_m": round(candidate_grasp.opening_m, 6),
+                    "pixel": [
+                        round(candidate_rgb.u, 3),
+                        round(candidate_rgb.v, 3),
+                    ],
+                    "angle_rad": round(candidate_rgb.angle_rad, 6),
+                    "depth_support_ratio": round(
+                        candidate_grasp.depth_support_ratio, 6
+                    ),
+                    "surface_residual_ratio": round(
+                        candidate_grasp.surface_residual_ratio, 6
+                    ),
+                    "valid_depth_points": candidate_grasp.valid_depth_points,
+                    "opening_evidence": candidate_opening_details,
+                    "pose": {
+                        "position_xyz_m": [
+                            float(transformed.pose.position.x),
+                            float(transformed.pose.position.y),
+                            float(transformed.pose.position.z),
+                        ],
+                        "orientation_xyzw": [
+                            float(transformed.pose.orientation.x),
+                            float(transformed.pose.orientation.y),
+                            float(transformed.pose.orientation.z),
+                            float(transformed.pose.orientation.w),
+                        ],
+                    },
+                }
+            )
 
-        target_pose.header.frame_id = self._target_frame
+        rank, proposal_rgb, _proposal_depth, grasp, opening_details = (
+            accepted_candidates[0]
+        )
+        target_pose = transformed_candidates[0]
         self._pose_publisher.publish(target_pose)
         metadata = {
             "accepted": True,
@@ -866,9 +1034,15 @@ class GraspAnythingPerception(Node):
             "model_sha256": result.get("model_sha256", ""),
             "inference_seconds": round(float(result["inference_seconds"]), 4),
             "rejected_higher_ranked": rejected,
+            "rejected_candidates": rejected,
+            "depth_validated_candidates": depth_validated_candidates,
             "pose_semantics": "visible_surface_candidate_not_gripper_tcp",
             "opening_evidence": opening_details,
             "object_region": region_details,
+            "source_stamp": {
+                "sec": int(depth_message.header.stamp.sec),
+                "nanosec": int(depth_message.header.stamp.nanosec),
+            },
         }
         self._publish_json(self._metadata_publisher, metadata)
         self._status(

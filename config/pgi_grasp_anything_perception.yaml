@@ -17,11 +17,11 @@ pgi_grasp_anything_perception:
     depth_scale_16uc1: 0.001
     min_depth_m: 0.05
     max_depth_m: 3.0
-    # A 13 x 13 local patch is small enough to fit a cylindrical cup surface
-    # without treating its visible curvature as depth noise.
-    patch_radius_px: 6
+    # A 9 x 9 local patch fits the narrow curved end of the horizontal cup.
+    # The former 13 x 13 patch mixed too much curvature into one plane fit.
+    patch_radius_px: 4
     local_depth_tolerance_m: 0.04
-    min_depth_points: 60
+    min_depth_points: 30
     min_depth_support_ratio: 0.30
     max_surface_residual_ratio: 0.25
     min_opening_m: 0.005
@@ -50,3 +50,12 @@ pgi_grasp_anything_perception:
     # The learned rectangle supplies centre and closing direction. Registered
     # depth silhouette supplies physical object width; add 4 mm clearance.
     opening_clearance_m: 0.004
+
+    # MoveIt integration divides the visible depth component into eight
+    # principal-axis boxes. This preserves taper better than one global box.
+    # The 10 mm padding reduces, but does not eliminate, single-view error.
+    collision_padding_m: 0.010
+    collision_box_count: 8
+    # Publish every depth-valid proposal returned by the pinned service so
+    # MoveIt can select the highest-scored collision-free reachable candidate.
+    maximum_published_candidates: 5

@@ -167,7 +167,8 @@ cd /home/dase-hw101/ur_drinking_project
 ros2 launch launch/pgi_140_80_physical_grasp.launch.py \
   ros_domain_id:=106 demo_mode:=none \
   launch_cup_perception:=false launch_camera_view:=false \
-  launch_grasp_anything:=true launch_grasp_anything_view:=true
+  launch_grasp_anything:=true launch_grasp_anything_view:=true \
+  controllers_file:=/home/dase-hw101/ur_drinking_project/config/pgi_140_80_grasp_anything_controllers.yaml
 ```
 
 The opt-in outputs are deliberately separate from the established detector:
@@ -186,17 +187,19 @@ depth then measures the physical jaw opening, fits a local surface, and turns
 the result into an observation-only pose in `base_link`. The adapter checks
 model score, object membership, depth support, surface fit, the calibrated
 camera self-mask, and the PGI 5-80 mm opening range. It never calls MoveIt or a
-controller, and the existing physical-grasp demo does not subscribe to these
-topics. A seriously occluded or mechanically infeasible candidate is refused.
+controller. The opt-in `pgi_grasp_anything_moveit_demo.py` bridge subscribes to
+the pose plus matching metadata, verifies the pinned model checksum and source
+timestamp, builds segmented depth collision geometry, and lets MoveIt reject
+unreachable or colliding candidates. A seriously occluded or mechanically
+infeasible candidate is refused.
 
 In the recorded upright overhead test, the candidate was on the cup but the
 depth silhouette required 120.1 mm, so the 80 mm PGI correctly refused it. In
-the recorded horizontal test, the adaptive crop moved the model candidate to
-the narrow end and produced a depth-validated 66.635 mm opening, score 0.697,
-98.8% local depth support, and a pose in `base_link`. This is perception
-evidence only. A later active-view step must expose a graspable region when the
-current view is infeasible, generate PGI TCP/pre-grasp/retreat offsets, and
-pass them through MoveIt collision and reachability checks before execution.
+the current horizontal test, the candidate is at the narrow end with a 69.675
+mm depth opening and score 0.681. The bridge uses the same registered depth
+frame to estimate the object's principal axis and slides the candidate 21.1 mm
+toward the closest observed body band below the 80 mm stroke. The resulting 76
+mm grasp uses a 70-degree downward oblique approach and horizontal jaw closing.
 
 Verify a running observation pipeline without any control command:
 
@@ -207,6 +210,34 @@ ROS_DOMAIN_ID=106 scripts/verify_pgi_grasp_anything_perception.py --timeout 20
 The verifier refuses domain 0, validates the pinned model checksum, requires
 advancing Gazebo time and fresh debug images, and accepts either a structured
 candidate or a structured geometric refusal as a healthy perception result.
+
+Run the connected MoveIt preflight without sending any trajectory:
+
+```bash
+ROS_DOMAIN_ID=106 /usr/bin/python3 scripts/pgi_grasp_anything_moveit_demo.py \
+  --ros-args --params-file config/pgi_grasp_anything_moveit.yaml
+```
+
+The connected route uses collision-checked Pilz PTP for the high transfer and
+coarse-staging transition. The precise `staging -> pre-grasp -> grasp -> lift`
+segments remain Cartesian with the image-derived final orientation. A recorded
+plan-only run validated the complete approach, attached lift/place, retreat,
+coarse-staging return, and camera-ready return.
+
+Gazebo-only execution is explicitly gated:
+
+```bash
+ROS_DOMAIN_ID=106 /usr/bin/python3 scripts/pgi_grasp_anything_moveit_demo.py \
+  --execute-sim --confirm-simulation \
+  --ros-args --params-file config/pgi_grasp_anything_moveit.yaml
+```
+
+The horizontal-cup contact experiment is not yet a successful grasp/place
+qualification. Coarse staging and contact execute correctly, but the best 40 N
+run rotated the cup 31.28 degrees during lift; the unchanged 15-degree guard
+stopped the workflow. An 80 N trial rotated 35.90 degrees, so the remaining
+issue is contact geometry/force closure rather than insufficient command
+force. No threshold was relaxed and no result is approved for real execution.
 
 Exact source, checksum, preprocessing deviation, self-mask assumption, and
 limitations are recorded in

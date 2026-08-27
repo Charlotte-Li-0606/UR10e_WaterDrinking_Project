@@ -1,0 +1,42 @@
+# Simulation-only controller set for offset Grasp-Anything grasps. The saved
+# Stage-5 baseline keeps pgi_140_80_physical_controllers.yaml and its 40 N cap.
+controller_manager:
+  ros__parameters:
+    update_rate: 500
+    enforce_command_limits: true
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    joint_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    pgi_gripper_controller:
+      type: position_controllers/GripperActionController
+
+gz_ros_control:
+  ros__parameters:
+    position_proportional_gain: 0.05
+    hold_joints: true
+
+joint_trajectory_controller:
+  ros__parameters:
+    joints:
+      - shoulder_pan_joint
+      - shoulder_lift_joint
+      - elbow_joint
+      - wrist_1_joint
+      - wrist_2_joint
+      - wrist_3_joint
+    command_interfaces: [position]
+    state_interfaces: [position, velocity]
+    state_publish_rate: 100.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: false
+
+pgi_gripper_controller:
+  ros__parameters:
+    joint: pgi_left_finger_joint
+    action_monitor_rate: 20.0
+    goal_tolerance: 0.0005
+    max_effort: 140.0
+    allow_stalling: true
+    stall_velocity_threshold: 0.0005
+    stall_timeout: 0.75

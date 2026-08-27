@@ -68,23 +68,29 @@ resolution, crop, or field of view changes.
   is not yet the PGI TCP or a collision-checked pre-grasp pose.
 - A tilted visible surface can produce a tilted 6-D candidate. This does not
   replace multi-view reconstruction or prove force closure.
-- Partial occlusion is accepted only while at least 60 local depth samples,
+- Partial occlusion is accepted only while at least 30 local depth samples,
   30% patch support, and a sufficiently planar visible surface remain. Severe
   occlusion is refused instead of guessed.
 - The learned rectangle provides centre and closing direction. Physical
   opening comes from the selected registered-depth silhouette plus 4 mm
   clearance; the learned opening remains diagnostic evidence. Depth openings
   outside 5-80 mm are refused because the PGI total stroke is 80 mm.
-- Outputs use `/pgi/grasp_anything/*` and are not consumed by the current
-  MoveIt/contact demo. No trajectory or controller command can be produced by
-  either perception process.
+- Outputs use `/pgi/grasp_anything/*`. The perception service and ROS adapter
+  remain observation-only. A separate opt-in simulation bridge may consume a
+  timestamp-matched candidate and metadata, but only after checksum, depth,
+  stroke, collision, IK, and ROS-domain guards; it cannot run on domain 0.
 
 Recorded Gazebo evidence on 2026-08-27:
 
 - upright overhead cup: candidate on cup, 120.1 mm depth opening, correctly
   refused as wider than the PGI stroke;
-- horizontal cup: candidate at the narrow end, 66.635 mm depth opening, score
-  0.697, 98.8% local depth support, accepted as an observation-only pose;
+- current horizontal cup: candidate at the narrow end, 69.675 mm depth opening
+  and score 0.681; the opt-in bridge shifted it 21.1 mm along the registered
+  principal axis to an interpolated 76 mm band and passed a complete MoveIt
+  plan-only cycle with Pilz PTP coarse staging;
+- horizontal native-contact execution: coarse staging, contact, and lift ran,
+  but the cup rotated 31.28 degrees at 40 N and 35.90 degrees at 80 N; the
+  unchanged 15-degree guard stopped both trials;
 - severe sparse-depth occlusion: rejected by the geometry unit test;
 - physically supported tilted-cup and realistic partial-occlusion scene tests
   remain pending.

@@ -27,6 +27,8 @@ pgi_logical_grasp_demo:
     # separately opts into collision-checked free-space flange relaxation.
     relax_transit_flange_orientation: false
     transit_flange_spin_deg: 0.0
+    use_configured_side_ready_branch: true
+    use_pilz_coarse_staging: false
     # Versioned IK branch that was validated for the low side approach. Pilz
     # PTP targets the high transfer state derived from this branch; it never
     # commands these joints directly or bypasses MoveIt collision checking.

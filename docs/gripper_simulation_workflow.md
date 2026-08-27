@@ -491,11 +491,14 @@ restart the isolated Gazebo launch before rerunning; the Stage-6 tool does not
 silently teleport or reset the dynamic cup. More repeated trials are still
 needed before claiming statistical grasp reliability.
 
-### Experimental Grasp-Anything perception branch
+### Experimental Grasp-Anything to MoveIt branch
 
-`feature/grasp-anything-simulation` adds an opt-in, observation-only perception
-experiment after the reproducible six-stage baseline. It does not replace the
-fixed Stage-5/6 cup target and is not connected to its planner or controller.
+`feature/grasp-anything-simulation` preserves the reproducible six-stage
+baseline and adds two opt-in layers: an observation-only Grasp-Anything RGB-D
+adapter and a separate simulation-only MoveIt bridge. The perception process
+cannot command motion. The bridge refuses ROS domain 0, requires matching fresh
+pose/metadata timestamps and the pinned model checksum, and is never used by
+the fixed Stage-5/6 or real-execution workflows.
 
 The official RGB-only Grasp-Anything checkpoint proposes 2-D parallel-jaw
 centres and closing directions. A local ROS adapter uses transformed registered
@@ -506,13 +509,29 @@ pose in `base_link`. Missing depth, excessive occlusion, poor surface fit, and
 openings outside the PGI 5-80 mm range are refusals.
 
 The upright overhead scene produced a correct 120.1 mm over-stroke refusal.
-The horizontal scene produced a 66.635 mm observation-only candidate at the
-narrow end with 0.697 model score and 98.8% local depth support. The verifier
-requires a pinned model checksum, advancing Gazebo clock, fresh debug images,
-structured observation-only status, and refuses ROS domain 0.
+The current horizontal scene produced a 69.675 mm candidate at the narrow end
+with score 0.681. Eight registered-depth PCA boxes form the provisional MoveIt
+collision object. The bridge preserves the learned closing direction, aligns
+it perpendicular to the observed cup axis, and shifts the point 21.1 mm toward
+an interpolated 76 mm body band.
 
-Current scope is perception evidence only. Before it can replace the known-cup
-target, the following work remains:
+The connected workflow is:
+
+1. freeze one fresh Grasp-Anything candidate and its registered-depth geometry;
+2. let MoveIt select a reachable candidate;
+3. move through the high transfer pose and collision-checked Pilz PTP coarse
+   staging;
+4. use Cartesian motion for staging, pre-grasp, grasp, attached lift/place,
+   retreat, and unstage;
+5. use the symmetric coarse-staging PTP and high return to camera-ready.
+
+The full plan-only cycle passes. Gazebo execution reaches contact and lift, but
+the horizontal cup currently rotates 31.28 degrees at 40 N, above the unchanged
+15-degree guard. An 80 N trial rotated 35.90 degrees. Both stopped safely,
+restored MoveIt world ownership, and reported that no real command was sent.
+
+Current scope is experimental simulation integration, not a qualified generic
+grasp. Before it can replace the known-cup target, the following work remains:
 
 1. add an active side/oblique camera view so a wide tapered cup can expose a
    graspable lower band;
@@ -520,10 +539,10 @@ target, the following work remains:
    and partially occluded scenes, including correct refusal under severe
    occlusion, then repeat every case statistically;
 3. select the intended object without relying on colour or a fixed cup model;
-4. convert the visible-surface candidate to PGI TCP, pre-grasp, and retreat
-   poses while accounting for finger length and cup thickness;
-5. pass every candidate through MoveIt IK, reachability, collision, approach,
-   closure, lift, and stability checks before allowing simulated execution.
+4. improve contact geometry or candidate scoring so a horizontal cup stays
+   within the 15-degree lift-stability limit;
+5. repeat MoveIt and physical-contact validation across supported orientations,
+   candidate ranks, occlusion levels, and fresh physics sessions.
 
 Source provenance and the limitations of the 2-D checkpoint are in
 `docs/vendor_assets/grasp_anything.md`.

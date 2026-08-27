@@ -72,9 +72,7 @@ def generate_launch_description():
             "activate_arm_controller": "false",
             "pgi_logical_grasp_start": "false",
             "pgi_contact_physics": "true",
-            "controllers_file": str(
-                PROJECT_ROOT / "config" / "pgi_140_80_physical_controllers.yaml"
-            ),
+            "controllers_file": LaunchConfiguration("controllers_file"),
             "world_file": str(
                 PROJECT_ROOT / "worlds" / "pgi_140_80_physical_grasp.sdf"
             ),
@@ -106,6 +104,18 @@ def generate_launch_description():
             DeclareLaunchArgument("cup_x", default_value="0.481542"),
             DeclareLaunchArgument("cup_y", default_value="0.208414"),
             DeclareLaunchArgument("cup_z", default_value="0.001"),
+            DeclareLaunchArgument(
+                "controllers_file",
+                default_value=str(
+                    PROJECT_ROOT
+                    / "config"
+                    / "pgi_140_80_physical_controllers.yaml"
+                ),
+                description=(
+                    "Simulation-only controller YAML. The default preserves "
+                    "the validated 40 N Stage-5 baseline."
+                ),
+            ),
             DeclareLaunchArgument(
                 "demo_mode",
                 default_value="none",

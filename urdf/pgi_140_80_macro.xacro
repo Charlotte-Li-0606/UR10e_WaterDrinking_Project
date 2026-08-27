@@ -43,13 +43,10 @@
     <xacro:if value="${use_gz_ros2_control}">
       <xacro:property name="pgi_physics_upper_limit" value="0.0405"/>
     </xacro:if>
-    <!-- The standard logical model retains the full documented 140 N upper
-         limit.  The isolated Stage-5 contact variant starts at the documented
-         minimum selectable gripping force, 40 N per jaw. -->
+    <!-- Documented hardware upper limit. Individual simulation workflows use
+         separate controller YAML files to select 40 to 140 N without changing
+         this exact-model joint limit. -->
     <xacro:property name="pgi_effort_limit" value="140.0"/>
-    <xacro:if value="${use_contact_physics}">
-      <xacro:property name="pgi_effort_limit" value="40.0"/>
-    </xacro:if>
     <!-- Placeholder camera interposer. Its final material, mass, and geometry
          depend on the project adapter design. The 0.10 kg uniform-box inertia
          is a provisional Gazebo stability value, not a verified adapter mass.
